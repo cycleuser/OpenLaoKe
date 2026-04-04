@@ -38,16 +38,30 @@ class BatchTool(Tool):
     is_concurrency_safe = True
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
-        calls = kwargs.get("calls", [])
+        calls_raw = kwargs.get("calls", [])
         parallel = kwargs.get("parallel", True)
         stop_on_error = kwargs.get("stop_on_error", False)
 
-        if not calls:
+        if not calls_raw:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
                 content="Error: calls list is required",
                 is_error=True,
             )
+
+        # Convert dict calls to ToolCallSpec if needed
+        calls: list[ToolCallSpec] = []
+        for call in calls_raw:
+            if isinstance(call, ToolCallSpec):
+                calls.append(call)
+            elif isinstance(call, dict):
+                calls.append(ToolCallSpec(**call))
+            else:
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id,
+                    content=f"Error: Invalid call spec type: {type(call)}",
+                    is_error=True,
+                )
 
         if len(calls) > 50:
             return ToolResultBlock(

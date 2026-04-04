@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 import httpx
@@ -16,6 +17,7 @@ from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.prompt_input import create_prompt_session, get_user_input
 from openlaoke.core.state import AppState
+from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import ToolContext, ToolRegistry
 from openlaoke.tools.register import register_all_tools
@@ -40,6 +42,8 @@ class REPL:
         self.app_config: Any = None
         self._proxy: str | None = None
         self._prompt_session = None
+        self.supervisor = TaskSupervisor(app_state)
+        self._current_task_id: str | None = None
 
         register_all()
         register_all_tools(self.registry)
@@ -87,17 +91,15 @@ class REPL:
         if not user_input:
             return
 
-        # 如果输入以 / 开头但没有空格，可能是想使用技能
-        if user_input.startswith("/") and " " not in user_input:
-            # 检查是否是有效的技能或命令
+        if user_input.startswith("/"):
             from openlaoke.core.skill_system import load_skill
 
-            potential_name = user_input[1:]
+            parts = user_input.split(None, 1)
+            potential_name = parts[0][1:] if parts else ""
+            skill_args = parts[1] if len(parts) > 1 else ""
 
-            # 检查是否是技能
             skill = load_skill(potential_name)
             if skill:
-                # 激活技能
                 if hasattr(self.app_state, "active_skills"):
                     if potential_name not in self.app_state.active_skills:
                         self.app_state.active_skills.append(potential_name)
@@ -108,6 +110,10 @@ class REPL:
                     if len(skill.description) > 100:
                         desc += "..."
                     self.console.print(f"  [dim]{desc}[/dim]")
+
+                if skill_args:
+                    self.console.print()
+                    await self._handle_chat(skill_args)
                 return
 
         cmd = parse_command(user_input)
@@ -121,6 +127,7 @@ class REPL:
     async def _handle_command(self, name: str, args: str) -> None:
         """Execute a slash command."""
         from openlaoke.commands.base import CommandContext
+        from openlaoke.commands.skill_shortcuts import SkillActivationResult
 
         command = get_command(name)
         if not command:
@@ -139,21 +146,124 @@ class REPL:
         if result.should_clear:
             self.console.clear()
 
+        if isinstance(result, SkillActivationResult) and result.should_continue_chat:
+            self.console.print()
+            await self._handle_chat(args)
+
     async def _handle_chat(self, user_input: str) -> None:
         """Process a chat message through the AI model."""
         self.app_state.is_running = True
         self.app_state.set_error(None)
 
+        self.supervisor.parse_request(user_input)
+        self._current_task_id = (
+            list(self.supervisor.tasks.keys())[-1] if self.supervisor.tasks else None
+        )
+
         user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
 
-        try:
-            await self._run_api_loop()
-        except Exception as e:
-            self.console.print(f"\n[bold red]Error:[/bold red] {e}")
-            self.app_state.set_error(str(e))
-        finally:
-            self.app_state.is_running = False
+        max_retry_attempts = 3
+        retry_count = 0
+
+        while retry_count < max_retry_attempts:
+            try:
+                await self._run_api_loop()
+
+                artifacts = self._collect_artifacts()
+
+                if self._current_task_id:
+                    result = await self.supervisor.check_completion(
+                        self._current_task_id, artifacts
+                    )
+
+                    if result.is_complete:
+                        self.console.print(
+                            f"\n[green]✓ Task completed ({result.completion_percentage:.0f}%)[/green]"
+                        )
+                        break
+
+                    if result.should_retry:
+                        retry_count += 1
+                        self.console.print(
+                            f"\n[yellow]⚠ Task incomplete ({result.completion_percentage:.0f}%)[/yellow]"
+                        )
+
+                        if result.feedback:
+                            self.console.print(
+                                Panel(
+                                    result.feedback,
+                                    title="Supervisor Feedback",
+                                    border_style="yellow",
+                                )
+                            )
+
+                        retry_prompt = self.supervisor.get_retry_prompt(
+                            self._current_task_id, result
+                        )
+
+                        if retry_count < max_retry_attempts:
+                            self.console.print(
+                                f"\n[cyan]Retrying... (attempt {retry_count}/{max_retry_attempts})[/cyan]"
+                            )
+
+                            user_msg = UserMessage(role=MessageRole.USER, content=retry_prompt)
+                            self.app_state.add_message(user_msg)
+                            continue
+                        else:
+                            self.console.print(
+                                "\n[red]Max retries reached. Task incomplete.[/red]"
+                            )
+                            self.console.print(
+                                f"[dim]Missing: {', '.join(result.missing_requirements[:3])}[/dim]"
+                            )
+                            break
+                    else:
+                        break
+                else:
+                    break
+
+            except Exception as e:
+                self.console.print(f"\n[bold red]Error:[/bold red] {e}")
+                self.app_state.set_error(str(e))
+                retry_count += 1
+
+                if retry_count >= max_retry_attempts:
+                    break
+
+                self.console.print("\n[yellow]Retrying after error...[/yellow]")
+        else:
+            self.console.print(
+                f"\n[red]Failed to complete task after {max_retry_attempts} attempts[/red]"
+            )
+
+        self.app_state.is_running = False
+
+    def _collect_artifacts(self) -> dict[str, Any]:
+        """Collect artifacts from the conversation for supervision check."""
+        artifacts = {
+            "content": "",
+            "output_files": [],
+        }
+
+        for msg in reversed(self.app_state.messages):
+            if msg.role == MessageRole.ASSISTANT and msg.content:
+                artifacts["content"] += msg.content + "\n\n"
+
+        cwd = self.app_state.get_cwd()
+        common_outputs = ["Article.md", "article.md", "README.md", "output.md"]
+        for filename in common_outputs:
+            filepath = f"{cwd}/{filename}"
+            if os.path.exists(filepath):
+                artifacts["output_files"].append(filepath)
+
+        import glob
+
+        for pattern in ["*.svg", "*.png", "*.pdf"]:
+            files = glob.glob(f"{cwd}/{pattern}")
+            artifacts["output_files"].extend(files)
+
+        return artifacts
 
     async def _run_api_loop(self) -> None:
         """Main API interaction loop."""
