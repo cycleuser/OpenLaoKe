@@ -17,11 +17,12 @@ async def execute_task_with_tools(
     task: SubTask,
     original_request: str,
     max_iterations: int = 10,
+    on_progress_callback: Any = None,
+    workflow_context: Any = None,
 ) -> dict[str, Any]:
     """Execute a task using AI with tool calling capability."""
     from openlaoke.core.multi_provider_api import MultiProviderClient
 
-    # Get API client
     if app_state.multi_provider_config:
         api_client = MultiProviderClient(app_state.multi_provider_config)
         model = app_state.multi_provider_config.get_active_model()
@@ -32,15 +33,9 @@ async def execute_task_with_tools(
         api_client = MultiProviderClient(config)
         model = "gemma3:1b"
 
-    # Get tool executor
     executor = ToolExecutor(app_state)
     tool_schemas = await executor.get_tool_schemas()
 
-    print(f"[TOOL_EXEC] Starting task: {task.name}")
-    print(f"[TOOL_EXEC] Model: {model}")
-    print(f"[TOOL_EXEC] Available tools: {len(tool_schemas)}")
-
-    # Build system prompt
     system_prompt = f"""You are an AI coding assistant. You have access to tools to complete tasks.
 
 Your current task: {task.name}
@@ -56,7 +51,6 @@ Instructions:
 
 Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
 
-    # Conversation history
     messages = [
         {
             "role": "user",
@@ -66,14 +60,12 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
 
     iteration = 0
     total_tokens = 0
-    all_results = []
+    all_results: list[dict[str, Any]] = []
 
     while iteration < max_iterations:
         iteration += 1
-        print(f"[TOOL_EXEC] Iteration {iteration}/{max_iterations}")
 
         try:
-            # Call API with tools
             response_msg, token_usage, _ = await api_client.send_message(
                 system_prompt=system_prompt,
                 messages=messages,
@@ -82,40 +74,24 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
                 max_tokens=4000,
             )
 
-            print("[TOOL_EXEC] API response received")
-            print(f"[TOOL_EXEC] Response type: {type(response_msg)}")
-
             if token_usage:
                 total_tokens += token_usage.total_tokens
+                if workflow_context:
+                    workflow_context.total_tokens += token_usage.total_tokens
+                if on_progress_callback:
+                    on_progress_callback(workflow_context)
 
-            # Debug: print response content
-            if hasattr(response_msg, "content"):
-                print("[TOOL_EXEC] Has content: True")
-                if isinstance(response_msg.content, str):
-                    print(f"[TOOL_EXEC] Content preview: {response_msg.content[:200]}...")
-
-            # Check for tool uses (AssistantMessage uses tool_uses, not tool_calls!)
             tool_uses = []
-            if hasattr(response_msg, "tool_uses"):
-                print("[TOOL_EXEC] Has tool_uses: True")
-                print(f"[TOOL_EXEC] tool_uses count: {len(response_msg.tool_uses)}")
-                if response_msg.tool_uses:
-                    tool_uses = response_msg.tool_uses
-                    print(f"[TOOL_EXEC] Found {len(tool_uses)} tool uses")
-                    for tu in tool_uses:
-                        print(f"[TOOL_EXEC]   - Tool: {tu.name}")
+            if hasattr(response_msg, "tool_uses") and response_msg.tool_uses:
+                tool_uses = response_msg.tool_uses
 
-            # Convert tool_uses to tool_calls format for compatibility
             tool_calls = []
             for tool_use in tool_uses:
                 tool_calls.append(
                     {"name": tool_use.name, "input": tool_use.input, "id": tool_use.id}
                 )
 
-            # No tool calls means task is complete
             if not tool_calls:
-                print("[TOOL_EXEC] No tool calls, task complete")
-                # Get final response text
                 final_text = ""
                 if hasattr(response_msg, "content"):
                     if isinstance(response_msg.content, str):
@@ -131,9 +107,7 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
                     "final_response": final_text,
                 }
 
-            # Execute tool calls
             for tool_call in tool_calls:
-                # Extract tool name and input
                 if isinstance(tool_call, dict):
                     tool_name = tool_call.get("name") or tool_call.get("function", {}).get(
                         "name", ""
@@ -151,10 +125,6 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
                     except json.JSONDecodeError:
                         tool_input = {}
 
-                print(f"[TOOL_EXEC] Executing tool: {tool_name}")
-                print(f"[TOOL_EXEC] Input: {json.dumps(tool_input, indent=2)[:200]}...")
-
-                # Execute the tool
                 result = await executor.execute_tool(tool_name, tool_input)
 
                 result_text = (
@@ -172,9 +142,6 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
                     }
                 )
 
-                print(f"[TOOL_EXEC] Tool result: {'ERROR' if result.is_error else 'SUCCESS'}")
-
-                # Add to conversation
                 messages.append(
                     {
                         "role": "assistant",
@@ -200,11 +167,7 @@ Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
                     }
                 )
 
-        except Exception as e:
-            print(f"[TOOL_EXEC] Error: {e}")
-            import traceback
-
-            traceback.print_exc()
+        except Exception:
             break
 
     return {
