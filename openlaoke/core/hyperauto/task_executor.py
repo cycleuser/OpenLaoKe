@@ -36,25 +36,30 @@ async def execute_task_with_tools(
     executor = ToolExecutor(app_state)
     tool_schemas = await executor.get_tool_schemas()
 
-    system_prompt = f"""You are an AI coding assistant. You have access to tools to complete tasks.
+    system_prompt = f"""You are an AI coding assistant executing a SPECIFIC sub-task.
 
-Your current task: {task.name}
-Task description: {task.description}
-Overall context: {original_request}
+Overall goal: {original_request}
 
-Instructions:
-1. Use the available tools to complete this task
-2. Make tool calls as needed - you can call multiple tools
-3. After each tool call, you'll receive the result
-4. Continue until the task is complete
-5. Provide a summary when done
+Your current sub-task: {task.name}
+Sub-task description: {task.description}
 
-Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}"""
+CRITICAL INSTRUCTIONS:
+1. This sub-task is part of a larger workflow - you MUST complete THIS specific sub-task
+2. If task.name contains a specific file/module name, you MUST create that exact file
+3. Do NOT stop after creating just one example file - complete what THIS sub-task requires
+4. Use Write tool to create complete, functional code files
+5. Use Bash (mkdir) to create directories first if needed
+6. If this is a translation task, read source files and write complete translated versions
+7. Do NOT just create placeholders - create REAL, WORKING implementations
+
+Available tools: {", ".join([t["name"] for t in tool_schemas[:10]])}
+
+IMPORTANT: Your goal is to complete THIS specific sub-task fully, not partially. Do not stop early."""
 
     messages = [
         {
             "role": "user",
-            "content": f"Please complete this task using the available tools:\n\nTask: {task.name}\nDescription: {task.description}",
+            "content": f"Execute this sub-task:\n\nSub-task: {task.name}\nDescription: {task.description}\nContext: {original_request}\n\nCreate the actual files/code required for this sub-task.",
         }
     ]
 
