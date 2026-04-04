@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style
 
 from openlaoke.commands.registry import get_all_commands, register_all
 from openlaoke.core.skill_system import get_skill_registry, list_available_skills
+
+# History file location
+HISTORY_FILE = Path.home() / ".openlaoke" / "command_history.txt"
 
 
 def _get_skill_source(path) -> str:
@@ -136,7 +142,7 @@ class OpenLaoKeCompleter(Completer):
         )
 
         # Return all matching completions (no artificial limit)
-        for score, opt in matches:
+        for _, opt in matches:
             meta_text = opt["description"] or ""
             yield Completion(
                 opt["display"],
@@ -155,7 +161,9 @@ class OpenLaoKeCompleter(Completer):
 
 
 def create_prompt_session():
-    """Create a PromptSession with autocomplete."""
+    """Create a PromptSession with autocomplete and history."""
+    # Ensure history directory exists
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     style = Style.from_dict(
         {
@@ -168,11 +176,16 @@ def create_prompt_session():
 
     completer = OpenLaoKeCompleter()
 
+    # Create file-based history for persistence
+    history = FileHistory(str(HISTORY_FILE))
+
     session = PromptSession(
         completer=completer,
         style=style,
         complete_while_typing=True,
         mouse_support=True,
+        history=history,
+        enable_history_search=True,  # Enable up/down arrow navigation
     )
 
     return session
