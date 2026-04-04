@@ -3,38 +3,53 @@
 from __future__ import annotations
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Footer, Header, Input, Label, RichLog, Static
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Footer, Header, Input, Label, RichLog
 
 from openlaoke.core.state import AppState
+from openlaoke.utils.theme import ThemeManager
 
 
 class MessagesLog(Vertical):
     """Scrollable message display area."""
+
+    def __init__(self, theme_manager: ThemeManager, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self.theme_manager = theme_manager
 
     def compose(self) -> ComposeResult:
         self.rich_log = RichLog(markup=True, wrap=True, highlight=True)
         yield self.rich_log
 
     def add_message(self, role: str, content: str) -> None:
+        theme = self.theme_manager.current_theme
         if role == "user":
-            self.rich_log.write(f"\n[bold green]You:[/bold green] {content}")
+            self.rich_log.write(
+                f"\n[{theme.colors.primary} bold]You:[/{theme.colors.primary} bold] {content}"
+            )
         elif role == "assistant":
-            self.rich_log.write(f"\n[bold cyan]OpenLaoKe:[/bold cyan] {content}")
+            self.rich_log.write(
+                f"\n[{theme.colors.secondary} bold]OpenLaoKe:[/{theme.colors.secondary} bold] {content}"
+            )
         elif role == "system":
-            self.rich_log.write(f"[dim]{content}[/dim]")
+            self.rich_log.write(f"[{theme.colors.muted}]{content}[/{theme.colors.muted}]")
         elif role == "error":
-            self.rich_log.write(f"[bold red]Error: {content}[/bold red]")
+            self.rich_log.write(
+                f"[{theme.colors.error} bold]Error: {content}[/{theme.colors.error} bold]"
+            )
         elif role == "tool":
-            self.rich_log.write(f"  [dim]{content}[/dim]")
+            self.rich_log.write(f"  [{theme.colors.muted}]{content}[/{theme.colors.muted}]")
 
 
 class StatusBar(Horizontal):
     """Status bar showing session info."""
 
-    def __init__(self, app_state: AppState) -> None:
-        super().__init__()
+    def __init__(
+        self, app_state: AppState, theme_manager: ThemeManager, id: str | None = None
+    ) -> None:
+        super().__init__(id=id)
         self.app_state = app_state
+        self.theme_manager = theme_manager
 
     def compose(self) -> ComposeResult:
         self.model_label = Label(f"Model: {self.app_state.session_config.model}")
@@ -56,36 +71,60 @@ class StatusBar(Horizontal):
 class OpenLaoKeTUI(App):
     """Full TUI for OpenLaoKe."""
 
-    CSS = """
-    Screen {
-        layout: vertical;
-    }
-    #header-bar {
-        height: 3;
-        dock: top;
-        background: $surface;
-    }
-    #messages-area {
-        height: 1fr;
-    }
-    #input-bar {
-        height: 3;
-        dock: bottom;
-        background: $surface;
-    }
-    Input {
-        width: 100%;
-    }
-    """
-
     def __init__(self, app_state: AppState) -> None:
         super().__init__()
         self.app_state = app_state
+        self.theme_manager = ThemeManager(app_state.theme)
+
+    def _generate_css(self) -> str:
+        theme = self.theme_manager.current_theme
+        return f"""
+    Screen {{
+        layout: vertical;
+    }}
+    #header-bar {{
+        height: 3;
+        dock: top;
+        background: {theme.colors.background};
+        color: {theme.colors.foreground};
+    }}
+    #messages-area {{
+        height: 1fr;
+        background: {theme.colors.background};
+        color: {theme.colors.foreground};
+    }}
+    #input-bar {{
+        height: 3;
+        dock: bottom;
+        background: {theme.colors.background};
+        color: {theme.colors.foreground};
+    }}
+    Input {{
+        width: 100%;
+        border: solid {theme.colors.primary};
+    }}
+    Input:focus {{
+        border: solid {theme.colors.accent};
+    }}
+    Label {{
+        color: {theme.colors.foreground};
+    }}
+    Footer {{
+        background: {theme.colors.background};
+        color: {theme.colors.foreground};
+    }}
+    Header {{
+        background: {theme.colors.primary};
+        color: {theme.colors.background};
+    }}
+    """
+
+    CSS = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield StatusBar(self.app_state, id="header-bar")
-        yield MessagesLog(id="messages-area")
+        yield StatusBar(self.app_state, self.theme_manager)
+        yield MessagesLog(self.theme_manager)
         yield Input(placeholder="Type a message or /help for commands...", id="prompt-input")
         yield Footer()
 
@@ -110,8 +149,8 @@ class OpenLaoKeTUI(App):
             await self._handle_chat(user_input)
 
     async def _handle_command(self, cmd_text: str) -> None:
-        from openlaoke.commands.registry import get_command, parse_command
         from openlaoke.commands.base import CommandContext
+        from openlaoke.commands.registry import get_command
 
         messages_log = self.query_one(MessagesLog)
 
@@ -138,7 +177,10 @@ class OpenLaoKeTUI(App):
         from openlaoke.core.system_prompt import build_system_prompt
         from openlaoke.core.tool import ToolContext, ToolRegistry
         from openlaoke.tools.register import register_all_tools
-        from openlaoke.types.core_types import MessageRole, UserMessage, AssistantMessage, SystemMessage
+        from openlaoke.types.core_types import (
+            MessageRole,
+            UserMessage,
+        )
 
         messages_log = self.query_one(MessagesLog)
 

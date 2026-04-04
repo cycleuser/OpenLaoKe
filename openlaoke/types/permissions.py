@@ -4,14 +4,43 @@ from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
-from openlaoke.types.core_types import PermissionMode, PermissionResult
+from openlaoke.types.core_types import HyperAutoMode, PermissionMode, PermissionResult
+
+
+class ClassifierMode(StrEnum):
+    """Classifier operation modes for intelligent permission decisions."""
+
+    FAST = "fast"
+    AI = "ai"
+    HYBRID = "hybrid"
+
+
+class ConfidenceLevel(StrEnum):
+    """Confidence levels for classification decisions."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+@dataclass
+class ClassifierResult:
+    """Result from the permission classifier."""
+
+    decision: PermissionResult
+    confidence: ConfidenceLevel
+    reason: str
+    safety_level: str | None = None
+    matched_pattern: str | None = None
+    ai_analysis: str | None = None
 
 
 @dataclass
 class PermissionRule:
     """A single permission rule matching tool names or patterns."""
+
     pattern: str
     action: PermissionResult
     description: str = ""
@@ -21,13 +50,28 @@ class PermissionRule:
 
 
 @dataclass
+class HyperAutoConfig:
+    """Configuration for HyperAuto mode."""
+
+    mode: HyperAutoMode = HyperAutoMode.SEMI_AUTO
+    enabled: bool = False
+    max_iterations: int = 100
+    timeout_seconds: int = 300
+    auto_save: bool = True
+    learning_enabled: bool = False
+    history_limit: int = 50
+
+
+@dataclass
 class PermissionConfig:
     """Configuration for the permission system."""
+
     mode: PermissionMode = PermissionMode.DEFAULT
     always_allow_rules: list[PermissionRule] = field(default_factory=list)
     always_deny_rules: list[PermissionRule] = field(default_factory=list)
     always_ask_rules: list[PermissionRule] = field(default_factory=list)
     approved_tools: set[str] = field(default_factory=set)
+    hyperauto_config: HyperAutoConfig = field(default_factory=HyperAutoConfig)
 
     @classmethod
     def defaults(cls) -> PermissionConfig:

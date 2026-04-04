@@ -50,6 +50,7 @@ class TaskKillTool(Tool):
             )
 
         from openlaoke.core.task import TaskManager
+
         task_mgr = TaskManager(ctx.app_state)
         task_mgr.kill_task(task_id)
 

@@ -8,13 +8,9 @@ Supports:
 
 from __future__ import annotations
 
-import json
-import os
 import shutil
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -22,6 +18,7 @@ import httpx
 @dataclass
 class SkillInfo:
     """Metadata about a skill."""
+
     name: str
     description: str = ""
     version: str = "1.0.0"
@@ -34,6 +31,7 @@ class SkillInfo:
 @dataclass
 class InstallResult:
     """Result of a skill installation."""
+
     skill_name: str
     success: bool
     message: str = ""
@@ -53,7 +51,9 @@ class SkillInstaller:
     async def close(self):
         await self._client.aclose()
 
-    async def install_from_github(self, repo_url: str, skill_name: str | None = None) -> list[InstallResult]:
+    async def install_from_github(
+        self, repo_url: str, skill_name: str | None = None
+    ) -> list[InstallResult]:
         """Install skills from a GitHub repository.
 
         Supports two formats:
@@ -70,7 +70,9 @@ class SkillInstaller:
                 raw_base = f"https://raw.githubusercontent.com/{repo_path}/main"
                 api_base = f"https://api.github.com/repos/{repo_path}/contents"
             else:
-                return [InstallResult(skill_name or "unknown", False, f"Invalid GitHub URL: {repo_url}")]
+                return [
+                    InstallResult(skill_name or "unknown", False, f"Invalid GitHub URL: {repo_url}")
+                ]
         else:
             raw_base = repo_url
             api_base = repo_url
@@ -81,7 +83,9 @@ class SkillInstaller:
         try:
             skills_index = await self._fetch_json(f"{raw_base}/skills.json")
             if skills_index and "skills" in skills_index:
-                results = await self._install_from_index(raw_base, api_base, skills_index, skill_name)
+                results = await self._install_from_index(
+                    raw_base, api_base, skills_index, skill_name
+                )
         except Exception:
             pass
 
@@ -127,7 +131,9 @@ class SkillInstaller:
 
         return results
 
-    async def _install_from_index(self, raw_base: str, api_base: str, index: dict, skill_name: str | None) -> list[InstallResult]:
+    async def _install_from_index(
+        self, raw_base: str, api_base: str, index: dict, skill_name: str | None
+    ) -> list[InstallResult]:
         """Install skills from a skills.json index."""
         results = []
         skills = index.get("skills", [])
@@ -142,31 +148,35 @@ class SkillInstaller:
 
         return results
 
-    async def _scan_skills_directory(self, raw_base: str, api_base: str, skill_name: str | None) -> list[InstallResult]:
+    async def _scan_skills_directory(
+        self, raw_base: str, api_base: str, skill_name: str | None
+    ) -> list[InstallResult]:
         """Scan the skills/ directory in a GitHub repo and install all skills found."""
         results = []
-        
+
         # Try skills/ subdirectory
         skills_dir_url = f"{api_base}/skills"
         contents = await self._fetch_json(skills_dir_url)
-        
+
         if not isinstance(contents, list):
             # API rate limited or directory doesn't exist
             # If specific skill requested, the caller will handle it via _install_single_skill
             return results
-        
+
         skill_dirs = [item["name"] for item in contents if item.get("type") == "dir"]
-        
+
         for name in skill_dirs:
             if skill_name and name != skill_name:
                 continue
-            
+
             result = await self._install_single_skill(raw_base, api_base, name)
             results.append(result)
-        
+
         return results
 
-    async def _install_from_opencode_index(self, url: str, skill_name: str | None) -> list[InstallResult]:
+    async def _install_from_opencode_index(
+        self, url: str, skill_name: str | None
+    ) -> list[InstallResult]:
         """Install skills using OpenCode discovery protocol (index.json)."""
         base = url.rstrip("/") + "/"
         index_url = f"{base}index.json"
@@ -199,7 +209,7 @@ class SkillInstaller:
         skill_dir = self.install_dir / name
         if skill_dir.exists() and (skill_dir / "SKILL.md").exists():
             return InstallResult(name, True, f"Already installed at {skill_dir}", skill_dir)
-        
+
         try:
             # Check if SKILL.md exists
             skill_url = f"{raw_base}/skills/{name}/SKILL.md"
@@ -209,7 +219,7 @@ class SkillInstaller:
                 skill_url = f"{raw_base}/{name}/SKILL.md"
                 resp = await self._client.head(skill_url)
                 if resp.status_code != 200:
-                    return InstallResult(name, False, f"SKILL.md not found")
+                    return InstallResult(name, False, "SKILL.md not found")
 
             # Get all files in the skill directory
             dir_url = f"{api_base}/skills/{name}"
@@ -222,7 +232,7 @@ class SkillInstaller:
             files = []
             if isinstance(contents, list):
                 files = [item["name"] for item in contents if item.get("type") == "file"]
-            
+
             # If API listing fails or returns no files, use known defaults
             if not files:
                 files = ["SKILL.md"]
@@ -303,6 +313,7 @@ class SkillInstaller:
                 parts = content.split("---", 2)
                 if len(parts) >= 3:
                     import yaml
+
                     try:
                         frontmatter = yaml.safe_load(parts[1])
                         if frontmatter:
@@ -313,12 +324,14 @@ class SkillInstaller:
 
             files = [f.name for f in skill_dir.iterdir() if f.is_file()]
 
-            skills.append(SkillInfo(
-                name=name,
-                description=description,
-                installed_path=skill_dir,
-                files=files,
-            ))
+            skills.append(
+                SkillInfo(
+                    name=name,
+                    description=description,
+                    installed_path=skill_dir,
+                    files=files,
+                )
+            )
 
         return skills
 

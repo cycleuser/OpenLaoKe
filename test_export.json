@@ -1,0 +1,21 @@
+{
+  "session_id": "session_1775278392",
+  "exported_at": "2026-04-04T12:53:12.825598",
+  "model": "claude-sonnet-4-20250514",
+  "messages": [
+    {
+      "role": "user",
+      "timestamp": 1775278392.825587,
+      "type": "user",
+      "content": "test",
+      "images": []
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_tokens": 0,
+    "cache_creation_tokens": 0
+  },
+  "cost": 0.0
+}

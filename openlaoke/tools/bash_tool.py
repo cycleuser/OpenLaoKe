@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
-from openlaoke.types.core_types import ToolResultBlock
+from openlaoke.types.core_types import PermissionMode, ToolResultBlock
+from openlaoke.utils.permissions.bash_classifier import (
+    CommandSafetyLevel,
+    classify_bash_command,
+)
 
 
 class BashInput(BaseModel):
@@ -41,6 +44,43 @@ class BashTool(Tool):
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
                 content="Error: Empty command",
+                is_error=True,
+            )
+
+        classification = classify_bash_command(command)
+
+        if classification.safety_level == CommandSafetyLevel.DESTRUCTIVE:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Command blocked for safety: {classification.reason}\n"
+                f"This command is classified as destructive and cannot be executed.",
+                is_error=True,
+            )
+
+        perm_mode = ctx.app_state.permission_config.mode
+
+        if (
+            perm_mode == PermissionMode.DEFAULT
+            and classification.safety_level == CommandSafetyLevel.DANGEROUS
+        ):
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Command requires approval: {classification.reason}\n"
+                f"Confidence: {classification.confidence.value}\n"
+                f"Use 'approve' to allow this command, or run with --permission-mode auto.",
+                is_error=True,
+            )
+
+        if (
+            perm_mode == PermissionMode.AUTO
+            and classification.safety_level != CommandSafetyLevel.SAFE
+            and classification.confidence != "high"
+        ):
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Command needs confirmation in auto mode: {classification.reason}\n"
+                f"Safety level: {classification.safety_level.value}\n"
+                f"Confidence: {classification.confidence.value}",
                 is_error=True,
             )
 

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openlaoke.types.permissions import HyperAutoConfig
 from openlaoke.types.providers import MultiProviderConfig, PlanConfig
-
+from openlaoke.utils.theme import Theme, get_theme, get_theme_names
 
 CONFIG_DIR = Path.home() / ".openlaoke"
 CONFIG_PATH = CONFIG_DIR / "config.json"
@@ -18,8 +19,10 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 @dataclass
 class AppConfig:
     """User configuration for OpenLaoKe."""
+
     providers: MultiProviderConfig = field(default_factory=MultiProviderConfig.defaults)
     plans: PlanConfig = field(default_factory=PlanConfig.defaults)
+    hyperauto_config: HyperAutoConfig = field(default_factory=HyperAutoConfig)
     max_tokens: int = 8192
     temperature: float = 1.0
     thinking_budget: int = 0
@@ -51,6 +54,15 @@ class AppConfig:
     def get_active_model(self) -> str:
         return self.providers.get_active_model()
 
+    def get_theme(self) -> Theme:
+        return get_theme(self.theme)
+
+    def validate_theme(self) -> bool:
+        return self.theme in get_theme_names()
+
+    def get_available_themes(self) -> list[str]:
+        return get_theme_names()
+
 
 def load_config() -> AppConfig:
     """Load configuration from disk."""
@@ -81,15 +93,33 @@ def load_config() -> AppConfig:
                 plans_data = data["plans"]
                 plans.active_plan = plans_data.get("active_plan", "default")
 
+            hyperauto_config = HyperAutoConfig()
+            if "hyperauto_config" in data:
+                ha_data = data["hyperauto_config"]
+                hyperauto_config.enabled = ha_data.get("enabled", False)
+                hyperauto_config.max_iterations = ha_data.get("max_iterations", 100)
+                hyperauto_config.timeout_seconds = ha_data.get("timeout_seconds", 300)
+                hyperauto_config.auto_save = ha_data.get("auto_save", True)
+                hyperauto_config.learning_enabled = ha_data.get("learning_enabled", False)
+                hyperauto_config.history_limit = ha_data.get("history_limit", 50)
+                if "mode" in ha_data:
+                    from openlaoke.types.core_types import HyperAutoMode
+
+                    with contextlib.suppress(ValueError):
+                        hyperauto_config.mode = HyperAutoMode(ha_data["mode"])
+
             config = AppConfig(
                 providers=providers,
                 plans=plans,
+                hyperauto_config=hyperauto_config,
                 max_tokens=data.get("max_tokens", 8192),
                 temperature=data.get("temperature", 1.0),
                 thinking_budget=data.get("thinking_budget", 0),
                 permission_mode=data.get("permission_mode", "auto"),
                 auto_approve_all=data.get("auto_approve_all", True),
-                theme=data.get("theme", "dark"),
+                theme=data.get("theme", "dark")
+                if data.get("theme", "dark") in get_theme_names()
+                else "dark",
                 show_token_budget=data.get("show_token_budget", True),
                 show_cost=data.get("show_cost", True),
                 max_output_lines=data.get("max_output_lines", 500),
@@ -128,6 +158,15 @@ def save_config(config: AppConfig) -> None:
         },
         "plans": {
             "active_plan": config.plans.active_plan,
+        },
+        "hyperauto_config": {
+            "mode": config.hyperauto_config.mode.value,
+            "enabled": config.hyperauto_config.enabled,
+            "max_iterations": config.hyperauto_config.max_iterations,
+            "timeout_seconds": config.hyperauto_config.timeout_seconds,
+            "auto_save": config.hyperauto_config.auto_save,
+            "learning_enabled": config.hyperauto_config.learning_enabled,
+            "history_limit": config.hyperauto_config.history_limit,
         },
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,

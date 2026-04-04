@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from openlaoke.commands.base import SlashCommand, CommandContext, CommandResult
-from openlaoke.core.skill_system import list_available_skills, load_skill, get_skill_registry, get_default_skill_dirs, rescan_skills
+from openlaoke.commands.base import CommandContext, CommandResult, SlashCommand
 from openlaoke.core.skill_installer import SkillInstaller
-
+from openlaoke.core.skill_system import (
+    get_default_skill_dirs,
+    get_skill_registry,
+    list_available_skills,
+    load_skill,
+    rescan_skills,
+)
 
 _installer: SkillInstaller | None = None
 
@@ -109,13 +114,15 @@ class SkillCommand(SlashCommand):
         total = rescan_skills()
 
         # Re-register skill shortcuts in the command registry
-        from openlaoke.commands.skill_shortcuts import SkillShortcutCommand
         from openlaoke.commands.registry import get_command
+        from openlaoke.commands.skill_shortcuts import SkillShortcutCommand
+
         for skill_name in list_available_skills():
             skill = load_skill(skill_name)
             if skill and not get_command(skill_name):
                 desc = skill.description[:80] if skill.description else ""
                 from openlaoke.commands.registry import _commands
+
                 _commands[skill_name] = SkillShortcutCommand(skill_name, desc)
 
         success_count = sum(1 for r in results if r.success)
@@ -206,34 +213,33 @@ class SkillCommand(SlashCommand):
 
 class UseSkillCommand(SlashCommand):
     """Command to activate a skill for the current session."""
-    
+
     name = "use"
     description = "Activate a skill for the current session"
-    
+
     async def execute(self, ctx: CommandContext) -> CommandResult:
         args = ctx.args.strip()
-        
+
         if not args:
             msg = "  Usage: /use <skill_name>"
             msg += "\n  Use /skill list to see available skills."
             msg += "\n  Tip: You can also use /<skill_name> directly!"
             return CommandResult(success=True, message=msg)
-        
+
         skill = load_skill(args)
         if not skill:
             msg = f"  Skill not found: {args}"
             msg += "\n  Use /skill list to see available skills."
             return CommandResult(success=True, message=msg)
-        
-        if hasattr(ctx.app_state, 'active_skills'):
-            if args not in ctx.app_state.active_skills:
-                ctx.app_state.active_skills.append(args)
-        
+
+        if hasattr(ctx.app_state, "active_skills") and args not in ctx.app_state.active_skills:
+            ctx.app_state.active_skills.append(args)
+
         msg = f"  ✓ Skill activated: {skill.name}"
         if skill.description:
             desc = skill.description[:100]
             if len(skill.description) > 100:
                 desc += "..."
             msg += f"\n    {desc}"
-        
+
         return CommandResult(success=True, message=msg)

@@ -68,8 +68,9 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         "- If uncertain, say so and suggest how to verify\n"
     )
 
-    if hasattr(app_state, 'active_skills') and app_state.active_skills:
+    if hasattr(app_state, "active_skills") and app_state.active_skills:
         from openlaoke.core.skill_system import get_skill_system_prompt
+
         skill_prompt = get_skill_system_prompt(app_state.active_skills)
         if skill_prompt:
             parts.append(f"\n## Active Skills\n{skill_prompt}")
@@ -84,6 +85,7 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
 def _get_git_branch(cwd: str) -> str | None:
     try:
         import subprocess
+
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=cwd,

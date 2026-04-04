@@ -49,12 +49,18 @@ class NotebookWriteTool(Tool):
 
         try:
             if os.path.exists(abs_path):
-                with open(abs_path, "r", encoding="utf-8") as f:
+                with open(abs_path, encoding="utf-8") as f:
                     nb = json.load(f)
             else:
                 nb = {
                     "cells": [],
-                    "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}},
+                    "metadata": {
+                        "kernelspec": {
+                            "display_name": "Python 3",
+                            "language": "python",
+                            "name": "python3",
+                        }
+                    },
                     "nbformat": 4,
                     "nbformat_minor": 5,
                 }

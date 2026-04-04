@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
+from openlaoke.utils.file_history import track_file_edit
 
 
 class WriteInput(BaseModel):
@@ -45,6 +46,8 @@ class WriteTool(Tool):
 
         try:
             os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+
+            track_file_edit(abs_path, ctx.app_state.session_id)
 
             was_new = not os.path.exists(abs_path)
 

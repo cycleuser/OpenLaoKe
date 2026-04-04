@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
-import os
 import difflib
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
+from openlaoke.utils.file_history import track_file_edit
 
 
 class EditInput(BaseModel):
     file_path: str = Field(description="Path to the file to edit")
     old_string: str = Field(description="The exact text to find and replace")
     new_string: str = Field(description="The text to replace it with")
-    replace_all: bool = Field(default=False, description="Replace all occurrences (default: only first)")
+    replace_all: bool = Field(
+        default=False, description="Replace all occurrences (default: only first)"
+    )
 
 
 class EditTool(Tool):
@@ -57,8 +60,10 @@ class EditTool(Tool):
             )
 
         try:
-            with open(abs_path, "r", encoding="utf-8") as f:
+            with open(abs_path, encoding="utf-8") as f:
                 original = f.read()
+
+            track_file_edit(abs_path, ctx.app_state.session_id)
 
             if old_string not in original:
                 return ToolResultBlock(
@@ -114,9 +119,7 @@ class EditTool(Tool):
                 similar_lines.append((i + 1, line.strip()))
 
         if similar_lines:
-            suggestions = "\n".join(
-                f"  Line {num}: {text}" for num, text in similar_lines[:10]
-            )
+            suggestions = "\n".join(f"  Line {num}: {text}" for num, text in similar_lines[:10])
             return (
                 f"Error: Exact text not found in {filename}.\n"
                 f"Similar lines found:\n{suggestions}\n\n"

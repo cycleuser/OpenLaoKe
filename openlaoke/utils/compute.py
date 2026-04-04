@@ -9,13 +9,13 @@ This module provides comprehensive compute cost estimation for:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 
 class GPUType(str, Enum):
     """Supported GPU models."""
+
     # NVIDIA Data Center
     H100 = "h100"
     H100_SXM = "h100_sxm"
@@ -40,6 +40,7 @@ class GPUType(str, Enum):
 @dataclass
 class GPUConfig:
     """Configuration and specs for a GPU model."""
+
     gpu_type: GPUType
     name: str
     fp32_tflops: float  # FP32 TFLOPS
@@ -53,6 +54,7 @@ class GPUConfig:
 
 class ComputeProvider(str, Enum):
     """Cloud compute providers."""
+
     AWS = "aws"
     GCP = "gcp"
     AZURE = "azure"
@@ -238,6 +240,7 @@ GPU_DATABASE: dict[GPUType, GPUConfig] = {
 @dataclass
 class InferenceConfig:
     """Configuration for inference workload."""
+
     model_name: str = ""
     model_size_b: float = 7.0  # Model size in billions of parameters
     context_length: int = 4096
@@ -252,21 +255,22 @@ class InferenceConfig:
 @dataclass
 class InferenceCost:
     """Cost breakdown for inference workload."""
+
     config: InferenceConfig
     gpu: GPUConfig
-    
+
     # Per-request metrics
     tokens_per_second: float = 0.0
     latency_seconds: float = 0.0
     memory_required_gb: float = 0.0
-    
+
     # Cost metrics
     hourly_compute_cost: float = 0.0
     cost_per_1k_tokens: float = 0.0
     cost_per_request: float = 0.0
     daily_cost: float = 0.0
     monthly_cost: float = 0.0
-    
+
     # GPU utilization
     tflops_utilization: float = 0.0
     memory_utilization: float = 0.0
@@ -275,6 +279,7 @@ class InferenceCost:
 @dataclass
 class TrainingConfig:
     """Configuration for training workload."""
+
     model_name: str = ""
     model_size_b: float = 7.0  # Model size in billions of parameters
     dataset_size_tokens: int = 1_000_000_000  # 1B tokens
@@ -283,7 +288,7 @@ class TrainingConfig:
     precision: str = "fp16"  # fp32, fp16, bf16
     gpu_type: GPUType = GPUType.A100_80GB
     gpu_count: int = 8
-    
+
     # Training parameters
     epochs: int = 1
     learning_rate_factor: float = 1.0
@@ -293,19 +298,20 @@ class TrainingConfig:
 @dataclass
 class TrainingCost:
     """Cost breakdown for training workload."""
+
     config: TrainingConfig
     gpu: GPUConfig
-    
+
     # Compute metrics
     total_tflops_required: float = 0.0
     estimated_training_hours: float = 0.0
     estimated_training_days: float = 0.0
-    
+
     # Cost metrics
     total_compute_cost: float = 0.0
     cost_per_1k_tokens: float = 0.0
     hourly_cost: float = 0.0
-    
+
     # Efficiency metrics
     tflops_per_gpu: float = 0.0
     tokens_per_second_total: float = 0.0
@@ -313,14 +319,14 @@ class TrainingCost:
 
 class ComputeCalculator:
     """Calculator for compute costs and performance estimates."""
-    
+
     # FLOPs estimates for training (Chinchilla scaling laws approximation)
     TRAINING_FLOPS_PER_TOKEN = {
-        "fp32": 6,   # 6 FLOPs per parameter per token (forward + backward)
-        "fp16": 2,   # 2 FLOPs per parameter per token (half precision)
-        "bf16": 2,   # 2 FLOPs per parameter per token (bfloat16)
+        "fp32": 6,  # 6 FLOPs per parameter per token (forward + backward)
+        "fp16": 2,  # 2 FLOPs per parameter per token (half precision)
+        "bf16": 2,  # 2 FLOPs per parameter per token (bfloat16)
     }
-    
+
     # Memory estimates for model weights (in bytes per parameter)
     MEMORY_PER_PARAM = {
         "fp32": 4,
@@ -329,20 +335,20 @@ class ComputeCalculator:
         "int8": 1,
         "int4": 0.5,
     }
-    
+
     # KV cache memory per token (rough estimates)
     KV_CACHE_PER_TOKEN = {
         "fp32": 8 * 2 * 128,  # key + value, fp32, 128 heads
         "fp16": 2 * 2 * 128,
         "bf16": 2 * 2 * 128,
     }
-    
+
     def __init__(self, gpu_type: GPUType = GPUType.A100_80GB):
         self.gpu_type = gpu_type
         self.gpu = GPU_DATABASE.get(gpu_type)
         if not self.gpu:
             raise ValueError(f"Unknown GPU type: {gpu_type}")
-    
+
     def get_effective_tflops(self, precision: str) -> float:
         """Get effective TFLOPS for given precision."""
         precision_map = {
@@ -351,27 +357,27 @@ class ComputeCalculator:
             "bf16": self.gpu.bf16_tflops,
         }
         return precision_map.get(precision, self.gpu.bf16_tflops)
-    
+
     def estimate_inference_cost(self, config: InferenceConfig) -> InferenceCost:
         """Estimate inference cost for given configuration."""
         gpu = GPU_DATABASE.get(config.gpu_type, self.gpu)
         precision = config.precision
-        
+
         # Calculate memory requirements
         memory_per_param = self.MEMORY_PER_PARAM.get(precision, 2)
         model_memory_gb = config.model_size_b * memory_per_param
-        
+
         # KV cache memory
         kv_memory_per_token = self.KV_CACHE_PER_TOKEN.get(precision, 512)
         kv_memory_gb = (config.context_length * kv_memory_per_token * config.batch_size) / (1024**3)
-        
+
         total_memory_gb = model_memory_gb + kv_memory_gb
-        
+
         # Estimate tokens per second based on model size and GPU
         # Simplified model: throughput scales roughly with TFLOPs / model_size
         effective_tflops = self.get_effective_tflops(precision)
         memory_bandwidth = gpu.memory_bandwidth_gbps
-        
+
         # Very rough throughput estimate
         if config.model_size_b <= 7:
             base_tps = 50  # tokens/second base rate
@@ -381,37 +387,45 @@ class ComputeCalculator:
             base_tps = 20
         else:
             base_tps = 10
-        
+
         # Scale by GPU capability relative to A100 80GB
         gpu_scale = gpu.fp16_tflops / GPU_DATABASE[GPUType.A100_80GB].fp16_tflops
         tokens_per_second = base_tps * gpu_scale * config.gpu_count
-        
+
         # Handle memory constraints
         memory_constraint = gpu.memory_gb / total_memory_gb if total_memory_gb > 0 else 1.0
         if memory_constraint < 1.0:
             tokens_per_second *= memory_constraint
-        
-        latency_seconds = config.avg_tokens_per_output / tokens_per_second if tokens_per_second > 0 else 0
-        
+
+        latency_seconds = (
+            config.avg_tokens_per_output / tokens_per_second if tokens_per_second > 0 else 0
+        )
+
         # Calculate costs
         hourly_compute = 0.0
         if gpu.price_per_hour:
             hourly_compute = gpu.price_per_hour * config.gpu_count
-        
+
         # Cost per token (compute only, rough estimate)
         tokens_per_hour = tokens_per_second * 3600
         cost_per_1k_tokens = (hourly_compute / tokens_per_hour * 1000) if tokens_per_hour > 0 else 0
-        
+
         # Total costs
         cost_per_request = cost_per_1k_tokens * config.avg_tokens_per_output / 1000
         daily_cost = hourly_compute * 24
         monthly_cost = daily_cost * 30
-        
+
         # GPU utilization estimate
         tflops_needed = config.model_size_b * 2 * config.batch_size * tokens_per_second / 1e12
-        tflops_utilization = (tflops_needed / (effective_tflops * config.gpu_count)) * 100 if effective_tflops > 0 else 0
-        memory_utilization = (total_memory_gb / (gpu.memory_gb * config.gpu_count)) * 100 if gpu.memory_gb > 0 else 0
-        
+        tflops_utilization = (
+            (tflops_needed / (effective_tflops * config.gpu_count)) * 100
+            if effective_tflops > 0
+            else 0
+        )
+        memory_utilization = (
+            (total_memory_gb / (gpu.memory_gb * config.gpu_count)) * 100 if gpu.memory_gb > 0 else 0
+        )
+
         return InferenceCost(
             config=config,
             gpu=gpu,
@@ -426,46 +440,48 @@ class ComputeCalculator:
             tflops_utilization=min(tflops_utilization, 100.0),
             memory_utilization=min(memory_utilization, 100.0),
         )
-    
+
     def estimate_training_cost(self, config: TrainingConfig) -> TrainingCost:
         """Estimate training cost for given configuration."""
         gpu = GPU_DATABASE.get(config.gpu_type, self.gpu)
         precision = config.precision
-        
+
         # Calculate FLOPs required
         flops_per_token = self.TRAINING_FLOPS_PER_TOKEN.get(precision, 2)
         model_size = config.model_size_b * 1e9  # Convert to actual parameters
-        
+
         # Total FLOPs = 6 * model_size * dataset_size * epochs (approx)
         # 6 = 2 (forward) + 4 (backward) for FP32, or 2 for FP16/BF16
         total_flops = flops_per_token * model_size * config.dataset_size_tokens * config.epochs
         total_tflops = total_flops / 1e12
-        
+
         # Effective GPU TFLOPS (accounting for practical efficiency ~50% for training)
         effective_tflops = self.get_effective_tflops(precision) * config.gpu_count * 0.5
-        
+
         # Training time
         training_seconds = total_tflops / effective_tflops if effective_tflops > 0 else 0
         training_hours = training_seconds / 3600
         training_days = training_hours / 24
-        
+
         # Costs
         hourly_cost = 0.0
         if gpu.price_per_hour:
             hourly_cost = gpu.price_per_hour * config.gpu_count
-        
+
         total_cost = hourly_cost * training_hours
-        
+
         # Cost per token
         total_tokens = config.dataset_size_tokens * config.epochs
         cost_per_1k_tokens = (total_cost / total_tokens * 1000) if total_tokens > 0 else 0
-        
+
         # Efficiency metrics
-        tflops_per_gpu = total_tflops / training_hours / config.gpu_count if training_hours > 0 else 0
-        
+        tflops_per_gpu = (
+            total_tflops / training_hours / config.gpu_count if training_hours > 0 else 0
+        )
+
         # Throughput
         tokens_per_second = total_tokens / training_seconds if training_seconds > 0 else 0
-        
+
         return TrainingCost(
             config=config,
             gpu=gpu,
@@ -478,12 +494,9 @@ class ComputeCalculator:
             tflops_per_gpu=tflops_per_gpu,
             tokens_per_second_total=tokens_per_second,
         )
-    
+
     def compare_cloud_providers(
-        self,
-        gpu_type: GPUType,
-        hours: float,
-        providers: list[ComputeProvider] | None = None
+        self, gpu_type: GPUType, hours: float, providers: list[ComputeProvider] | None = None
     ) -> dict[str, float]:
         """Compare costs across cloud providers for given GPU and hours."""
         if providers is None:
@@ -494,11 +507,11 @@ class ComputeCalculator:
                 ComputeProvider.LAMBDA_LABS,
                 ComputeProvider.VAST_AI,
             ]
-        
+
         gpu = GPU_DATABASE.get(gpu_type)
         if not gpu or not gpu.price_per_hour:
             return {}
-        
+
         # Provider-specific pricing adjustments (approximate)
         provider_multipliers = {
             "aws": 1.0,
@@ -508,10 +521,10 @@ class ComputeCalculator:
             "vast_ai": 0.6,
             "local": 0.0,  # Electricity only
         }
-        
+
         base_hourly = gpu.price_per_hour
         results = {}
-        
+
         for provider in providers:
             provider_key = provider.value
             if provider == ComputeProvider.LOCAL:
@@ -520,7 +533,7 @@ class ComputeCalculator:
             else:
                 multiplier = provider_multipliers.get(provider_key, 1.0)
                 results[provider_key] = hours * base_hourly * multiplier
-        
+
         return results
 
 
@@ -553,25 +566,25 @@ def estimate_model_vram(
     batch_size: int = 1,
 ) -> dict[str, float]:
     """Estimate VRAM requirements for a model.
-    
+
     Returns:
         Dictionary with memory breakdown in GB.
     """
     memory_per_param = ComputeCalculator.MEMORY_PER_PARAM.get(precision, 2)
-    
+
     # Model weights
     weights_gb = model_size_b * memory_per_param
-    
+
     # Activations (rough estimate: ~2x model size for training)
     activations_gb = model_size_b * memory_per_param * 2
-    
+
     # KV cache (per token)
     kv_per_token = ComputeCalculator.KV_CACHE_PER_TOKEN.get(precision, 512) / (1024**3)
     kv_cache_gb = kv_per_token * max_context_length * batch_size if include_kv_cache else 0
-    
+
     # Gradient optimizer states (training only, fp32 copies)
     optimizer_gb = model_size_b * 4  # Adam optimizer: 2 states per parameter
-    
+
     return {
         "weights": weights_gb,
         "activations": activations_gb,
@@ -586,7 +599,7 @@ def print_inference_report(cost: InferenceCost) -> str:
     """Generate a formatted inference cost report."""
     cfg = cost.config
     gpu = cost.gpu
-    
+
     lines = [
         "=" * 60,
         "INFERENCE COST REPORT",
@@ -627,7 +640,7 @@ def print_training_report(cost: TrainingCost) -> str:
     """Generate a formatted training cost report."""
     cfg = cost.config
     gpu = cost.gpu
-    
+
     lines = [
         "=" * 60,
         "TRAINING COST REPORT",
@@ -665,44 +678,33 @@ def print_training_report(cost: TrainingCost) -> str:
 
 # Convenience function for quick calculations
 def quick_estimate(
-    model_size_b: float,
-    gpu_type: GPUType = GPUType.A100_80GB,
-    mode: str = "inference",
-    **kwargs
+    model_size_b: float, gpu_type: GPUType = GPUType.A100_80GB, mode: str = "inference", **kwargs
 ) -> TrainingCost | InferenceCost:
     """Quick estimate for common scenarios.
-    
+
     Args:
         model_size_b: Model size in billions of parameters
         gpu_type: GPU type to use
         mode: 'inference' or 'training'
         **kwargs: Additional configuration parameters
-    
+
     Returns:
         TrainingCost or InferenceCost object
     """
     calc = ComputeCalculator(gpu_type)
-    
+
     if mode == "inference":
-        config = InferenceConfig(
-            model_size_b=model_size_b,
-            gpu_type=gpu_type,
-            **kwargs
-        )
+        config = InferenceConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
         return calc.estimate_inference_cost(config)
     else:
-        config = TrainingConfig(
-            model_size_b=model_size_b,
-            gpu_type=gpu_type,
-            **kwargs
-        )
+        config = TrainingConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
         return calc.estimate_training_cost(config)
 
 
 if __name__ == "__main__":
     # Example usage
     print("GPU Compute Calculator - Example Usage\n")
-    
+
     # Example 1: Estimate inference cost for a 7B model on A100
     print("Example 1: 7B Model Inference on A100 80GB")
     print("-" * 40)
@@ -716,7 +718,7 @@ if __name__ == "__main__":
     )
     print(print_inference_report(inference_cost))
     print()
-    
+
     # Example 2: Estimate training cost for a 70B model on H100 cluster
     print("Example 2: 70B Model Training on H100 Cluster (8 GPUs)")
     print("-" * 40)
@@ -730,7 +732,7 @@ if __name__ == "__main__":
     )
     print(print_training_report(training_cost))
     print()
-    
+
     # Example 3: VRAM estimation
     print("Example 3: VRAM Requirements for 13B Model")
     print("-" * 40)
@@ -740,7 +742,7 @@ if __name__ == "__main__":
     print(f"  Total Inference: {vram['total_inference']:.1f} GB")
     print(f"  Total Training: {vram['total_training']:.1f} GB")
     print()
-    
+
     # Example 4: Compare cloud providers
     print("Example 4: Cloud Provider Comparison (H100, 24 hours)")
     print("-" * 40)

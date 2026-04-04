@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import time
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -14,9 +14,7 @@ from openlaoke.types.core_types import (
     AssistantMessage,
     CostInfo,
     MessageRole,
-    SystemMessage,
     TokenUsage,
-    ToolResultBlock,
     ToolUseBlock,
 )
 
@@ -24,6 +22,7 @@ from openlaoke.types.core_types import (
 @dataclass
 class ModelPricing:
     """Pricing information for a model (per million tokens)."""
+
     input_price: float = 3.0
     output_price: float = 15.0
     cache_read_price: float = 0.30
@@ -42,6 +41,7 @@ MODEL_PRICES: dict[str, ModelPricing] = {
 @dataclass
 class APIConfig:
     """Configuration for the API client."""
+
     api_key: str = ""
     base_url: str = "https://api.anthropic.com"
     model: str = "claude-sonnet-4-20250514"
@@ -96,7 +96,9 @@ class APIClient:
             "content-type": "application/json",
         }
 
-    def _build_messages(self, system_prompt: str, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _build_messages(
+        self, system_prompt: str, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         result = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -106,28 +108,32 @@ class APIClient:
                 continue
 
             if role == "tool_result":
-                result.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.get("tool_use_id", ""),
-                            "content": content,
-                        }
-                    ],
-                })
+                result.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.get("tool_use_id", ""),
+                                "content": content,
+                            }
+                        ],
+                    }
+                )
             elif role == "tool_use":
-                result.append({
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "id": msg.get("id", ""),
-                            "name": msg.get("name", ""),
-                            "input": msg.get("input", {}),
-                        }
-                    ],
-                })
+                result.append(
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": msg.get("id", ""),
+                                "name": msg.get("name", ""),
+                                "input": msg.get("input", {}),
+                            }
+                        ],
+                    }
+                )
             else:
                 result.append({"role": role, "content": content})
 
@@ -138,8 +144,12 @@ class APIClient:
         return CostInfo(
             input_cost=usage.get("input_tokens", 0) / 1_000_000 * pricing.input_price,
             output_cost=usage.get("output_tokens", 0) / 1_000_000 * pricing.output_price,
-            cache_read_cost=usage.get("cache_read_input_tokens", 0) / 1_000_000 * pricing.cache_read_price,
-            cache_creation_cost=usage.get("cache_creation_input_tokens", 0) / 1_000_000 * pricing.cache_creation_price,
+            cache_read_cost=usage.get("cache_read_input_tokens", 0)
+            / 1_000_000
+            * pricing.cache_read_price,
+            cache_creation_cost=usage.get("cache_creation_input_tokens", 0)
+            / 1_000_000
+            * pricing.cache_creation_price,
         )
 
     def _parse_token_usage(self, usage: dict[str, int]) -> TokenUsage:
@@ -190,21 +200,27 @@ class APIClient:
             if block["type"] == "text":
                 content += block["text"]
             elif block["type"] == "tool_use":
-                tool_uses.append(ToolUseBlock(
-                    id=block["id"],
-                    name=block["name"],
-                    input=block["input"],
-                ))
+                tool_uses.append(
+                    ToolUseBlock(
+                        id=block["id"],
+                        name=block["name"],
+                        input=block["input"],
+                    )
+                )
 
         usage = self._parse_token_usage(data.get("usage", {}))
         cost = self._calculate_cost(data.get("usage", {}))
 
-        return AssistantMessage(
-            role=MessageRole.ASSISTANT,
-            content=content,
-            tool_uses=tool_uses,
-            stop_reason=data.get("stop_reason"),
-        ), usage, cost
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=data.get("stop_reason"),
+            ),
+            usage,
+            cost,
+        )
 
     async def stream_message(
         self,
@@ -262,11 +278,13 @@ class APIClient:
                 if event_type == "content_block_start":
                     block = event.get("content_block", {})
                     if block.get("type") == "tool_use":
-                        tool_uses.append(ToolUseBlock(
-                            id=block["id"],
-                            name=block["name"],
-                            input={},
-                        ))
+                        tool_uses.append(
+                            ToolUseBlock(
+                                id=block["id"],
+                                name=block["name"],
+                                input={},
+                            )
+                        )
 
                 elif event_type == "content_block_delta":
                     delta = event.get("delta", {})

@@ -10,7 +10,11 @@ import sys
 from rich.console import Console
 
 from openlaoke import __version__
-from openlaoke.core.config_wizard import get_proxy_url, quick_setup, run_config_wizard, show_current_config
+from openlaoke.core.config_wizard import (
+    get_proxy_url,
+    run_config_wizard,
+    show_current_config,
+)
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.repl import REPL
 from openlaoke.core.state import create_app_state
@@ -23,34 +27,69 @@ def main() -> None:
         description="OpenLaoKe - Open-source AI coding assistant",
     )
     parser.add_argument(
-        "-v", "--version",
+        "-v",
+        "--version",
         action="version",
         version=f"OpenLaoKe {__version__}",
     )
+
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    server_parser = subparsers.add_parser("server", help="Start HTTP API server")
+    server_parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Server host (default: localhost)",
+    )
+    server_parser.add_argument(
+        "--port",
+        type=int,
+        default=3000,
+        help="Server port (default: 3000)",
+    )
+    server_parser.add_argument(
+        "--cors",
+        nargs="*",
+        default=None,
+        help="Additional CORS origins",
+    )
+
     parser.add_argument(
-        "-m", "--model",
+        "-m",
+        "--model",
         default=None,
         help="Model to use (e.g., gpt-4o, llama3.2, gemma3:1b)",
     )
     parser.add_argument(
-        "-p", "--permission",
+        "-p",
+        "--permission",
         choices=["default", "auto", "bypass"],
         default=None,
         help="Permission mode (auto/bypass = no confirmations)",
     )
     parser.add_argument(
-        "-y", "--yes",
+        "-y",
+        "--yes",
         action="store_true",
         help="Auto-approve all tool calls (same as --permission auto)",
     )
     parser.add_argument(
-        "-c", "--cwd",
+        "-c",
+        "--cwd",
         default=None,
         help="Working directory",
     )
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "openai", "minimax", "aliyun_coding_plan", "ollama", "lm_studio", "openai_compatible"],
+        choices=[
+            "anthropic",
+            "openai",
+            "minimax",
+            "aliyun_coding_plan",
+            "ollama",
+            "lm_studio",
+            "openai_compatible",
+        ],
         default=None,
         help="AI provider to use",
     )
@@ -111,6 +150,18 @@ def main() -> None:
 
     console = Console(force_terminal=True)
 
+    if args.command == "server":
+        from openlaoke.server import Server
+
+        server = Server(
+            host=args.host,
+            port=args.port,
+            cors_origins=args.cors,
+        )
+        console.print(f"[green]Starting OpenLaoKe server on {args.host}:{args.port}[/green]")
+        server.run()
+        return
+
     config = load_config()
 
     if args.show_config:
@@ -164,9 +215,10 @@ def main() -> None:
         persist_path=persist_path,
     )
     app_state.session_config.model = config.providers.get_active_model()
-    
+
     if config.auto_approve_all:
         from openlaoke.types.core_types import PermissionMode
+
         app_state.permission_config.mode = PermissionMode.AUTO
         app_state.auto_accept = True
 
@@ -176,9 +228,11 @@ def main() -> None:
         config.thinking_budget = args.thinking_budget
     if args.permission:
         from openlaoke.types.core_types import PermissionMode
+
         app_state.permission_config.mode = PermissionMode(args.permission)
     if args.yes:
         from openlaoke.types.core_types import PermissionMode
+
         app_state.permission_config.mode = PermissionMode.AUTO
         app_state.auto_accept = True
     if args.verbose:
@@ -186,7 +240,7 @@ def main() -> None:
 
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
-    
+
     if args.prompt:
         prompt_text = " ".join(args.prompt)
         asyncio.run(_run_non_interactive(prompt_text, app_state, config))
@@ -248,31 +302,40 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
             for tool_use in response.tool_uses:
                 tool = registry.get(tool_use.name)
                 if not tool:
-                    messages.append({
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Unknown tool: {tool_use.name}",
-                    })
+                    messages.append(
+                        {
+                            "role": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Unknown tool: {tool_use.name}",
+                        }
+                    )
                     continue
 
                 from openlaoke.core.tool import ToolContext
+
                 ctx = ToolContext(app_state=app_state, tool_use_id=tool_use.id)
 
                 validation = tool.validate_input(tool_use.input)
                 if not validation.result:
-                    messages.append({
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Validation error: {validation.message}",
-                    })
+                    messages.append(
+                        {
+                            "role": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Validation error: {validation.message}",
+                        }
+                    )
                     continue
 
                 result = await tool.call(ctx, **tool_use.input)
-                messages.append({
-                    "role": "tool_result",
-                    "tool_use_id": tool_use.id,
-                    "content": result.content if isinstance(result.content, str) else str(result.content),
-                })
+                messages.append(
+                    {
+                        "role": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": result.content
+                        if isinstance(result.content, str)
+                        else str(result.content),
+                    }
+                )
 
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
