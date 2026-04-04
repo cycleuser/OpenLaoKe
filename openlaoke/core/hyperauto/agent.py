@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.core.hyperauto.config import HyperAutoConfig
+from openlaoke.core.hyperauto.executor import ToolExecutor
 from openlaoke.core.hyperauto.types import (
     Decision,
     DecisionType,
@@ -78,6 +79,7 @@ class HyperAutoAgent:
         self._learned_patterns: dict[str, list[str]] = {}
         self._on_progress: ProgressCallback | None = None
         self._api_client = None
+        self._tool_executor: ToolExecutor | None = None
 
     @property
     def skill_registry(self) -> SkillRegistry:
@@ -112,6 +114,12 @@ class HyperAutoAgent:
         else:
             print("[DEBUG] _get_api_client: Reusing existing client")
         return self._api_client
+
+    def _get_tool_executor(self) -> ToolExecutor:
+        """Get or create tool executor."""
+        if self._tool_executor is None:
+            self._tool_executor = ToolExecutor(self.app_state)
+        return self._tool_executor
 
     async def run(self, request: str) -> dict[str, Any]:
         """Execute a request in HyperAuto mode."""
@@ -334,7 +342,7 @@ JSON only, no other text."""
         return all_done
 
     async def _execute_sub_task(self, task: SubTask) -> Any:
-        """Execute a single sub-task using AI."""
+        """Execute a single sub-task using AI with tool calling."""
         import traceback
 
         print(f"[DEBUG] _execute_sub_task: Starting task '{task.name}'")
@@ -347,54 +355,33 @@ JSON only, no other text."""
                 task.status = SubTaskStatus.COMPLETED
                 return task.result
 
-            api = await self._get_api_client()
-            print("[DEBUG] _execute_sub_task: API client ready")
+            # Use the new task executor with tool calling
+            from openlaoke.core.hyperauto.task_executor import execute_task_with_tools
 
-            system_prompt = "You are a task executor. Complete tasks efficiently."
-            user_prompt = f"""Execute this subtask:
-
-Task: {task.name}
-Description: {task.description}
-Context: {self.context.original_request}
-
-Provide the results."""
-
-            if self.app_state.multi_provider_config:
-                model = self.app_state.multi_provider_config.get_active_model()
-            else:
-                model = "gemma3:1b"
-            print(f"[DEBUG] _execute_sub_task: Calling API with model={model}...")
-
-            response_msg, token_usage, _ = await api.send_message(
-                system_prompt=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-                model=model,
-                max_tokens=4000,
+            result = await execute_task_with_tools(
+                app_state=self.app_state,
+                task=task,
+                original_request=self.context.original_request,
+                max_iterations=10,
             )
 
-            print("[DEBUG] _execute_sub_task: API response received")
+            task.result = result
+            task.status = SubTaskStatus.COMPLETED
 
-            if response_msg and response_msg.content:
-                content = response_msg.content
-                if hasattr(content, "text"):
-                    content = content.text
-                print(f"[DEBUG] _execute_sub_task: Response length={len(content)}")
-                task.result = {"output": content, "task": task.name}
-                task.status = SubTaskStatus.COMPLETED
+            if result.get("tokens"):
+                self.context.total_tokens += result["tokens"]
 
-                if token_usage:
-                    self.context.total_tokens += token_usage.total_tokens
-                    print(f"[DEBUG] _execute_sub_task: Tokens={token_usage.total_tokens}")
-            else:
-                print("[DEBUG] _execute_sub_task: No API response, using dispatcher")
-                result = await self._dispatch_task(task)
-                task.result = result
-                task.status = SubTaskStatus.COMPLETED
+            print(
+                f"[DEBUG] _execute_sub_task: Task completed in {result.get('iterations', 0)} iterations"
+            )
+            print(f"[DEBUG] _execute_sub_task: Tokens used: {result.get('tokens', 0)}")
+            print(
+                f"[DEBUG] _execute_sub_task: Tool calls made: {len(result.get('tool_results', []))}"
+            )
 
             if self.config.auto_run_tests and task.metadata.get("requires_test", False):
                 await self._run_tests_for_task(task)
 
-            print(f"[DEBUG] _execute_sub_task: Task '{task.name}' completed successfully")
             return task.result
 
         except Exception as e:
