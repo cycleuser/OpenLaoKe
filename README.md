@@ -6,6 +6,8 @@ Open-source terminal AI coding assistant with advanced automation and supervisio
 
 ### Core Features
 - **Interactive REPL** with rich terminal UI
+- **Command History** - Use ↑/↓ arrows to browse previous commands, Ctrl+R to search
+- **Smart Autocomplete** - Tab completion for commands and skills
 - **Multi-Provider Support** - 22 AI providers supported
 - **Tool System** - 30+ built-in tools
 - **MCP Support** - Connect to external MCP tool servers

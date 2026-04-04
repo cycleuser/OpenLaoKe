@@ -3,6 +3,25 @@
 ## 核心原则
 所有命令都支持**直接参数传递**，无需复杂子命令。
 
+## 输入增强功能
+
+### 命令历史记录
+- **↑ / ↓ 键** - 浏览历史命令
+- **Ctrl+R** - 搜索历史命令
+- **Tab 键** - 自动补全命令和技能名称
+- 历史文件位置：`~/.openlaoke/command_history.txt`
+
+**使用示例：**
+```bash
+OpenLaoKe: /model gemma3:27b
+# 稍后按 ↑ 键
+OpenLaoKe: /model gemma3:27b  # 自动显示上一条命令
+
+# 搜索包含 "hyper" 的历史命令
+OpenLaoKe: [Ctrl+R]
+(reverse-i-search)`hyper': /hyperauto 重构项目
+```
+
 ## 模型与提供商
 
 ### `/model` - 模型切换

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -686,12 +687,140 @@ class HyperAutoCommand(SlashCommand):
         self, ctx: CommandContext, task_id: str, task_description: str | None
     ) -> None:
         """Execute HyperAuto task in background and display output."""
-        from rich.console import Console
+        import time
+
+        from rich.console import Console, Group
+        from rich.live import Live
+        from rich.panel import Panel
+        from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+        from rich.table import Table
 
         console = Console()
 
+        progress_state: dict[str, Any] = {
+            "iteration": 0,
+            "max_iterations": 100,
+            "status": "Initializing",
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "cost": 0.0,
+            "model_active": False,
+            "sub_tasks": [],
+            "current_task": "",
+            "state": "idle",
+            "start_time": 0.0,
+        }
+
+        def create_progress_display() -> Group:
+            progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}[/bold blue]"),
+                BarColumn(complete_style="green", finished_style="green"),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+            )
+
+            max_iter: int = progress_state.get("max_iterations", 100)
+            iter_count: int = progress_state.get("iteration", 0)
+            task_progress = progress.add_task(
+                "[cyan]Iteration Progress[/cyan]",
+                total=max_iter,
+            )
+            progress.update(task_progress, completed=iter_count)
+
+            status_table = Table(show_header=False, box=None, padding=(0, 2))
+            status_table.add_column("key", style="bold cyan")
+            status_table.add_column("value")
+
+            start_time: float = progress_state.get("start_time", 0.0)
+            elapsed = time.time() - start_time if start_time > 0 else 0.0
+
+            elapsed_str = (
+                f"{int(elapsed)}s"
+                if elapsed < 60
+                else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+            )
+
+            state_val: str = progress_state.get("state", "idle")
+            status_table.add_row("Status", f"[bold]{state_val.upper()}[/bold]")
+            status_table.add_row("Iteration", f"{iter_count}/{max_iter}")
+            status_table.add_row("Elapsed", elapsed_str)
+
+            current_task_val: str = progress_state.get("current_task", "N/A")
+            status_table.add_row("Current", current_task_val[:40])
+
+            model_active: bool = progress_state.get("model_active", False)
+            model_status = "[green]ACTIVE[/green]" if model_active else "[dim]IDLE[/dim]"
+            status_table.add_row("Model", model_status)
+
+            token_table = Table(show_header=False, box=None, padding=(0, 2))
+            token_table.add_column("key", style="bold yellow")
+            token_table.add_column("value")
+
+            tokens_input: int = progress_state.get("tokens_input", 0)
+            tokens_output: int = progress_state.get("tokens_output", 0)
+            cost: float = progress_state.get("cost", 0.0)
+            token_table.add_row("Input Tokens", f"{tokens_input:,}")
+            token_table.add_row("Output Tokens", f"{tokens_output:,}")
+            token_table.add_row("Cost", f"${cost:.4f}")
+
+            sub_tasks: list[dict[str, Any]] = progress_state.get("sub_tasks", [])
+            if sub_tasks:
+                task_table = Table(show_header=True, box=None, padding=(0, 1))
+                task_table.add_column("Task", style="cyan")
+                task_table.add_column("Status", justify="center")
+
+                for st in sub_tasks[:6]:
+                    st_status: str = st.get("status", "pending")
+                    status_icon = {
+                        "completed": "[green]✓[/green]",
+                        "running": "[yellow]●[/yellow]",
+                        "pending": "[dim]○[/dim]",
+                        "failed": "[red]✗[/red]",
+                    }.get(st_status, "[dim]○[/dim]")
+                    st_name: str = st.get("name", "unknown")
+                    task_table.add_row(st_name[:30], status_icon)
+
+                return Group(
+                    Panel(progress, title="[bold]HyperAuto Progress[/bold]", border_style="cyan"),
+                    Panel(status_table, title="[bold]Status[/bold]", border_style="blue"),
+                    Panel(token_table, title="[bold]Token Usage[/bold]", border_style="yellow"),
+                    Panel(task_table, title="[bold]Sub Tasks[/bold]", border_style="green"),
+                )
+
+            return Group(
+                Panel(progress, title="[bold]HyperAuto Progress[/bold]", border_style="cyan"),
+                Panel(status_table, title="[bold]Status[/bold]", border_style="blue"),
+                Panel(token_table, title="[bold]Token Usage[/bold]", border_style="yellow"),
+            )
+
+        def on_progress(context) -> None:
+            progress_state["iteration"] = context.iteration
+            progress_state["max_iterations"] = self._get_hyperauto_config(ctx).max_iterations
+            progress_state["state"] = context.current_state.value
+            progress_state["sub_tasks"] = [t.to_dict() for t in context.sub_tasks]
+            progress_state["tokens_input"] = context.total_tokens
+            progress_state["tokens_output"] = context.total_tokens
+            progress_state["cost"] = context.total_cost
+
+            running_tasks = [t for t in context.sub_tasks if t.status.value == "running"]
+            if running_tasks:
+                progress_state["current_task"] = running_tasks[0].name
+                progress_state["model_active"] = True
+            else:
+                progress_state["current_task"] = context.current_state.value
+                progress_state["model_active"] = False
+
+            task = self._get_active_hyperauto_task(ctx)
+            if task:
+                task["iterations"] = context.iteration
+                task["status"] = context.current_state.value
+                task["current_step"] = len(
+                    [t for t in context.sub_tasks if t.status.value == "completed"]
+                )
+                self._save_active_task(ctx, task)
+
         try:
-            # Update status to running
             task = self._get_active_hyperauto_task(ctx)
             if task:
                 task["status"] = "running"
@@ -705,10 +834,6 @@ class HyperAutoCommand(SlashCommand):
                 task["recent_actions"] = ["Starting execution..."]
                 self._save_active_task(ctx, task)
 
-            console.print("\n[bold cyan]► HyperAuto Execution Started[/bold cyan]")
-            console.print(f"[dim]Task: {task_description or 'Autonomous operation'}[/dim]\n")
-
-            # Import and create HyperAuto agent
             from openlaoke.core.hyperauto.agent import HyperAutoAgent
             from openlaoke.core.hyperauto.config import HyperAutoConfig as HAutoConfig
 
@@ -721,14 +846,29 @@ class HyperAutoCommand(SlashCommand):
                 reflection_enabled=True,
             )
 
-            agent = HyperAutoAgent(ctx.app_state, ha_config)
+            progress_state["max_iterations"] = hyperauto_config.max_iterations
+            progress_state["start_time"] = time.time()
 
-            # Run the agent
-            console.print("[yellow]▶ Running autonomous execution...[/yellow]\n")
+            agent = HyperAutoAgent(ctx.app_state, ha_config, on_progress=on_progress)
 
-            result = await agent.run(task_description or "Autonomous operation")
+            console.print()
 
-            # Update final status
+            with Live(
+                create_progress_display(),
+                console=console,
+                refresh_per_second=4,
+                transient=False,
+            ) as live:
+                run_task = asyncio.create_task(
+                    agent.run(task_description or "Autonomous operation")
+                )
+
+                while not run_task.done():
+                    live.update(create_progress_display())
+                    await asyncio.sleep(0.25)
+
+                result = run_task.result()
+
             task = self._get_active_hyperauto_task(ctx)
             if task:
                 if result.get("success"):
@@ -738,7 +878,8 @@ class HyperAutoCommand(SlashCommand):
 
                     console.print("\n[bold green]✓ HyperAuto Completed Successfully![/bold green]")
                     console.print(f"[green]Task ID: {task_id}[/green]")
-                    console.print(f"[green]Iterations: {task['iterations']}[/green]\n")
+                    console.print(f"[green]Iterations: {task['iterations']}[/green]")
+                    console.print(f"[green]Duration: {self._calculate_duration(task)}[/green]\n")
                 else:
                     task["status"] = "failed"
                     error_msg = result.get("error", "Unknown error")
@@ -755,7 +896,6 @@ class HyperAutoCommand(SlashCommand):
         except Exception as e:
             console.print(f"\n[bold red]✗ HyperAuto Error: {e}[/bold red]\n")
 
-            # Update task status
             task = self._get_active_hyperauto_task(ctx)
             if task:
                 task["status"] = "failed"

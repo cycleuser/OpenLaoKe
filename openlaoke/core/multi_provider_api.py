@@ -588,6 +588,22 @@ class MultiProviderClient:
             ]
 
         response = await client.post(endpoint, headers=headers, json=body)
+
+        if response.status_code >= 400:
+            error_detail = ""
+            try:
+                error_data = response.json()
+                error_detail = f"\nError details: {error_data}"
+            except Exception:
+                error_detail = f"\nResponse text: {response.text[:500]}"
+
+            print(f"[DEBUG] API Error: {response.status_code} {response.reason_phrase}")
+            print(f"[DEBUG] Endpoint: {endpoint}")
+            print(f"[DEBUG] Request body keys: {list(body.keys())}")
+            print(f"[DEBUG] Model: {body.get('model', 'N/A')}")
+            print(f"[DEBUG] Messages count: {len(body.get('messages', []))}")
+            print(f"[DEBUG]{error_detail}")
+
         response.raise_for_status()
         data = response.json()
 
