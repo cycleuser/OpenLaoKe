@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from openlaoke.core.model_assessment import ModelAssessor, TaskDecomposer
 from openlaoke.core.supervisor.checker import TaskCompletionChecker
 from openlaoke.core.supervisor.requirements import TaskRequirements
 
@@ -44,6 +45,10 @@ class SupervisedTask:
     start_time: float = field(default_factory=time.time)
     last_check_time: float = 0.0
     retry_history: list[dict[str, Any]] = field(default_factory=list)
+    model: str | None = None
+    decomposed_steps: list[str] = field(default_factory=list)
+    current_step: int = 0
+    step_verification_results: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -67,6 +72,7 @@ class TaskSupervisor:
     3. Detect incomplete or low-quality outputs
     4. Trigger retries with specific feedback
     5. Escalate when automatic recovery fails
+    6. Adapt to model capabilities (tier-based task decomposition)
     """
 
     def __init__(self, app_state: AppState):
@@ -75,6 +81,17 @@ class TaskSupervisor:
         self.checker = TaskCompletionChecker()
         self._supervision_enabled = True
         self._anti_ai_mode = True
+        self.model_assessor: ModelAssessor | None = None
+        self.current_model: str | None = None
+        self.task_decomposer: TaskDecomposer | None = None
+
+    def set_model(self, model: str, config: Any = None) -> None:
+        """Set the current model and initialize model-aware supervision."""
+        self.current_model = model
+        if config:
+            self.model_assessor = ModelAssessor(config)
+            granularity = self.model_assessor.get_granularity(model)
+            self.task_decomposer = TaskDecomposer(granularity)
 
     def parse_request(self, user_request: str) -> SupervisedTask:
         requirements = self._extract_requirements(user_request)
@@ -83,7 +100,13 @@ class TaskSupervisor:
             original_request=user_request,
             requirements=requirements,
             status=TaskStatus.PENDING,
+            model=self.current_model,
         )
+
+        if self.task_decomposer:
+            task.decomposed_steps = self.task_decomposer.decompose(user_request)
+            if len(task.decomposed_steps) > 1:
+                task.max_attempts = self.task_decomposer.gran.retry_limit
 
         task_id = f"task_{int(time.time() * 1000)}"
         self.tasks[task_id] = task
@@ -94,57 +117,58 @@ class TaskSupervisor:
         requirements = []
         request_lower = request.lower()
 
-        if any(word in request_lower for word in ["写", "write", "撰写", "创建"]):
-            if "文章" in request_lower or "article" in request_lower or "paper" in request_lower:
-                requirements.extend(
-                    [
-                        TaskRequirements(
-                            name="document_created",
-                            description="Target document must be created",
-                            check_type="file_exists",
-                            critical=True,
-                        ),
-                        TaskRequirements(
-                            name="sufficient_length",
-                            description="Document must have substantial content (min 3000 words)",
-                            check_type="word_count",
-                            threshold=3000,
-                            critical=True,
-                        ),
-                        TaskRequirements(
-                            name="proper_structure",
-                            description="Document must have academic structure with sections",
-                            check_type="structure",
-                            patterns=["Introduction", "Conclusion", "References"],
-                            critical=True,
-                        ),
-                        TaskRequirements(
-                            name="has_citations",
-                            description="Document must include citations",
-                            check_type="contains",
-                            patterns=["[1]", "[2]", "References", "参考文献"],
-                            critical=False,
-                        ),
-                        TaskRequirements(
-                            name="anti_ai_quality",
-                            description="Content must not have AI-typical patterns",
-                            check_type="anti_ai_check",
-                            critical=True,
-                        ),
-                        TaskRequirements(
-                            name="references_downloaded",
-                            description="All cited references must be downloaded to pdf/ directory",
-                            check_type="references_exist",
-                            critical=True,
-                        ),
-                        TaskRequirements(
-                            name="has_real_citations",
-                            description="Document must cite REAL papers with downloadable sources",
-                            check_type="citations_quality",
-                            critical=False,
-                        ),
-                    ]
-                )
+        if any(word in request_lower for word in ["写", "write", "撰写", "创建"]) and any(
+            word in request_lower for word in ["文章", "article", "paper"]
+        ):
+            requirements.extend(
+                [
+                    TaskRequirements(
+                        name="document_created",
+                        description="Target document must be created",
+                        check_type="file_exists",
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="sufficient_length",
+                        description="Document must have substantial content (min 3000 words)",
+                        check_type="word_count",
+                        threshold=3000,
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="proper_structure",
+                        description="Document must have academic structure with sections",
+                        check_type="structure",
+                        patterns=["Introduction", "Conclusion", "References"],
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="has_citations",
+                        description="Document must include citations",
+                        check_type="contains",
+                        patterns=["[1]", "[2]", "References", "参考文献"],
+                        critical=False,
+                    ),
+                    TaskRequirements(
+                        name="anti_ai_quality",
+                        description="Content must not have AI-typical patterns",
+                        check_type="anti_ai_check",
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="references_downloaded",
+                        description="All cited references must be downloaded to pdf/ directory",
+                        check_type="references_exist",
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="has_real_citations",
+                        description="Document must cite REAL papers with downloadable sources",
+                        check_type="citations_quality",
+                        critical=False,
+                    ),
+                ]
+            )
 
         if any(word in request_lower for word in ["对比", "compare", "分析", "analyze"]):
             requirements.extend(
@@ -221,6 +245,17 @@ class TaskSupervisor:
         task = self.tasks[task_id]
         task.artifacts = artifacts
         task.last_check_time = time.time()
+
+        if self.task_decomposer and task.decomposed_steps:
+            should_verify = self.task_decomposer.should_verify(task.current_step)
+            if should_verify:
+                task.step_verification_results.append(
+                    {
+                        "step": task.current_step,
+                        "timestamp": time.time(),
+                        "artifacts": list(artifacts.keys()),
+                    }
+                )
 
         missing = []
         completed_count = 0
@@ -443,3 +478,54 @@ class TaskSupervisor:
     def enable_anti_ai_mode(self, enabled: bool = True) -> None:
         self._anti_ai_mode = enabled
         self.checker.enable_anti_ai_check(enabled)
+
+    def get_step_prompt(self, task_id: str) -> str | None:
+        """Get the current step prompt for decomposed tasks."""
+        if task_id not in self.tasks:
+            return None
+
+        task = self.tasks[task_id]
+        if not task.decomposed_steps or task.current_step >= len(task.decomposed_steps):
+            return None
+
+        step = task.decomposed_steps[task.current_step]
+        return f"Step {task.current_step + 1}/{len(task.decomposed_steps)}: {step}"
+
+    def advance_step(self, task_id: str) -> bool:
+        """Advance to the next step in a decomposed task."""
+        if task_id not in self.tasks:
+            return False
+
+        task = self.tasks[task_id]
+        if task.current_step < len(task.decomposed_steps) - 1:
+            task.current_step += 1
+            return True
+        return False
+
+    def get_timeout(self, base_timeout: float = 60.0) -> float:
+        """Get model-adjusted timeout."""
+        if self.task_decomposer:
+            return self.task_decomposer.get_timeout(base_timeout)
+        return base_timeout
+
+    def get_model_guidance(self) -> str:
+        """Get guidance specific to current model tier."""
+        if not self.task_decomposer:
+            return ""
+
+        gran = self.task_decomposer.gran
+        guidance = []
+
+        if gran.requires_explicit_steps:
+            guidance.append("This task will be broken into explicit atomic steps.")
+
+        if gran.verification_frequency in ["every_step", "frequent"]:
+            guidance.append("Each step will be verified before proceeding.")
+
+        if gran.max_subtasks < 10:
+            guidance.append(f"Task complexity limited to {gran.max_subtasks} subtasks.")
+
+        if gran.min_confidence_threshold > 0.8:
+            guidance.append("High confidence required - provide specific evidence.")
+
+        return " ".join(guidance) if guidance else ""
