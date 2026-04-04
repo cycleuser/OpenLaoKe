@@ -7,14 +7,12 @@ import json
 import os
 import sys
 import time
-import readline
 from typing import Any
 
 import httpx
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.text import Text
 
 from openlaoke.commands.registry import get_command, parse_command, register_all
@@ -23,7 +21,7 @@ from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.state import AppState
 from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import ToolContext, ToolRegistry
-from openlaoke.core.autocomplete import get_autocomplete_manager
+from openlaoke.core.prompt_input import create_prompt_session, get_user_input
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
     AssistantMessage,
@@ -47,46 +45,16 @@ class REPL:
         self.multi_provider_config: MultiProviderConfig | None = None
         self.app_config: Any = None
         self._proxy: str | None = None
+        self._prompt_session = None
 
         register_all()
         register_all_tools(self.registry)
-        
-        self._setup_completion()
-
-    def _setup_completion(self):
-        """Setup tab completion following OpenCode's behavior."""
-        manager = get_autocomplete_manager()
-        manager._cwd = self.app_state.get_cwd()
-        
-        def complete(text: str, state: int):
-            """自定义补全函数"""
-            if state == 0:
-                # 首次调用
-                manager.state.reset()
-                
-                # 检查是否以 / 开头（命令/技能补全）
-                if text.startswith("/"):
-                    manager.start_completion("/", len(text), text)
-                    return
-            
-            # 返回补全选项
-            if manager.state.visible and manager.state.options:
-                if state < len(manager.state.options):
-                    opt = manager.state.options[state]
-                    return opt.display
-            
-            return None
-        
-        readline.set_completer(complete)
-        readline.parse_and_bind("tab: complete")
-        readline.set_completer_delims(" \t\n")
-        
-        # 保存 manager 供后续使用
-        self._autocomplete_manager = manager
 
     async def run(self) -> None:
         """Start the REPL loop."""
         self._running = True
+        
+        self._prompt_session = create_prompt_session()
 
         self._print_banner()
         self._print_welcome()
@@ -115,18 +83,14 @@ class REPL:
 
     async def _handle_input(self) -> None:
         """Get input from user and process it."""
-        try:
-            # 使用 readline 进行输入，支持 Tab 补全
-            self.console.print()
-            try:
-                user_input = input("\033[1;32mOpenLaoKe\033[0m: ")
-            except EOFError:
-                self._running = False
-                return
-        except KeyboardInterrupt:
+        self.console.print()
+        
+        user_input = await get_user_input(self._prompt_session)
+        
+        if user_input is None:
             self._running = False
             return
-
+        
         user_input = user_input.strip()
         if not user_input:
             return
