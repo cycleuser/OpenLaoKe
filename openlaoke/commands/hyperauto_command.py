@@ -284,15 +284,30 @@ class HyperAutoCommand(SlashCommand):
         task_id = f"ha_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         task = {
             "id": task_id,
-            "status": "running",
+            "status": "initializing",
             "start_time": datetime.now().isoformat(),
             "mode": hyperauto_config.mode.value,
             "iterations": 0,
             "description": task_description or "Autonomous operation",
+            "steps": [],
+            "current_step": 0,
+            "completed_steps": [],
+            "recent_actions": [],
         }
 
         self._save_active_task(ctx, task)
         self._add_to_history(ctx, task)
+
+        # Start async execution
+        import asyncio
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        asyncio.create_task(self._execute_hyperauto_task(ctx, task_id, task_description))
 
         lines = [
             "[green]✓ HyperAuto Started[/green]",
@@ -302,14 +317,19 @@ class HyperAutoCommand(SlashCommand):
         ]
 
         if task_description:
-            lines.append(f"  Task:    {task_description}")
+            desc = task_description[:60]
+            if len(task_description) > 60:
+                desc += "..."
+            lines.append(f"  Task:    {desc}")
 
         lines.extend(
             [
                 f"  Timeout: {hyperauto_config.timeout_seconds}s",
                 "",
-                "[dim]The AI will operate autonomously within configured limits.[/dim]",
-                "[dim]Use /hyperauto stop to halt execution.[/dim]",
+                "[dim]The AI is now working...[/dim]",
+                "[dim]Use /hyperauto progress to monitor.[/dim]",
+                "",
+                "[bold cyan]Real-time output below:[/bold cyan]",
             ]
         )
 
@@ -661,3 +681,86 @@ class HyperAutoCommand(SlashCommand):
             return f"{secs}s"
         except Exception:
             return "unknown"
+
+    async def _execute_hyperauto_task(
+        self, ctx: CommandContext, task_id: str, task_description: str | None
+    ) -> None:
+        """Execute HyperAuto task in background and display output."""
+        from rich.console import Console
+
+        console = Console()
+
+        try:
+            # Update status to running
+            task = self._get_active_hyperauto_task(ctx)
+            if task:
+                task["status"] = "running"
+                task["steps"] = [
+                    "Analyzing task requirements",
+                    "Creating execution plan",
+                    "Executing subtasks",
+                    "Verifying results",
+                    "Finalizing",
+                ]
+                task["recent_actions"] = ["Starting execution..."]
+                self._save_active_task(ctx, task)
+
+            console.print("\n[bold cyan]► HyperAuto Execution Started[/bold cyan]")
+            console.print(f"[dim]Task: {task_description or 'Autonomous operation'}[/dim]\n")
+
+            # Import and create HyperAuto agent
+            from openlaoke.core.hyperauto.agent import HyperAutoAgent
+            from openlaoke.core.hyperauto.config import HyperAutoConfig as HAutoConfig
+
+            hyperauto_config = self._get_hyperauto_config(ctx)
+            ha_config = HAutoConfig(
+                mode=hyperauto_config.mode,
+                max_iterations=hyperauto_config.max_iterations,
+                timeout_seconds=hyperauto_config.timeout_seconds,
+                learning_enabled=hyperauto_config.learning_enabled,
+                reflection_enabled=True,
+            )
+
+            agent = HyperAutoAgent(ctx.app_state, ha_config)
+
+            # Run the agent
+            console.print("[yellow]▶ Running autonomous execution...[/yellow]\n")
+
+            result = await agent.run(task_description or "Autonomous operation")
+
+            # Update final status
+            task = self._get_active_hyperauto_task(ctx)
+            if task:
+                if result.get("success"):
+                    task["status"] = "completed"
+                    task["completed_steps"] = task.get("steps", [])
+                    task["iterations"] = result.get("context", {}).get("iteration", 0)
+
+                    console.print("\n[bold green]✓ HyperAuto Completed Successfully![/bold green]")
+                    console.print(f"[green]Task ID: {task_id}[/green]")
+                    console.print(f"[green]Iterations: {task['iterations']}[/green]\n")
+                else:
+                    task["status"] = "failed"
+                    error_msg = result.get("error", "Unknown error")
+                    if "errors" not in task:
+                        task["errors"] = []
+                    task["errors"].append(error_msg)
+
+                    console.print("\n[bold red]✗ HyperAuto Failed[/bold red]")
+                    console.print(f"[red]Error: {error_msg}[/red]\n")
+
+                task["end_time"] = datetime.now().isoformat()
+                self._update_history_task(ctx, task)
+
+        except Exception as e:
+            console.print(f"\n[bold red]✗ HyperAuto Error: {e}[/bold red]\n")
+
+            # Update task status
+            task = self._get_active_hyperauto_task(ctx)
+            if task:
+                task["status"] = "failed"
+                task["end_time"] = datetime.now().isoformat()
+                if "errors" not in task:
+                    task["errors"] = []
+                task["errors"].append(str(e))
+                self._update_history_task(ctx, task)
