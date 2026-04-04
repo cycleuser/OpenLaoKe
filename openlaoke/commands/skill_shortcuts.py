@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from openlaoke.commands.base import CommandContext, CommandResult, SlashCommand
 from openlaoke.core.skill_system import list_available_skills, load_skill
+
+
+@dataclass
+class SkillActivationResult(CommandResult):
+    """Result that includes skill activation info for continued processing."""
+
+    skill_name: str = ""
+    skill_content: str = ""
+    should_continue_chat: bool = False
 
 
 class SkillShortcutCommand(SlashCommand):
@@ -15,7 +26,7 @@ class SkillShortcutCommand(SlashCommand):
         self.aliases = []
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
-        """Execute skill activation."""
+        """Execute skill activation and continue with user input if provided."""
         skill = load_skill(self.name)
         if not skill:
             return CommandResult(success=False, message=f"Skill not found: {self.name}")
@@ -30,7 +41,15 @@ class SkillShortcutCommand(SlashCommand):
                 desc += "..."
             msg += f"\n  {desc}"
 
-        return CommandResult(success=True, message=msg)
+        result = SkillActivationResult(
+            success=True,
+            message=msg,
+            skill_name=self.name,
+            skill_content=skill.content,
+            should_continue_chat=bool(ctx.args),
+        )
+
+        return result
 
 
 def register_skill_shortcuts(registry: dict) -> None:

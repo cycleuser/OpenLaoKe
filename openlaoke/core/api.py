@@ -76,11 +76,14 @@ class APIClient:
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
+            proxy = self.config.proxy_url
+            if proxy == "" or proxy is None:
+                proxy = None
             self._client = httpx.AsyncClient(
                 base_url=self.config.base_url,
                 timeout=httpx.Timeout(self.config.timeout, connect=30.0),
                 limits=limits,
-                proxy=self.config.proxy_url,
+                proxy=proxy,
             )
         return self._client
 

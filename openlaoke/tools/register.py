@@ -55,7 +55,7 @@ def register_deferred_tools(registry: ToolRegistry) -> None:
             "Git operations",
             "git repository version control",
         ),
-        "LS": (
+        "ListDirectory": (
             lambda: __import__(
                 "openlaoke.tools.ls_tool", fromlist=["ListDirectoryTool"]
             ).ListDirectoryTool(),
@@ -67,7 +67,7 @@ def register_deferred_tools(registry: ToolRegistry) -> None:
             "Language server protocol operations",
             "lsp language server ide",
         ),
-        "NotebookEdit": (
+        "NotebookWrite": (
             lambda: __import__(
                 "openlaoke.tools.notebook_write_tool", fromlist=["NotebookWriteTool"]
             ).NotebookWriteTool(),
@@ -93,7 +93,7 @@ def register_deferred_tools(registry: ToolRegistry) -> None:
             "Kill running tasks",
             "kill stop terminate task",
         ),
-        "Todo": (
+        "TodoWrite": (
             lambda: __import__(
                 "openlaoke.tools.todo_tool", fromlist=["TodoWriteTool"]
             ).TodoWriteTool(),
@@ -160,6 +160,27 @@ def register_deferred_tools(registry: ToolRegistry) -> None:
             "Search and discover available tools",
             "tool search suggest discover",
         ),
+        "DownloadReference": (
+            lambda: __import__(
+                "openlaoke.tools.reference_downloader", fromlist=["ReferenceDownloader"]
+            ).ReferenceDownloader(),
+            "Download academic papers as PDFs",
+            "reference paper pdf download arxiv doi",
+        ),
+        "BatchDownloadReferences": (
+            lambda: __import__(
+                "openlaoke.tools.reference_downloader", fromlist=["BatchDownloadReferences"]
+            ).BatchDownloadReferences(),
+            "Download multiple academic papers",
+            "batch download papers references",
+        ),
+        "SearchAndDownloadPapers": (
+            lambda: __import__(
+                "openlaoke.tools.reference_downloader", fromlist=["SearchAndDownloadPapers"]
+            ).SearchAndDownloadPapers(),
+            "Search and download academic papers",
+            "search download academic papers semantic scholar",
+        ),
     }
 
     for name, (loader, description, search_hint) in deferred_map.items():
@@ -184,11 +205,11 @@ def get_tool_loader(tool_name: str) -> Callable[[], Tool] | None:
             "openlaoke.tools.batch_tool", fromlist=["BatchTool"]
         ).BatchTool(),
         "Git": lambda: __import__("openlaoke.tools.git_tool", fromlist=["GitTool"]).GitTool(),
-        "LS": lambda: __import__(
+        "ListDirectory": lambda: __import__(
             "openlaoke.tools.ls_tool", fromlist=["ListDirectoryTool"]
         ).ListDirectoryTool(),
         "LSP": lambda: __import__("openlaoke.tools.lsp_tool", fromlist=["LSPTool"]).LSPTool(),
-        "NotebookEdit": lambda: __import__(
+        "NotebookWrite": lambda: __import__(
             "openlaoke.tools.notebook_write_tool", fromlist=["NotebookWriteTool"]
         ).NotebookWriteTool(),
         "Plan": lambda: __import__("openlaoke.tools.plan_tool", fromlist=["PlanTool"]).PlanTool(),
@@ -198,7 +219,7 @@ def get_tool_loader(tool_name: str) -> Callable[[], Tool] | None:
         "TaskKill": lambda: __import__(
             "openlaoke.tools.taskkill_tool", fromlist=["TaskKillTool"]
         ).TaskKillTool(),
-        "Todo": lambda: __import__(
+        "TodoWrite": lambda: __import__(
             "openlaoke.tools.todo_tool", fromlist=["TodoWriteTool"]
         ).TodoWriteTool(),
         "WebFetch": lambda: __import__(
@@ -225,5 +246,14 @@ def get_tool_loader(tool_name: str) -> Callable[[], Tool] | None:
         "ToolSearch": lambda: __import__(
             "openlaoke.tools.tool_search_tool", fromlist=["ToolSearchTool"]
         ).ToolSearchTool(),
+        "DownloadReference": lambda: __import__(
+            "openlaoke.tools.reference_downloader", fromlist=["ReferenceDownloader"]
+        ).ReferenceDownloader(),
+        "BatchDownloadReferences": lambda: __import__(
+            "openlaoke.tools.reference_downloader", fromlist=["BatchDownloadReferences"]
+        ).BatchDownloadReferences(),
+        "SearchAndDownloadPapers": lambda: __import__(
+            "openlaoke.tools.reference_downloader", fromlist=["SearchAndDownloadPapers"]
+        ).SearchAndDownloadPapers(),
     }
     return loaders.get(tool_name)

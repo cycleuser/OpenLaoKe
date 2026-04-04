@@ -68,6 +68,43 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         "- If uncertain, say so and suggest how to verify\n"
     )
 
+    parts.append(
+        "## Anti-AI Quality Standards (MANDATORY)\n"
+        "\n"
+        "CRITICAL: Your output will be checked for AI-typical patterns. You MUST avoid:\n"
+        "\n"
+        "1. **Empty numbered lists** - Never write lists without substantive content\n"
+        '   ❌ BAD: "Benefits include: 1. Speed 2. Quality 3. Cost"\n'
+        '   ✅ GOOD: "The system achieves 2.3s average response time (34% faster than baseline), '
+        '94% code accuracy on HumanEval benchmark, and $0.003 per query operational cost."\n'
+        "\n"
+        "2. **Vague claims without evidence** - Every claim needs SPECIFIC numbers or citations\n"
+        '   ❌ BAD: "significant improvement", "novel approach", "state-of-the-art"\n'
+        '   ✅ GOOD: "45% reduction in latency (p<0.01, n=1000 trials)", '
+        '"as demonstrated in Smith et al. [3]"\n'
+        "\n"
+        "3. **AI-typical phrases** - Avoid these patterns:\n"
+        '   - "Systems could enable:"\n'
+        '   - "Improvements include:"\n'
+        '   - "The main contributions are:"\n'
+        "   - Generic bullet points as paragraphs\n"
+        "\n"
+        "4. **Missing technical depth** - Explain HOW and WHY, not just WHAT\n"
+        '   ❌ BAD: "The system uses caching for performance."\n'
+        '   ✅ GOOD: "The system implements LRU caching with 256MB capacity in Redis, '
+        'achieving 89% cache hit rate and reducing database queries by 67% (measured over 10k requests)."\n'
+        "\n"
+        "5. **No real citations** - Use WebSearch to find REAL papers\n"
+        "   - Always cite actual papers with [number] format\n"
+        "   - Reference specific code with file:line format\n"
+        "   - Include actual measurements and numbers\n"
+        "\n"
+        "VERIFICATION: Before finishing ANY task:\n"
+        "- Does every paragraph have specific details (numbers, citations, code refs)?\n"
+        "- Are there more than 3 bullet points without explanation?\n"
+        "- Can you replace generic phrases with specific evidence?\n"
+    )
+
     if hasattr(app_state, "active_skills") and app_state.active_skills:
         from openlaoke.core.skill_system import get_skill_system_prompt
 

@@ -21,15 +21,22 @@ async def run_subagent(
     The sub-agent uses the same API configuration and tools as the parent,
     but with its own isolated conversation context.
     """
-    from openlaoke.core.api import APIClient, APIConfig
+    from openlaoke.core.config_wizard import get_proxy_url
+    from openlaoke.core.multi_provider_api import MultiProviderClient
     from openlaoke.core.tool import ToolRegistry
     from openlaoke.tools import register_all_tools
 
     registry = ToolRegistry()
     register_all_tools(registry)
 
-    api = APIClient(APIConfig.from_env())
-    api.config.model = app_state.session_config.model
+    config = app_state.multi_provider_config
+    if not config or not config.is_configured():
+        return "Sub-agent error: No provider configured"
+
+    app_config = getattr(app_state, "app_config", None)
+    proxy = get_proxy_url(app_config) if app_config else None
+
+    api = MultiProviderClient(config, proxy=proxy)
 
     system_prompt = _build_system_prompt(app_state)
 
@@ -48,6 +55,7 @@ async def run_subagent(
                 system_prompt=system_prompt,
                 messages=messages,
                 tools=tools if iteration < max_iterations - 1 else None,
+                model=app_state.session_config.model,
             )
 
             app_state.accumulate_tokens(usage)

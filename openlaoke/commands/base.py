@@ -598,10 +598,13 @@ class ExportCommand(SlashCommand):
             "cost": ctx.app_state.cost_info.total_cost,
         }
 
+        sessions_dir = os.path.expanduser("~/.openlaoke/sessions")
+        os.makedirs(sessions_dir, exist_ok=True)
+
         if filename:
             path = os.path.expanduser(filename)
         else:
-            path = f"session_{ctx.app_state.session_id}.json"
+            path = os.path.join(sessions_dir, f"session_{ctx.app_state.session_id}.json")
 
         try:
             with open(path, "w", encoding="utf-8") as f:
@@ -642,10 +645,13 @@ class ExportCommand(SlashCommand):
         lines.append(f"- Output tokens: {ctx.app_state.token_usage.output_tokens:,}")
         lines.append(f"- Total cost: ${ctx.app_state.cost_info.total_cost:.4f}")
 
+        sessions_dir = os.path.expanduser("~/.openlaoke/sessions")
+        os.makedirs(sessions_dir, exist_ok=True)
+
         if filename:
             path = os.path.expanduser(filename)
         else:
-            path = f"session_{ctx.app_state.session_id}.md"
+            path = os.path.join(sessions_dir, f"session_{ctx.app_state.session_id}.md")
 
         try:
             with open(path, "w", encoding="utf-8") as f:

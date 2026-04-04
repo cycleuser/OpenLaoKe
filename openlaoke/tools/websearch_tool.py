@@ -77,8 +77,9 @@ class WebSearchTool(Tool):
         url = "https://html.duckduckgo.com/html/"
         params = {"q": query}
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, data=params, follow_redirects=True)
+        # Use a simple client without proxy for web search
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.post(url, data=params)
             response.raise_for_status()
 
         return self._parse_ddg_html(response.text, num_results)
