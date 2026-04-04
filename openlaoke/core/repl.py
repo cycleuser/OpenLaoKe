@@ -4,30 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import sys
-import time
 from typing import Any
 
 import httpx
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.text import Text
 
 from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
+from openlaoke.core.prompt_input import create_prompt_session, get_user_input
 from openlaoke.core.state import AppState
 from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import ToolContext, ToolRegistry
-from openlaoke.core.prompt_input import create_prompt_session, get_user_input
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
-    AssistantMessage,
     MessageRole,
     PermissionResult,
-    SystemMessage,
     UserMessage,
 )
 from openlaoke.types.providers import MultiProviderConfig
@@ -53,7 +47,7 @@ class REPL:
     async def run(self) -> None:
         """Start the REPL loop."""
         self._running = True
-        
+
         self._prompt_session = create_prompt_session()
 
         self._print_banner()
@@ -61,9 +55,7 @@ class REPL:
 
         config = self.multi_provider_config or self.app_state.multi_provider_config
         if not config:
-            self.console.print(
-                "[bold red]Error: No provider configured.[/bold red]"
-            )
+            self.console.print("[bold red]Error: No provider configured.[/bold red]")
             self.console.print("Run 'openlaoke --config' to set up a provider.")
             return
 
@@ -84,32 +76,32 @@ class REPL:
     async def _handle_input(self) -> None:
         """Get input from user and process it."""
         self.console.print()
-        
+
         user_input = await get_user_input(self._prompt_session)
-        
+
         if user_input is None:
             self._running = False
             return
-        
+
         user_input = user_input.strip()
         if not user_input:
             return
-        
+
         # 如果输入以 / 开头但没有空格，可能是想使用技能
         if user_input.startswith("/") and " " not in user_input:
             # 检查是否是有效的技能或命令
             from openlaoke.core.skill_system import load_skill
-            
+
             potential_name = user_input[1:]
-            
+
             # 检查是否是技能
             skill = load_skill(potential_name)
             if skill:
                 # 激活技能
-                if hasattr(self.app_state, 'active_skills'):
+                if hasattr(self.app_state, "active_skills"):
                     if potential_name not in self.app_state.active_skills:
                         self.app_state.active_skills.append(potential_name)
-                
+
                 self.console.print(f"[green]✓ Skill activated: {skill.name}[/green]")
                 if skill.description:
                     desc = skill.description[:100]
@@ -133,7 +125,7 @@ class REPL:
         command = get_command(name)
         if not command:
             self.console.print(f"[red]Unknown command: /{name}[/red]")
-            self.console.print('Type [bold]/help[/bold] for available commands.')
+            self.console.print("Type [bold]/help[/bold] for available commands.")
             return
 
         ctx = CommandContext(app_state=self.app_state, args=args)
@@ -188,11 +180,13 @@ class REPL:
                     ]
                 messages.append(assistant_msg)
             elif msg.role == MessageRole.TOOL:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_use_id,
-                    "content": msg.content,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_use_id,
+                        "content": msg.content,
+                    }
+                )
 
         while iteration < max_iterations and self._running:
             iteration += 1
@@ -205,9 +199,7 @@ class REPL:
             tools = self.registry.get_all_for_prompt()
 
             self.console.print()
-            spinner = self.console.status(
-                "[bold blue]Thinking...[/bold blue]", spinner="dots"
-            )
+            spinner = self.console.status("[bold blue]Thinking...[/bold blue]", spinner="dots")
             spinner.start()
 
             try:
@@ -257,12 +249,16 @@ class REPL:
 
                     result = await self._execute_tool(tool_use)
 
-                    result_content = result.content if isinstance(result.content, str) else str(result.content)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_use.id,
-                        "content": result_content,
-                    })
+                    result_content = (
+                        result.content if isinstance(result.content, str) else str(result.content)
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_use.id,
+                            "content": result_content,
+                        }
+                    )
 
             except asyncio.CancelledError:
                 spinner.stop()
@@ -289,6 +285,7 @@ class REPL:
         if not tool:
             self.console.print(f"  [dim]Unknown tool: {tool_use.name}[/dim]")
             from openlaoke.types.core_types import ToolResultBlock
+
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Unknown tool: {tool_use.name}",
@@ -305,6 +302,7 @@ class REPL:
                 f"  [red]Denied:[/red] {tool_use.name} - {tool.get_deny_message(tool_use.input)}"
             )
             from openlaoke.types.core_types import ToolResultBlock
+
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Permission denied for {tool_use.name}",
@@ -326,6 +324,7 @@ class REPL:
             if answer in ("n", "no"):
                 self.console.print(f"  [red]Denied: {tool_use.name}[/red]")
                 from openlaoke.types.core_types import ToolResultBlock
+
                 return ToolResultBlock(
                     tool_use_id=tool_use.id,
                     content=f"User denied {tool_use.name}",
@@ -345,6 +344,7 @@ class REPL:
         if not validation.result:
             self.console.print(f"  [red]Validation failed: {validation.message}[/red]")
             from openlaoke.types.core_types import ToolResultBlock
+
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Validation error: {validation.message}",
@@ -363,6 +363,7 @@ class REPL:
 
     def _print_banner(self) -> None:
         from openlaoke import __version__
+
         self.console.print(
             Panel.fit(
                 f"[bold cyan]OpenLaoKe[/bold cyan] v{__version__}\n"
@@ -384,20 +385,27 @@ class REPL:
 
         # Get available skills
         from openlaoke.core.skill_system import list_available_skills
+
         skills = list_available_skills()
 
         self.console.print(f"\n[bold]Provider:[/bold] {provider_name}")
         self.console.print(f"[bold]Model:[/bold] {self.app_state.session_config.model}")
         self.console.print(f"[bold]Working directory:[/bold] {self.app_state.get_cwd()}")
-        self.console.print(f"[bold]Tools:[/bold] {len(self.registry.get_all())} available{proxy_info}")
-        
+        self.console.print(
+            f"[bold]Tools:[/bold] {len(self.registry.get_all())} available{proxy_info}"
+        )
+
         if skills:
-            self.console.print(f"[bold]Skills:[/bold] {len(skills)} available (use Tab to complete)")
+            self.console.print(
+                f"[bold]Skills:[/bold] {len(skills)} available (use Tab to complete)"
+            )
             # Show first few skills as examples
             example_skills = sorted(skills)[:5]
             skills_str = ", ".join(f"/{s}" for s in example_skills)
             if len(skills) > 5:
                 skills_str += f", ... ({len(skills) - 5} more)"
             self.console.print(f"[dim]  Examples: {skills_str}[/dim]")
-        
-        self.console.print(f"\n[dim]Type [bold]/help[/bold] for commands, [bold]Tab[/bold] for skill completion, or just start chatting.[/dim]")
+
+        self.console.print(
+            "\n[dim]Type [bold]/help[/bold] for commands, [bold]Tab[/bold] for skill completion, or just start chatting.[/dim]"
+        )

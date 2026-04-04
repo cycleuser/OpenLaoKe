@@ -7,9 +7,9 @@ Usage:
     python publish.py release  # Build + upload to PyPI
 """
 
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).parent

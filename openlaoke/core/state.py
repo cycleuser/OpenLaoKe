@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openlaoke.types.core_types import (
     CostInfo,
@@ -28,6 +25,7 @@ if TYPE_CHECKING:
 @dataclass
 class SessionConfig:
     """Configuration for a session."""
+
     model: str = "gemma3:1b"
     max_tokens: int = 8192
     temperature: float = 1.0
@@ -64,6 +62,7 @@ class AppState:
     project_root: str | None = None
     git_branch: str | None = None
     theme: str = "dark"
+    vim_mode: bool = False
     verbose: bool = False
     auto_accept: bool = False
     resume_session: bool = True
@@ -124,7 +123,8 @@ class AppState:
 
     def get_active_tasks(self) -> list[TaskState]:
         return [
-            t for t in self.tasks.values()
+            t
+            for t in self.tasks.values()
             if t.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.KILLED)
         ]
 

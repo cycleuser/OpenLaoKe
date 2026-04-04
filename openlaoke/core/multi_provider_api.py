@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -14,7 +15,6 @@ from openlaoke.types.core_types import (
     CostInfo,
     MessageRole,
     TokenUsage,
-    ToolResultBlock,
     ToolUseBlock,
 )
 from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
@@ -23,6 +23,7 @@ from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, Provi
 @dataclass
 class ModelPricing:
     """Pricing information for a model (per million tokens)."""
+
     input_price: float = 3.0
     output_price: float = 15.0
     cache_read_price: float = 0.30
@@ -49,6 +50,27 @@ MODEL_PRICES: dict[str, ModelPricing] = {
     "qwen3-max-2026-01-23": ModelPricing(2.0, 6.0, 0.0, 0.0),
     "glm-5": ModelPricing(0.1, 0.3, 0.0, 0.0),
     "glm-4.7": ModelPricing(0.2, 0.6, 0.0, 0.0),
+    "gemini-2.0-flash": ModelPricing(0.1, 0.4, 0.0, 0.0),
+    "gemini-2.0-pro": ModelPricing(1.25, 5.0, 0.0, 0.0),
+    "gemini-1.5-flash": ModelPricing(0.075, 0.3, 0.0, 0.0),
+    "gemini-1.5-pro": ModelPricing(1.25, 5.0, 0.0, 0.0),
+    "grok-2-latest": ModelPricing(2.0, 10.0, 0.0, 0.0),
+    "grok-2-1212": ModelPricing(2.0, 10.0, 0.0, 0.0),
+    "grok-beta": ModelPricing(5.0, 15.0, 0.0, 0.0),
+    "mistral-large-latest": ModelPricing(2.0, 6.0, 0.0, 0.0),
+    "mistral-small-latest": ModelPricing(0.2, 0.6, 0.0, 0.0),
+    "codestral-latest": ModelPricing(0.2, 0.6, 0.0, 0.0),
+    "open-mistral-nemo": ModelPricing(0.03, 0.06, 0.0, 0.0),
+    "llama-3.3-70b-versatile": ModelPricing(0.59, 0.79, 0.0, 0.0),
+    "llama-3.1-8b-instant": ModelPricing(0.05, 0.08, 0.0, 0.0),
+    "mixtral-8x7b-32768": ModelPricing(0.27, 0.27, 0.0, 0.0),
+    "gemma2-9b-it": ModelPricing(0.2, 0.2, 0.0, 0.0),
+    "command-r-plus": ModelPricing(3.0, 15.0, 0.0, 0.0),
+    "command-r": ModelPricing(0.5, 1.5, 0.0, 0.0),
+    "command": ModelPricing(1.0, 2.0, 0.0, 0.0),
+    "command-light": ModelPricing(0.3, 0.6, 0.0, 0.0),
+    "llama-3.1-sonar-large-128k-online": ModelPricing(1.0, 1.0, 0.0, 0.0),
+    "llama-3.1-sonar-small-128k-online": ModelPricing(0.2, 0.2, 0.0, 0.0),
 }
 
 
@@ -89,6 +111,34 @@ class MultiProviderClient:
             env_key = os.environ.get("MINIMAX_API_KEY", "")
         elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
             env_key = os.environ.get("ALIYUN_API_KEY", "")
+        elif provider.provider_type == ProviderType.AZURE_OPENAI:
+            env_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
+        elif provider.provider_type == ProviderType.GOOGLE:
+            env_key = os.environ.get("GOOGLE_API_KEY", "")
+        elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
+            env_key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+        elif provider.provider_type == ProviderType.AWS_BEDROCK:
+            env_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        elif provider.provider_type == ProviderType.XAI:
+            env_key = os.environ.get("XAI_API_KEY", "")
+        elif provider.provider_type == ProviderType.MISTRAL:
+            env_key = os.environ.get("MISTRAL_API_KEY", "")
+        elif provider.provider_type == ProviderType.GROQ:
+            env_key = os.environ.get("GROQ_API_KEY", "")
+        elif provider.provider_type == ProviderType.CEREBRAS:
+            env_key = os.environ.get("CEREBRAS_API_KEY", "")
+        elif provider.provider_type == ProviderType.COHERE:
+            env_key = os.environ.get("COHERE_API_KEY", "")
+        elif provider.provider_type == ProviderType.DEEPINFRA:
+            env_key = os.environ.get("DEEPINFRA_API_KEY", "")
+        elif provider.provider_type == ProviderType.TOGETHERAI:
+            env_key = os.environ.get("TOGETHERAI_API_KEY", "")
+        elif provider.provider_type == ProviderType.PERPLEXITY:
+            env_key = os.environ.get("PERPLEXITY_API_KEY", "")
+        elif provider.provider_type == ProviderType.OPENROUTER:
+            env_key = os.environ.get("OPENROUTER_API_KEY", "")
+        elif provider.provider_type == ProviderType.GITHUB_COPILOT:
+            env_key = os.environ.get("GITHUB_TOKEN", "")
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_key = os.environ.get("OPENAI_API_KEY", "none")
 
@@ -104,6 +154,36 @@ class MultiProviderClient:
             env_url = os.environ.get("MINIMAX_BASE_URL", "https://api.minimaxi.com/v1")
         elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
             env_url = os.environ.get("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
+        elif provider.provider_type == ProviderType.AZURE_OPENAI:
+            env_url = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+        elif provider.provider_type == ProviderType.GOOGLE:
+            env_url = os.environ.get(
+                "GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
+            )
+        elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
+            env_url = os.environ.get("GOOGLE_VERTEX_BASE_URL", "")
+        elif provider.provider_type == ProviderType.AWS_BEDROCK:
+            env_url = os.environ.get("AWS_BEDROCK_REGION", "")
+        elif provider.provider_type == ProviderType.XAI:
+            env_url = os.environ.get("XAI_BASE_URL", "https://api.x.ai/v1")
+        elif provider.provider_type == ProviderType.MISTRAL:
+            env_url = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+        elif provider.provider_type == ProviderType.GROQ:
+            env_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        elif provider.provider_type == ProviderType.CEREBRAS:
+            env_url = os.environ.get("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1")
+        elif provider.provider_type == ProviderType.COHERE:
+            env_url = os.environ.get("COHERE_BASE_URL", "https://api.cohere.ai/v2")
+        elif provider.provider_type == ProviderType.DEEPINFRA:
+            env_url = os.environ.get("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai")
+        elif provider.provider_type == ProviderType.TOGETHERAI:
+            env_url = os.environ.get("TOGETHERAI_BASE_URL", "https://api.together.xyz/v1")
+        elif provider.provider_type == ProviderType.PERPLEXITY:
+            env_url = os.environ.get("PERPLEXITY_BASE_URL", "https://api.perplexity.ai")
+        elif provider.provider_type == ProviderType.OPENROUTER:
+            env_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        elif provider.provider_type == ProviderType.GITHUB_COPILOT:
+            env_url = os.environ.get("GITHUB_COPILOT_BASE_URL", "https://api.githubcopilot.com")
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
@@ -117,6 +197,24 @@ class MultiProviderClient:
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
+            }
+        elif provider.provider_type == ProviderType.AZURE_OPENAI:
+            return {
+                "api-key": api_key,
+                "Content-Type": "application/json",
+            }
+        elif provider.provider_type == ProviderType.GOOGLE:
+            return {
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            }
+        elif (
+            provider.provider_type == ProviderType.GOOGLE_VERTEX
+            or provider.provider_type == ProviderType.COHERE
+        ):
+            return {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
             }
         elif provider.is_local:
             return {
@@ -178,14 +276,16 @@ class MultiProviderClient:
                 result.append(tool)
             else:
                 # Convert from internal format
-                result.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.get("name", ""),
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("input_schema", {}),
-                    },
-                })
+                result.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.get("name", ""),
+                            "description": tool.get("description", ""),
+                            "parameters": tool.get("input_schema", {}),
+                        },
+                    }
+                )
         return result
 
     def _convert_messages_for_provider(
@@ -209,35 +309,47 @@ class MultiProviderClient:
 
             # Handle OpenAI native tool format
             if role == "tool":
-                result.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg.get("tool_call_id", ""),
-                        "content": content,
-                    }],
-                })
+                result.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.get("tool_call_id", ""),
+                                "content": content,
+                            }
+                        ],
+                    }
+                )
             # Handle our internal tool_result format
             elif role == "tool_result":
-                result.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg.get("tool_use_id", ""),
-                        "content": content,
-                    }],
-                })
+                result.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.get("tool_use_id", ""),
+                                "content": content,
+                            }
+                        ],
+                    }
+                )
             # Handle tool_use (legacy)
             elif role == "tool_use":
-                result.append({
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": msg.get("id", ""),
-                        "name": msg.get("name", ""),
-                        "input": msg.get("input", {}),
-                    }],
-                })
+                result.append(
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": msg.get("id", ""),
+                                "name": msg.get("name", ""),
+                                "input": msg.get("input", {}),
+                            }
+                        ],
+                    }
+                )
             # Handle assistant with tool_calls (OpenAI native)
             elif role == "assistant" and "tool_calls" in msg:
                 content_blocks = []
@@ -249,12 +361,14 @@ class MultiProviderClient:
                         args = json.loads(func.get("arguments", "{}"))
                     except json.JSONDecodeError:
                         args = {}
-                    content_blocks.append({
-                        "type": "tool_use",
-                        "id": tc.get("id", ""),
-                        "name": func.get("name", ""),
-                        "input": args,
-                    })
+                    content_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "input": args,
+                        }
+                    )
                 result.append({"role": "assistant", "content": content_blocks})
             else:
                 result.append({"role": role, "content": content})
@@ -269,30 +383,36 @@ class MultiProviderClient:
 
             # Handle OpenAI native tool format
             if role == "tool":
-                result.append({
-                    "role": "tool",
-                    "tool_call_id": msg.get("tool_call_id", ""),
-                    "content": content,
-                })
+                result.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.get("tool_call_id", ""),
+                        "content": content,
+                    }
+                )
             # Handle our internal tool_result format
             elif role == "tool_result":
-                result.append({
-                    "role": "tool",
-                    "tool_call_id": msg.get("tool_use_id", ""),
-                    "content": content,
-                })
+                result.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.get("tool_use_id", ""),
+                        "content": content,
+                    }
+                )
             # Handle tool_use (legacy)
             elif role == "tool_use":
                 if not result or result[-1].get("role") != "assistant":
                     result.append({"role": "assistant", "content": "", "tool_calls": []})
-                result[-1].setdefault("tool_calls", []).append({
-                    "id": msg.get("id", ""),
-                    "type": "function",
-                    "function": {
-                        "name": msg.get("name", ""),
-                        "arguments": json.dumps(msg.get("input", {})),
-                    },
-                })
+                result[-1].setdefault("tool_calls", []).append(
+                    {
+                        "id": msg.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": msg.get("name", ""),
+                            "arguments": json.dumps(msg.get("input", {})),
+                        },
+                    }
+                )
             # Handle assistant with tool_calls (OpenAI native)
             elif role == "assistant" and "tool_calls" in msg:
                 result.append(msg)
@@ -301,7 +421,9 @@ class MultiProviderClient:
 
         return result
 
-    def _parse_anthropic_response(self, data: dict[str, Any]) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
+    def _parse_anthropic_response(
+        self, data: dict[str, Any]
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         content = ""
         tool_uses = []
 
@@ -309,23 +431,31 @@ class MultiProviderClient:
             if block["type"] == "text":
                 content += block["text"]
             elif block["type"] == "tool_use":
-                tool_uses.append(ToolUseBlock(
-                    id=block["id"],
-                    name=block["name"],
-                    input=block["input"],
-                ))
+                tool_uses.append(
+                    ToolUseBlock(
+                        id=block["id"],
+                        name=block["name"],
+                        input=block["input"],
+                    )
+                )
 
         usage = self._parse_token_usage(data.get("usage", {}))
         cost = self._calculate_cost(data.get("usage", {}), data.get("model", ""))
 
-        return AssistantMessage(
-            role=MessageRole.ASSISTANT,
-            content=content,
-            tool_uses=tool_uses,
-            stop_reason=data.get("stop_reason"),
-        ), usage, cost
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=data.get("stop_reason"),
+            ),
+            usage,
+            cost,
+        )
 
-    def _parse_openai_response(self, data: dict[str, Any]) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
+    def _parse_openai_response(
+        self, data: dict[str, Any]
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         content = ""
         tool_uses = []
 
@@ -341,11 +471,13 @@ class MultiProviderClient:
                     args = json.loads(func.get("arguments", "{}"))
                 except json.JSONDecodeError:
                     args = {}
-                tool_uses.append(ToolUseBlock(
-                    id=tool_call.get("id", ""),
-                    name=func.get("name", ""),
-                    input=args,
-                ))
+                tool_uses.append(
+                    ToolUseBlock(
+                        id=tool_call.get("id", ""),
+                        name=func.get("name", ""),
+                        input=args,
+                    )
+                )
 
         usage_data = data.get("usage", {})
         usage = TokenUsage(
@@ -354,12 +486,16 @@ class MultiProviderClient:
         )
         cost = self._calculate_cost(usage_data, data.get("model", ""))
 
-        return AssistantMessage(
-            role=MessageRole.ASSISTANT,
-            content=content,
-            tool_uses=tool_uses,
-            stop_reason=choices[0].get("finish_reason") if choices else None,
-        ), usage, cost
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=choices[0].get("finish_reason") if choices else None,
+            ),
+            usage,
+            cost,
+        )
 
     def _parse_token_usage(self, usage: dict[str, int]) -> TokenUsage:
         return TokenUsage(
@@ -398,9 +534,7 @@ class MultiProviderClient:
         client = self._get_client()
         headers = self._build_headers(provider)
 
-        converted_messages = self._convert_messages_for_provider(
-            messages, provider.provider_type
-        )
+        converted_messages = self._convert_messages_for_provider(messages, provider.provider_type)
 
         if provider.provider_type == ProviderType.ANTHROPIC:
             endpoint = f"{base_url}/v1/messages"
@@ -408,6 +542,41 @@ class MultiProviderClient:
                 model, converted_messages, tools, max_tokens, temperature, thinking_budget
             )
             body["system"] = system_prompt
+        elif provider.provider_type == ProviderType.AZURE_OPENAI:
+            api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+            endpoint = (
+                f"{base_url}/openai/deployments/{model}/chat/completions?api-version={api_version}"
+            )
+            body = self._build_openai_body(
+                model, converted_messages, tools, max_tokens, temperature
+            )
+            body["messages"] = [
+                {"role": "system", "content": system_prompt},
+                *body["messages"],
+            ]
+        elif provider.provider_type == ProviderType.GOOGLE:
+            endpoint = f"{base_url}/models/{model}:generateContent"
+            body = self._build_google_body(
+                system_prompt, converted_messages, tools, max_tokens, temperature
+            )
+        elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
+            project_id = os.environ.get("GOOGLE_VERTEX_PROJECT", "")
+            location = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")
+            endpoint = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent"
+            body = self._build_google_body(
+                system_prompt, converted_messages, tools, max_tokens, temperature
+            )
+        elif provider.provider_type == ProviderType.AWS_BEDROCK:
+            region = os.environ.get("AWS_REGION", "us-east-1")
+            endpoint = f"https://bedrock-runtime.{region}.amazonaws.com/model/{model}/invoke"
+            body = self._build_bedrock_body(
+                system_prompt, converted_messages, tools, max_tokens, temperature
+            )
+        elif provider.provider_type == ProviderType.COHERE:
+            endpoint = f"{base_url}/chat"
+            body = self._build_cohere_body(
+                model, system_prompt, converted_messages, tools, max_tokens, temperature
+            )
         else:
             endpoint = f"{base_url}/chat/completions"
             body = self._build_openai_body(
@@ -424,6 +593,12 @@ class MultiProviderClient:
 
         if provider.provider_type == ProviderType.ANTHROPIC:
             return self._parse_anthropic_response(data)
+        elif provider.provider_type in (ProviderType.GOOGLE, ProviderType.GOOGLE_VERTEX):
+            return self._parse_google_response(data)
+        elif provider.provider_type == ProviderType.AWS_BEDROCK:
+            return self._parse_bedrock_response(data, model)
+        elif provider.provider_type == ProviderType.COHERE:
+            return self._parse_cohere_response(data)
         else:
             return self._parse_openai_response(data)
 
@@ -446,9 +621,7 @@ class MultiProviderClient:
         client = self._get_client()
         headers = self._build_headers(provider)
 
-        converted_messages = self._convert_messages_for_provider(
-            messages, provider.provider_type
-        )
+        converted_messages = self._convert_messages_for_provider(messages, provider.provider_type)
 
         if provider.provider_type == ProviderType.ANTHROPIC:
             endpoint = f"{base_url}/v1/messages"
@@ -501,7 +674,9 @@ class MultiProviderClient:
 
             yield "", final_usage, final_cost
 
-    def _parse_anthropic_stream_event(self, event: dict[str, Any]) -> tuple[str, TokenUsage | None, CostInfo | None]:
+    def _parse_anthropic_stream_event(
+        self, event: dict[str, Any]
+    ) -> tuple[str, TokenUsage | None, CostInfo | None]:
         event_type = event.get("type", "")
         text = ""
         usage = None
@@ -525,7 +700,9 @@ class MultiProviderClient:
 
         return text, usage, cost
 
-    def _parse_openai_stream_event(self, event: dict[str, Any]) -> tuple[str, TokenUsage | None, CostInfo | None]:
+    def _parse_openai_stream_event(
+        self, event: dict[str, Any]
+    ) -> tuple[str, TokenUsage | None, CostInfo | None]:
         text = ""
         usage = None
         cost = None
@@ -547,3 +724,245 @@ class MultiProviderClient:
             )
 
         return text, usage, cost
+
+    def _build_google_body(
+        self,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]:
+        contents = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                continue
+            gemini_role = "user" if role in ["user", "tool", "tool_result"] else "model"
+            contents.append({"role": gemini_role, "parts": [{"text": content}]})
+        body: dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+        }
+        if system_prompt:
+            body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        if tools:
+            body["tools"] = self._convert_tools_to_google_format(tools)
+        return body
+
+    def _convert_tools_to_google_format(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        result = []
+        for tool in tools:
+            if tool.get("type") == "function" and "function" in tool:
+                func = tool["function"]
+            else:
+                func = {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("input_schema", {}),
+                }
+            result.append(
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": func.get("name", ""),
+                            "description": func.get("description", ""),
+                            "parameters": func.get("parameters", {}),
+                        }
+                    ]
+                }
+            )
+        return result
+
+    def _parse_google_response(
+        self, data: dict[str, Any]
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
+        content = ""
+        tool_uses = []
+        candidates = data.get("candidates", [])
+        if candidates:
+            candidate = candidates[0]
+            content_parts = candidate.get("content", {}).get("parts", [])
+            for part in content_parts:
+                if "text" in part:
+                    content += part["text"]
+                elif "functionCall" in part:
+                    fc = part["functionCall"]
+                    tool_uses.append(
+                        ToolUseBlock(
+                            id=fc.get("name", ""), name=fc.get("name", ""), input=fc.get("args", {})
+                        )
+                    )
+        usage_data = data.get("usageMetadata", {})
+        usage = TokenUsage(
+            input_tokens=usage_data.get("promptTokenCount", 0),
+            output_tokens=usage_data.get("candidatesTokenCount", 0),
+        )
+        cost = CostInfo(
+            input_cost=usage.input_tokens / 1_000_000 * 0.1,
+            output_cost=usage.output_tokens / 1_000_000 * 0.4,
+        )
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=candidates[0].get("finishReason") if candidates else None,
+            ),
+            usage,
+            cost,
+        )
+
+    def _build_bedrock_body(
+        self,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]:
+        bedrock_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                continue
+            bedrock_role = "user" if role in ["user", "tool", "tool_result"] else "assistant"
+            bedrock_messages.append({"role": bedrock_role, "content": [{"text": content}]})
+        body: dict[str, Any] = {
+            "messages": bedrock_messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system_prompt:
+            body["system"] = system_prompt
+        if tools:
+            body["tools"] = self._convert_tools_to_openai_format(tools)
+        return body
+
+    def _parse_bedrock_response(
+        self, data: dict[str, Any], model: str
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
+        content = ""
+        tool_uses = []
+        output = data.get("output", {})
+        message = output.get("message", {})
+        content_blocks = message.get("content", [])
+        for block in content_blocks:
+            if "text" in block:
+                content += block["text"]
+            elif "toolUse" in block:
+                tu = block["toolUse"]
+                tool_uses.append(
+                    ToolUseBlock(
+                        id=tu.get("toolUseId", ""),
+                        name=tu.get("name", ""),
+                        input=tu.get("input", {}),
+                    )
+                )
+        usage_data = data.get("usage", {})
+        usage = TokenUsage(
+            input_tokens=usage_data.get("inputTokens", 0),
+            output_tokens=usage_data.get("outputTokens", 0),
+        )
+        cost = self._calculate_cost(
+            {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens}, model
+        )
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=data.get("stopReason"),
+            ),
+            usage,
+            cost,
+        )
+
+    def _build_cohere_body(
+        self,
+        model: str,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]:
+        chat_history = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                continue
+            cohere_role = "USER" if role in ["user", "tool", "tool_result"] else "CHATBOT"
+            chat_history.append({"role": cohere_role, "message": content})
+        body: dict[str, Any] = {
+            "model": model,
+            "message": messages[-1].get("content", "") if messages else "",
+            "chat_history": chat_history[:-1] if chat_history else [],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system_prompt:
+            body["preamble"] = system_prompt
+        if tools:
+            body["tools"] = self._convert_tools_to_cohere_format(tools)
+        return body
+
+    def _convert_tools_to_cohere_format(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        result = []
+        for tool in tools:
+            if tool.get("type") == "function" and "function" in tool:
+                func = tool["function"]
+            else:
+                func = {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("input_schema", {}),
+                }
+            result.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": func.get("name", ""),
+                        "description": func.get("description", ""),
+                        "parameters": func.get("parameters", {}),
+                    },
+                }
+            )
+        return result
+
+    def _parse_cohere_response(
+        self, data: dict[str, Any]
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
+        content = ""
+        tool_uses = []
+        text = data.get("text", "")
+        content = text
+        tool_calls = data.get("tool_calls", [])
+        for tc in tool_calls:
+            tool_uses.append(
+                ToolUseBlock(
+                    id=tc.get("name", ""), name=tc.get("name", ""), input=tc.get("parameters", {})
+                )
+            )
+        usage_data = data.get("meta", {}).get("tokens", {})
+        usage = TokenUsage(
+            input_tokens=usage_data.get("input_tokens", 0),
+            output_tokens=usage_data.get("output_tokens", 0),
+        )
+        cost = CostInfo(
+            input_cost=usage.input_tokens / 1_000_000 * 3.0,
+            output_cost=usage.output_tokens / 1_000_000 * 15.0,
+        )
+        return (
+            AssistantMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+                tool_uses=tool_uses,
+                stop_reason=data.get("finish_reason"),
+            ),
+            usage,
+            cost,
+        )

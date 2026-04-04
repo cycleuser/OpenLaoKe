@@ -5,17 +5,16 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from openlaoke.core.state import AppState, SessionConfig, create_app_state
+from openlaoke.core.state import AppState, create_app_state
 from openlaoke.types.core_types import MessageRole, TaskStatus, TaskType, UserMessage
-from openlaoke.types.permissions import PermissionConfig
 
 
 @dataclass
 class SessionInfo:
     """Summary information about a saved session."""
+
     session_id: str
     path: str
     created_at: float
@@ -60,15 +59,17 @@ class SessionManager:
             try:
                 with open(path) as f:
                     data = json.load(f)
-                sessions.append(SessionInfo(
-                    session_id=data.get("session_id", filename.replace(".json", "")),
-                    path=path,
-                    created_at=os.path.getmtime(path),
-                    message_count=len(data.get("messages", [])),
-                    task_count=len(data.get("tasks", {})),
-                    model=data.get("model", "unknown"),
-                    cwd=data.get("cwd", ""),
-                ))
+                sessions.append(
+                    SessionInfo(
+                        session_id=data.get("session_id", filename.replace(".json", "")),
+                        path=path,
+                        created_at=os.path.getmtime(path),
+                        message_count=len(data.get("messages", [])),
+                        task_count=len(data.get("tasks", {})),
+                        model=data.get("model", "unknown"),
+                        cwd=data.get("cwd", ""),
+                    )
+                )
             except Exception:
                 continue
         return sorted(sessions, key=lambda s: s.created_at, reverse=True)
@@ -104,13 +105,16 @@ class SessionManager:
                 role = msg_data.get("role", "user")
                 content = msg_data.get("content", "")
                 if role == "user":
-                    app_state.messages.append(UserMessage(
-                        role=MessageRole.USER,
-                        content=content,
-                    ))
+                    app_state.messages.append(
+                        UserMessage(
+                            role=MessageRole.USER,
+                            content=content,
+                        )
+                    )
 
             for task_id, task_data in data.get("tasks", {}).items():
                 from openlaoke.types.core_types import TaskState
+
                 app_state.tasks[task_id] = TaskState(
                     id=task_id,
                     type=TaskType(task_data.get("type", "local_bash")),

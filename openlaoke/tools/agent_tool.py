@@ -12,7 +12,9 @@ from openlaoke.types.core_types import ToolResultBlock
 
 class AgentInput(BaseModel):
     prompt: str = Field(description="The prompt to give the sub-agent")
-    description: str = Field(default="", description="Brief description of what the agent should do")
+    description: str = Field(
+        default="", description="Brief description of what the agent should do"
+    )
     subagent_type: str = Field(default="general-purpose", description="Type of sub-agent to use")
 
 
@@ -57,7 +59,10 @@ class AgentTool(Tool):
 
             max_output = 20000
             if len(result) > max_output:
-                result = result[:max_output] + f"\n\n... (output truncated, {len(result) - max_output} chars omitted)"
+                result = (
+                    result[:max_output]
+                    + f"\n\n... (output truncated, {len(result) - max_output} chars omitted)"
+                )
 
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,

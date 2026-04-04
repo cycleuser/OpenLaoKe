@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
 from openlaoke.types.hooks import HookContext, HookHandler, HookRegistration, HookResult, HookType
 
 
@@ -34,9 +31,7 @@ class HookManager:
 
     def unregister(self, hook_type: HookType, name: str) -> None:
         if hook_type in self._hooks:
-            self._hooks[hook_type] = [
-                r for r in self._hooks[hook_type] if r.name != name
-            ]
+            self._hooks[hook_type] = [r for r in self._hooks[hook_type] if r.name != name]
 
     async def execute(self, ctx: HookContext) -> HookResult:
         handlers = self._hooks.get(ctx.hook_type, [])

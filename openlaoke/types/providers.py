@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
 
 
-class ProviderType(str, Enum):
+class ProviderType(StrEnum):
     """Supported LLM providers."""
+
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     OPENAI_COMPATIBLE = "openai_compatible"
@@ -16,12 +16,27 @@ class ProviderType(str, Enum):
     LM_STUDIO = "lm_studio"
     MINIMAX = "minimax"
     ALIYUN_CODING_PLAN = "aliyun_coding_plan"
+    AZURE_OPENAI = "azure_openai"
+    GOOGLE = "google"
+    GOOGLE_VERTEX = "google_vertex"
+    AWS_BEDROCK = "aws_bedrock"
+    XAI = "xai"
+    MISTRAL = "mistral"
+    GROQ = "groq"
+    CEREBRAS = "cerebras"
+    COHERE = "cohere"
+    DEEPINFRA = "deepinfra"
+    TOGETHERAI = "togetherai"
+    PERPLEXITY = "perplexity"
+    OPENROUTER = "openrouter"
+    GITHUB_COPILOT = "github_copilot"
     CUSTOM = "custom"
 
 
 @dataclass
 class ProviderConfig:
     """Configuration for a single provider."""
+
     provider_type: ProviderType
     api_key: str = ""
     base_url: str = ""
@@ -44,6 +59,7 @@ class ProviderConfig:
 @dataclass
 class MultiProviderConfig:
     """Configuration for all providers."""
+
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     active_provider: str = "ollama"
     active_model: str = ""
@@ -157,6 +173,168 @@ class MultiProviderConfig:
                     default_model="",
                     models=[],
                 ),
+                "azure_openai": ProviderConfig(
+                    provider_type=ProviderType.AZURE_OPENAI,
+                    base_url="",
+                    default_model="gpt-4o",
+                    models=[
+                        "gpt-4o",
+                        "gpt-4o-mini",
+                        "gpt-4-turbo",
+                        "gpt-35-turbo",
+                    ],
+                ),
+                "google": ProviderConfig(
+                    provider_type=ProviderType.GOOGLE,
+                    base_url="https://generativelanguage.googleapis.com/v1beta",
+                    default_model="gemini-2.0-flash",
+                    models=[
+                        "gemini-2.0-flash",
+                        "gemini-2.0-pro",
+                        "gemini-1.5-flash",
+                        "gemini-1.5-pro",
+                    ],
+                ),
+                "google_vertex": ProviderConfig(
+                    provider_type=ProviderType.GOOGLE_VERTEX,
+                    base_url="",
+                    default_model="gemini-2.0-flash",
+                    models=[
+                        "gemini-2.0-flash",
+                        "gemini-2.0-pro",
+                        "gemini-1.5-flash",
+                        "gemini-1.5-pro",
+                    ],
+                ),
+                "aws_bedrock": ProviderConfig(
+                    provider_type=ProviderType.AWS_BEDROCK,
+                    base_url="",
+                    default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+                    models=[
+                        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+                        "anthropic.claude-3-5-haiku-20241022-v1:0",
+                        "anthropic.claude-3-opus-20240229-v1:0",
+                        "meta.llama3-1-405b-instruct-v1:0",
+                        "meta.llama3-1-70b-instruct-v1:0",
+                        "amazon.nova-pro-v1:0",
+                        "amazon.nova-lite-v1:0",
+                    ],
+                ),
+                "xai": ProviderConfig(
+                    provider_type=ProviderType.XAI,
+                    base_url="https://api.x.ai/v1",
+                    default_model="grok-2-latest",
+                    models=[
+                        "grok-2-latest",
+                        "grok-2-1212",
+                        "grok-beta",
+                        "grok-vision-beta",
+                    ],
+                ),
+                "mistral": ProviderConfig(
+                    provider_type=ProviderType.MISTRAL,
+                    base_url="https://api.mistral.ai/v1",
+                    default_model="mistral-large-latest",
+                    models=[
+                        "mistral-large-latest",
+                        "mistral-small-latest",
+                        "codestral-latest",
+                        "open-mistral-nemo",
+                        "open-codestral-mamba",
+                    ],
+                ),
+                "groq": ProviderConfig(
+                    provider_type=ProviderType.GROQ,
+                    base_url="https://api.groq.com/openai/v1",
+                    default_model="llama-3.3-70b-versatile",
+                    models=[
+                        "llama-3.3-70b-versatile",
+                        "llama-3.1-8b-instant",
+                        "llama-3.2-1b-preview",
+                        "llama-3.2-3b-preview",
+                        "mixtral-8x7b-32768",
+                        "gemma2-9b-it",
+                    ],
+                ),
+                "cerebras": ProviderConfig(
+                    provider_type=ProviderType.CEREBRAS,
+                    base_url="https://api.cerebras.ai/v1",
+                    default_model="llama-3.3-70b",
+                    models=[
+                        "llama-3.3-70b",
+                        "llama-3.1-8b",
+                        "llama-3.1-70b",
+                    ],
+                ),
+                "cohere": ProviderConfig(
+                    provider_type=ProviderType.COHERE,
+                    base_url="https://api.cohere.ai/v2",
+                    default_model="command-r-plus",
+                    models=[
+                        "command-r-plus",
+                        "command-r",
+                        "command",
+                        "command-light",
+                    ],
+                ),
+                "deepinfra": ProviderConfig(
+                    provider_type=ProviderType.DEEPINFRA,
+                    base_url="https://api.deepinfra.com/v1/openai",
+                    default_model="meta-llama/Llama-3.3-70B-Instruct",
+                    models=[
+                        "meta-llama/Llama-3.3-70B-Instruct",
+                        "meta-llama/Llama-3.1-8B-Instruct",
+                        "meta-llama/Llama-3.1-70B-Instruct",
+                        "mistralai/Mistral-Small-24B-Instruct-2501",
+                    ],
+                ),
+                "togetherai": ProviderConfig(
+                    provider_type=ProviderType.TOGETHERAI,
+                    base_url="https://api.together.xyz/v1",
+                    default_model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                    models=[
+                        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                        "meta-llama/Llama-3.1-8B-Instruct-Turbo",
+                        "mistralai/Mistral-7B-Instruct-v0.3",
+                        "Qwen/Qwen2.5-72B-Instruct-Turbo",
+                    ],
+                ),
+                "perplexity": ProviderConfig(
+                    provider_type=ProviderType.PERPLEXITY,
+                    base_url="https://api.perplexity.ai",
+                    default_model="llama-3.1-sonar-large-128k-online",
+                    models=[
+                        "llama-3.1-sonar-large-128k-online",
+                        "llama-3.1-sonar-small-128k-online",
+                        "llama-3.1-sonar-large-128k-chat",
+                        "llama-3.1-sonar-small-128k-chat",
+                    ],
+                ),
+                "openrouter": ProviderConfig(
+                    provider_type=ProviderType.OPENROUTER,
+                    base_url="https://openrouter.ai/api/v1",
+                    default_model="anthropic/claude-3.5-sonnet",
+                    models=[
+                        "anthropic/claude-3.5-sonnet",
+                        "anthropic/claude-3-opus",
+                        "openai/gpt-4o",
+                        "openai/gpt-4-turbo",
+                        "google/gemini-pro",
+                        "meta-llama/llama-3.1-70b-instruct",
+                    ],
+                ),
+                "github_copilot": ProviderConfig(
+                    provider_type=ProviderType.GITHUB_COPILOT,
+                    base_url="https://api.githubcopilot.com",
+                    default_model="gpt-4o",
+                    models=[
+                        "gpt-4o",
+                        "gpt-4o-mini",
+                        "gpt-4-turbo",
+                        "o1-preview",
+                        "o1-mini",
+                    ],
+                ),
             },
             active_provider="ollama",
         )
@@ -165,6 +343,7 @@ class MultiProviderConfig:
 @dataclass
 class CodingPlan:
     """Coding plan configuration for opencode-style plans."""
+
     name: str
     description: str
     enabled: bool = True
@@ -176,6 +355,7 @@ class CodingPlan:
 @dataclass
 class PlanConfig:
     """Configuration for coding plans."""
+
     plans: dict[str, CodingPlan] = field(default_factory=dict)
     active_plan: str = "default"
 

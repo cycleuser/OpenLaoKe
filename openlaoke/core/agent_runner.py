@@ -56,10 +56,12 @@ async def run_subagent(
             if response.content:
                 result_parts.append(response.content)
 
-            messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content,
+                }
+            )
 
             if not response.tool_uses:
                 break
@@ -67,14 +69,17 @@ async def run_subagent(
             for tool_use in response.tool_uses:
                 tool = registry.get(tool_use.name)
                 if not tool:
-                    messages.append({
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Unknown tool: {tool_use.name}",
-                    })
+                    messages.append(
+                        {
+                            "role": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Unknown tool: {tool_use.name}",
+                        }
+                    )
                     continue
 
                 from openlaoke.core.tool import ToolContext
+
                 ctx = ToolContext(
                     app_state=app_state,
                     tool_use_id=tool_use.id,
@@ -82,19 +87,25 @@ async def run_subagent(
 
                 validation = tool.validate_input(tool_use.input)
                 if not validation.result:
-                    messages.append({
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Validation error: {validation.message}",
-                    })
+                    messages.append(
+                        {
+                            "role": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Validation error: {validation.message}",
+                        }
+                    )
                     continue
 
                 result = await tool.call(ctx, **tool_use.input)
-                messages.append({
-                    "role": "tool_result",
-                    "tool_use_id": tool_use.id,
-                    "content": result.content if isinstance(result.content, str) else str(result.content),
-                })
+                messages.append(
+                    {
+                        "role": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": result.content
+                        if isinstance(result.content, str)
+                        else str(result.content),
+                    }
+                )
 
     except asyncio.CancelledError:
         raise

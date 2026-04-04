@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 import pathspec
@@ -104,6 +103,7 @@ class GlobTool(Tool):
 
     def _match_pattern(self, path: str, pattern: str) -> bool:
         from fnmatch import fnmatch
+
         return fnmatch(path, pattern) or fnmatch(os.path.basename(path), pattern)
 
     def _load_gitignore(self, path: str) -> pathspec.PathSpec | None:

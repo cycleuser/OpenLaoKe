@@ -3,19 +3,32 @@
 from __future__ import annotations
 
 from openlaoke.commands.base import (
+    AgentsCommand,
     ClearCommand,
     CommandsCommand,
     CompactCommand,
     CostCommand,
     CwdCommand,
+    DoctorCommand,
     ExitCommand,
+    ExportCommand,
     HelpCommand,
+    HistoryCommand,
+    HooksCommand,
+    InitCommand,
+    McpCommand,
+    MemoryCommand,
     ModelCommand,
     PermissionCommand,
     ResumeCommand,
     SettingsCommand,
     SlashCommand,
+    ThemeCommand,
+    UndoCommand,
+    UsageCommand,
+    VimCommand,
 )
+from openlaoke.commands.hyperauto_command import HyperAutoCommand
 from openlaoke.commands.skill_commands import SkillCommand, UseSkillCommand
 from openlaoke.commands.skill_shortcuts import register_skill_shortcuts
 
@@ -25,17 +38,30 @@ _commands: dict[str, SlashCommand] = {}
 def register_all() -> None:
     """Register all built-in slash commands."""
     commands = [
-        HelpCommand(),
-        ExitCommand(),
+        AgentsCommand(),
         ClearCommand(),
-        ModelCommand(),
-        PermissionCommand(),
+        CommandsCommand(),
         CompactCommand(),
         CostCommand(),
         CwdCommand(),
+        DoctorCommand(),
+        ExitCommand(),
+        ExportCommand(),
+        HelpCommand(),
+        HistoryCommand(),
+        HooksCommand(),
+        HyperAutoCommand(),
+        InitCommand(),
+        McpCommand(),
+        MemoryCommand(),
+        ModelCommand(),
+        PermissionCommand(),
         ResumeCommand(),
-        CommandsCommand(),
         SettingsCommand(),
+        ThemeCommand(),
+        UndoCommand(),
+        UsageCommand(),
+        VimCommand(),
         SkillCommand(),
         UseSkillCommand(),
     ]
@@ -43,7 +69,7 @@ def register_all() -> None:
         _commands[cmd.name] = cmd
         for alias in cmd.aliases:
             _commands[alias] = cmd
-    
+
     # Register skill shortcuts like /browse, /qa, etc.
     register_skill_shortcuts(_commands)
 

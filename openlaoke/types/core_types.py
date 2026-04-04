@@ -3,27 +3,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Literal
+from enum import StrEnum
+from typing import Any
 from uuid import uuid4
 
 
-class PermissionMode(str, Enum):
+class PermissionMode(StrEnum):
     """Permission modes for tool execution."""
+
     DEFAULT = "default"
     AUTO = "auto"
     BYPASS = "bypass"
 
 
-class PermissionResult(str, Enum):
+class HyperAutoMode(StrEnum):
+    """HyperAuto operation modes."""
+
+    SEMI_AUTO = "semi_auto"
+    FULL_AUTO = "full_auto"
+    HYPER_AUTO = "hyper_auto"
+
+
+class PermissionResult(StrEnum):
     """Result of a permission check."""
+
     ALLOW = "allow"
     DENY = "deny"
     ASK = "ask"
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     """Types of tasks that can be executed."""
+
     LOCAL_BASH = "local_bash"
     LOCAL_AGENT = "local_agent"
     REMOTE_AGENT = "remote_agent"
@@ -33,8 +44,9 @@ class TaskType(str, Enum):
     DREAM = "dream"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     """Lifecycle states for tasks."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -51,15 +63,17 @@ def is_terminal_task_status(status: TaskStatus) -> bool:
 class TaskId:
     """Generates and parses task IDs with type prefixes."""
 
-    PREFIXES: dict[str, str] = field(default_factory=lambda: {
-        TaskType.LOCAL_BASH: "b",
-        TaskType.LOCAL_AGENT: "a",
-        TaskType.REMOTE_AGENT: "r",
-        TaskType.IN_PROCESS_TEAMMATE: "t",
-        TaskType.LOCAL_WORKFLOW: "w",
-        TaskType.MONITOR_MCP: "m",
-        TaskType.DREAM: "d",
-    })
+    PREFIXES: dict[str, str] = field(
+        default_factory=lambda: {
+            TaskType.LOCAL_BASH: "b",
+            TaskType.LOCAL_AGENT: "a",
+            TaskType.REMOTE_AGENT: "r",
+            TaskType.IN_PROCESS_TEAMMATE: "t",
+            TaskType.LOCAL_WORKFLOW: "w",
+            TaskType.MONITOR_MCP: "m",
+            TaskType.DREAM: "d",
+        }
+    )
 
     def generate(self, task_type: TaskType) -> str:
         prefix = self.PREFIXES.get(task_type, "x")
@@ -76,6 +90,7 @@ class TaskId:
 @dataclass
 class AgentId:
     """Identifier for an agent/subagent instance."""
+
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     parent_id: str | None = None
     name: str = "agent"
@@ -87,6 +102,7 @@ class AgentId:
 @dataclass
 class ToolUseBlock:
     """Represents a tool use request from the model."""
+
     id: str
     name: str
     input: dict[str, Any]
@@ -103,6 +119,7 @@ class ToolUseBlock:
 @dataclass
 class ToolResultBlock:
     """Represents the result of a tool execution."""
+
     tool_use_id: str
     content: str | list[dict[str, Any]]
     is_error: bool = False
@@ -119,6 +136,7 @@ class ToolResultBlock:
 @dataclass
 class ToolProgress:
     """Progress information for a running tool."""
+
     tool_use_id: str
     tool_name: str
     message: str
@@ -126,8 +144,9 @@ class ToolProgress:
     spinner: str = "dots"
 
 
-class MessageRole(str, Enum):
+class MessageRole(StrEnum):
     """Roles in the conversation message list."""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -136,6 +155,7 @@ class MessageRole(str, Enum):
 @dataclass
 class BaseMessage:
     """Base message in the conversation."""
+
     role: MessageRole
     timestamp: float = 0.0
 
@@ -146,6 +166,7 @@ class BaseMessage:
 @dataclass
 class UserMessage(BaseMessage):
     """Message from the user."""
+
     content: str = ""
     images: list[str] = field(default_factory=list)
     attachments: list[str] = field(default_factory=list)
@@ -162,6 +183,7 @@ class UserMessage(BaseMessage):
 @dataclass
 class AssistantMessage(BaseMessage):
     """Message from the assistant (model response)."""
+
     content: str = ""
     tool_uses: list[ToolUseBlock] = field(default_factory=list)
     stop_reason: str | None = None
@@ -179,6 +201,7 @@ class AssistantMessage(BaseMessage):
 @dataclass
 class SystemMessage(BaseMessage):
     """System-generated message (e.g., tool output, status)."""
+
     content: str = ""
     subtype: str = "info"
 
@@ -194,6 +217,7 @@ class SystemMessage(BaseMessage):
 @dataclass
 class ProgressMessage(BaseMessage):
     """Real-time progress update."""
+
     content: str = ""
     tool_use_id: str = ""
     tool_name: str = ""
@@ -212,6 +236,7 @@ class ProgressMessage(BaseMessage):
 @dataclass
 class AttachmentMessage(BaseMessage):
     """Message with file attachments."""
+
     content: str = ""
     file_paths: list[str] = field(default_factory=list)
 
@@ -230,6 +255,7 @@ Message = UserMessage | AssistantMessage | SystemMessage | ProgressMessage | Att
 @dataclass
 class TaskState:
     """Runtime state of a task."""
+
     id: str
     type: TaskType
     status: TaskStatus = TaskStatus.PENDING
@@ -264,6 +290,7 @@ class TaskState:
 @dataclass
 class ValidationResult:
     """Result of input validation."""
+
     result: bool
     message: str = ""
     error_code: int = 0
@@ -272,6 +299,7 @@ class ValidationResult:
 @dataclass
 class TokenUsage:
     """Token usage tracking for API calls."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -287,10 +315,19 @@ class TokenUsage:
         self.cache_read_tokens += other.cache_read_tokens
         self.cache_creation_tokens += other.cache_creation_tokens
 
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cache_read_tokens": self.cache_read_tokens,
+            "cache_creation_tokens": self.cache_creation_tokens,
+        }
+
 
 @dataclass
 class CostInfo:
     """Cost tracking for API calls."""
+
     input_cost: float = 0.0
     output_cost: float = 0.0
     cache_read_cost: float = 0.0

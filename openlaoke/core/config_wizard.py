@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
 from openlaoke.utils.config import AppConfig
-
 
 console = Console(force_terminal=True)
 
@@ -22,35 +20,51 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
     config = config or AppConfig()
 
     console.clear()
-    console.print(Panel.fit(
-        "[bold cyan]OpenLaoKe Configuration Wizard[/bold cyan]\n"
-        "[dim]Let's set up your AI coding assistant[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]OpenLaoKe Configuration Wizard[/bold cyan]\n"
+            "[dim]Let's set up your AI coding assistant[/dim]",
+            border_style="cyan",
+        )
+    )
     console.print()
 
     # Step 1: Configure provider
     while True:
         console.print("[bold]Step 1: Choose your AI provider[/bold]")
         console.print()
-        
+
         table = Table(show_header=False, box=None)
         table.add_column("Option", style="cyan")
         table.add_column("Provider", style="bold")
         table.add_column("Status", style="dim")
-        
+
         providers = [
             ("1", "Anthropic", "anthropic", "cloud"),
             ("2", "OpenAI (GPT-4)", "openai", "cloud"),
             ("3", "MiniMax", "minimax", "cloud"),
             ("4", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("5", "Ollama (Local)", "ollama", "local"),
-            ("6", "LM Studio (Local)", "lm_studio", "local"),
-            ("7", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
-            ("8", "Skip (configure later)", "", ""),
+            ("5", "Azure OpenAI", "azure_openai", "cloud"),
+            ("6", "Google AI (Gemini)", "google", "cloud"),
+            ("7", "Google Vertex AI", "google_vertex", "cloud"),
+            ("8", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("9", "xAI Grok", "xai", "cloud"),
+            ("10", "Mistral AI", "mistral", "cloud"),
+            ("11", "Groq", "groq", "cloud"),
+            ("12", "Cerebras", "cerebras", "cloud"),
+            ("13", "Cohere", "cohere", "cloud"),
+            ("14", "DeepInfra", "deepinfra", "cloud"),
+            ("15", "Together AI", "togetherai", "cloud"),
+            ("16", "Perplexity", "perplexity", "cloud"),
+            ("17", "OpenRouter", "openrouter", "cloud"),
+            ("18", "GitHub Copilot", "github_copilot", "cloud"),
+            ("19", "Ollama (Local)", "ollama", "local"),
+            ("20", "LM Studio (Local)", "lm_studio", "local"),
+            ("21", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
+            ("22", "Skip (configure later)", "", ""),
         ]
-        
-        for opt, name, key, ptype in providers:
+
+        for opt, name, key, _ptype in providers:
             if key and key in config.providers.providers:
                 provider = config.providers.providers[key]
                 status = _get_provider_status(provider)
@@ -59,14 +73,14 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
                 table.add_row(f"  [{opt}]", name, "")
             else:
                 table.add_row(f"  [{opt}]", name, "[dim]not configured[/dim]")
-        
+
         console.print(table)
         console.print()
 
         choice = Prompt.ask(
             "Select provider",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8"],
-            default="5",
+            choices=[str(i) for i in range(1, 23)],
+            default="19",
         )
 
         provider_map = {
@@ -74,12 +88,26 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             "2": "openai",
             "3": "minimax",
             "4": "aliyun_coding_plan",
-            "5": "ollama",
-            "6": "lm_studio",
-            "7": "openai_compatible",
+            "5": "azure_openai",
+            "6": "google",
+            "7": "google_vertex",
+            "8": "aws_bedrock",
+            "9": "xai",
+            "10": "mistral",
+            "11": "groq",
+            "12": "cerebras",
+            "13": "cohere",
+            "14": "deepinfra",
+            "15": "togetherai",
+            "16": "perplexity",
+            "17": "openrouter",
+            "18": "github_copilot",
+            "19": "ollama",
+            "20": "lm_studio",
+            "21": "openai_compatible",
         }
 
-        if choice == "8":
+        if choice == "22":
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
@@ -138,6 +166,38 @@ def _get_provider_status(provider: ProviderConfig) -> str:
         env_key = os.environ.get("ANTHROPIC_API_KEY", "")
     elif provider.provider_type == ProviderType.OPENAI:
         env_key = os.environ.get("OPENAI_API_KEY", "")
+    elif provider.provider_type == ProviderType.MINIMAX:
+        env_key = os.environ.get("MINIMAX_API_KEY", "")
+    elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
+        env_key = os.environ.get("ALIYUN_API_KEY", "")
+    elif provider.provider_type == ProviderType.AZURE_OPENAI:
+        env_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
+    elif provider.provider_type == ProviderType.GOOGLE:
+        env_key = os.environ.get("GOOGLE_API_KEY", "")
+    elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
+        env_key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    elif provider.provider_type == ProviderType.AWS_BEDROCK:
+        env_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    elif provider.provider_type == ProviderType.XAI:
+        env_key = os.environ.get("XAI_API_KEY", "")
+    elif provider.provider_type == ProviderType.MISTRAL:
+        env_key = os.environ.get("MISTRAL_API_KEY", "")
+    elif provider.provider_type == ProviderType.GROQ:
+        env_key = os.environ.get("GROQ_API_KEY", "")
+    elif provider.provider_type == ProviderType.CEREBRAS:
+        env_key = os.environ.get("CEREBRAS_API_KEY", "")
+    elif provider.provider_type == ProviderType.COHERE:
+        env_key = os.environ.get("COHERE_API_KEY", "")
+    elif provider.provider_type == ProviderType.DEEPINFRA:
+        env_key = os.environ.get("DEEPINFRA_API_KEY", "")
+    elif provider.provider_type == ProviderType.TOGETHERAI:
+        env_key = os.environ.get("TOGETHERAI_API_KEY", "")
+    elif provider.provider_type == ProviderType.PERPLEXITY:
+        env_key = os.environ.get("PERPLEXITY_API_KEY", "")
+    elif provider.provider_type == ProviderType.OPENROUTER:
+        env_key = os.environ.get("OPENROUTER_API_KEY", "")
+    elif provider.provider_type == ProviderType.GITHUB_COPILOT:
+        env_key = os.environ.get("GITHUB_TOKEN", "")
     if env_key:
         return "[green]✓ env var[/green]"
     return "[yellow]needs setup[/yellow]"
@@ -159,11 +219,11 @@ def _configure_proxy(config: AppConfig) -> AppConfig:
     table.add_column("Option", style="cyan")
     table.add_column("Mode", style="bold")
     table.add_column("Description", style="dim")
-    
+
     table.add_row("  [1]", "No proxy", "Direct connection (default)")
     table.add_row("  [2]", "System proxy", "Use system HTTP/HTTPS proxy settings")
     table.add_row("  [3]", "Custom proxy", "Specify a custom proxy URL")
-    
+
     console.print(table)
     console.print()
 
@@ -221,13 +281,17 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
                 provider.default_model = _select_model_from_list(models, provider.default_model)
             else:
                 console.print("[yellow]No models detected. Using default list.[/yellow]")
-                provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+                provider.default_model = _select_model_from_list(
+                    provider.models, provider.default_model
+                )
         else:
-            provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+            provider.default_model = _select_model_from_list(
+                provider.models, provider.default_model
+            )
 
     elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
         console.print("[dim]Enter your custom OpenAI-compatible API details[/dim]")
-        
+
         base_url = Prompt.ask(
             "API Base URL",
             default=provider.base_url or "http://localhost:8000/v1",
@@ -237,7 +301,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         # Check for API key in environment
         env_key = os.environ.get("OPENAI_API_KEY", "")
         if env_key:
-            console.print(f"[green]✓ Found OPENAI_API_KEY in environment[/green]")
+            console.print("[green]✓ Found OPENAI_API_KEY in environment[/green]")
             use_env = Confirm.ask("Use this key?", default=True)
             if use_env:
                 provider.api_key = env_key
@@ -266,7 +330,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
     elif provider.provider_type == ProviderType.MINIMAX:
         env_key = os.environ.get("MINIMAX_API_KEY", "")
         if env_key:
-            console.print(f"[green]✓ Found MINIMAX_API_KEY in environment[/green]")
+            console.print("[green]✓ Found MINIMAX_API_KEY in environment[/green]")
             use_env = Confirm.ask("Use this key?", default=True)
             if use_env:
                 provider.api_key = env_key
@@ -286,20 +350,244 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
     elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
         env_key = os.environ.get("ALIYUN_API_KEY", "")
         if env_key:
-            console.print(f"[green]✓ Found ALIYUN_API_KEY in environment[/green]")
+            console.print("[green]✓ Found ALIYUN_API_KEY in environment[/green]")
             use_env = Confirm.ask("Use this key?", default=True)
             if use_env:
                 provider.api_key = env_key
             else:
-                provider.api_key = Prompt.ask("Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True)
+                provider.api_key = Prompt.ask(
+                    "Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True
+                )
         else:
-            provider.api_key = Prompt.ask("Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True)
+            provider.api_key = Prompt.ask(
+                "Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True
+            )
 
         base_url = Prompt.ask(
             "API Base URL (press Enter for default)",
             default=provider.base_url,
         )
         provider.base_url = base_url
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.AZURE_OPENAI:
+        console.print("[dim]Azure OpenAI requires endpoint and API key[/dim]")
+        env_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+        if env_endpoint:
+            console.print("[green]✓ Found AZURE_OPENAI_ENDPOINT in environment[/green]")
+            use_env = Confirm.ask("Use this endpoint?", default=True)
+            if use_env:
+                provider.base_url = env_endpoint
+            else:
+                provider.base_url = Prompt.ask(
+                    "Enter Azure OpenAI Endpoint (e.g., https://your-resource.openai.azure.com)"
+                )
+        else:
+            provider.base_url = Prompt.ask(
+                "Enter Azure OpenAI Endpoint (e.g., https://your-resource.openai.azure.com)"
+            )
+        env_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found AZURE_OPENAI_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Azure OpenAI API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Azure OpenAI API Key", password=True)
+        console.print(
+            f"\n[dim]Available models (deployment names): {', '.join(provider.models)}[/dim]"
+        )
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.GOOGLE:
+        env_key = os.environ.get("GOOGLE_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found GOOGLE_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Google AI API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Google AI API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
+        console.print("[dim]Google Vertex AI uses GCP Application Default Credentials[/dim]")
+        env_project = os.environ.get("GOOGLE_VERTEX_PROJECT", "")
+        if env_project:
+            console.print("[green]✓ Found GOOGLE_VERTEX_PROJECT in environment[/green]")
+        else:
+            project_id = Prompt.ask("Enter GCP Project ID")
+            os.environ["GOOGLE_VERTEX_PROJECT"] = project_id
+        env_location = os.environ.get("GOOGLE_VERTEX_LOCATION", "")
+        if env_location:
+            console.print("[green]✓ Found GOOGLE_VERTEX_LOCATION in environment[/green]")
+        else:
+            location = Prompt.ask("Enter GCP Location (e.g., us-central1)", default="us-central1")
+            os.environ["GOOGLE_VERTEX_LOCATION"] = location
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.AWS_BEDROCK:
+        console.print("[dim]AWS Bedrock uses AWS credentials from environment[/dim]")
+        env_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        if env_key:
+            console.print("[green]✓ Found AWS_ACCESS_KEY_ID in environment[/green]")
+        else:
+            console.print(
+                "[yellow]AWS credentials not found. Configure with AWS CLI or set environment variables[/yellow]"
+            )
+        env_region = os.environ.get("AWS_REGION", "")
+        if env_region:
+            console.print("[green]✓ Found AWS_REGION in environment[/green]")
+        else:
+            region = Prompt.ask("Enter AWS Region (e.g., us-east-1)", default="us-east-1")
+            os.environ["AWS_REGION"] = region
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.XAI:
+        env_key = os.environ.get("XAI_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found XAI_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter xAI API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter xAI API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.MISTRAL:
+        env_key = os.environ.get("MISTRAL_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found MISTRAL_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Mistral API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Mistral API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.GROQ:
+        env_key = os.environ.get("GROQ_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found GROQ_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Groq API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Groq API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.CEREBRAS:
+        env_key = os.environ.get("CEREBRAS_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found CEREBRAS_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Cerebras API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Cerebras API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.COHERE:
+        env_key = os.environ.get("COHERE_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found COHERE_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Cohere API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Cohere API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.DEEPINFRA:
+        env_key = os.environ.get("DEEPINFRA_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found DEEPINFRA_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter DeepInfra API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter DeepInfra API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.TOGETHERAI:
+        env_key = os.environ.get("TOGETHERAI_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found TOGETHERAI_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Together AI API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Together AI API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.PERPLEXITY:
+        env_key = os.environ.get("PERPLEXITY_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found PERPLEXITY_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter Perplexity API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter Perplexity API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.OPENROUTER:
+        env_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if env_key:
+            console.print("[green]✓ Found OPENROUTER_API_KEY in environment[/green]")
+            use_env = Confirm.ask("Use this key?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter OpenRouter API Key", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter OpenRouter API Key", password=True)
+        console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
+        provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.GITHUB_COPILOT:
+        env_key = os.environ.get("GITHUB_TOKEN", "")
+        if env_key:
+            console.print("[green]✓ Found GITHUB_TOKEN in environment[/green]")
+            use_env = Confirm.ask("Use this token?", default=True)
+            if use_env:
+                provider.api_key = env_key
+            else:
+                provider.api_key = Prompt.ask("Enter GitHub Personal Access Token", password=True)
+        else:
+            provider.api_key = Prompt.ask("Enter GitHub Personal Access Token", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
@@ -350,33 +638,39 @@ def _select_model_from_list(models: list[str], default: str) -> str:
     """Show a numbered list of models and let user select one."""
     if not models:
         return default
-    
+
     if len(models) == 1:
         console.print(f"[green]Using model: {models[0]}[/green]")
         return models[0]
 
     # Find preferred default
-    preferred_defaults = ["gemma3:1b", "gemma4:e4b", "llama3.2", "gpt-4o", "claude-sonnet-4-20250514"]
+    preferred_defaults = [
+        "gemma3:1b",
+        "gemma4:e4b",
+        "llama3.2",
+        "gpt-4o",
+        "claude-sonnet-4-20250514",
+    ]
     actual_default = default
     for pref in preferred_defaults:
         if pref in models:
             actual_default = pref
             break
-    
+
     console.print("\n[bold]Available models:[/bold]")
     for i, model in enumerate(models, 1):
         marker = " [cyan](default)[/cyan]" if model == actual_default else ""
         console.print(f"  [{i}] {model}{marker}")
-    
+
     default_idx = models.index(actual_default) + 1 if actual_default in models else 1
-    
+
     choices = [str(i) for i in range(1, len(models) + 1)]
     selection = Prompt.ask(
         "\nSelect model",
         choices=choices,
         default=str(default_idx),
     )
-    
+
     return models[int(selection) - 1]
 
 
@@ -384,6 +678,7 @@ def _detect_ollama_models(base_url: str) -> list[str]:
     """Try to detect available Ollama models."""
     try:
         import httpx
+
         url = base_url.replace("/v1", "/api/tags")
         # Don't use proxy for local Ollama
         with httpx.Client(timeout=5.0, proxy=None) as client:
@@ -414,7 +709,7 @@ def show_current_config(config: AppConfig) -> None:
         table.add_row(name, model, status, active)
 
     console.print(table)
-    
+
     # Proxy info
     console.print(f"\n[bold]Proxy:[/bold] {_get_proxy_display(config)}")
     console.print()

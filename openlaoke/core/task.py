@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from openlaoke.types.core_types import (
+    TaskId,
     TaskState,
     TaskStatus,
     TaskType,
-    TaskId,
     is_terminal_task_status,
 )
 
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 @dataclass
 class TaskHandle:
     """Handle to a running task for cleanup and monitoring."""
+
     task_id: str
     task: asyncio.Task | None = None
     cleanup: callable | None = None
@@ -45,9 +46,7 @@ class TaskManager:
         self.app_state = app_state
         self._id_generator = TaskId()
         self._handles: dict[str, TaskHandle] = {}
-        self._output_dir = os.path.join(
-            os.path.expanduser("~/.openlaoke"), "task_outputs"
-        )
+        self._output_dir = os.path.join(os.path.expanduser("~/.openlaoke"), "task_outputs")
         os.makedirs(self._output_dir, exist_ok=True)
 
     def _get_output_path(self, task_id: str) -> str:
@@ -80,9 +79,7 @@ class TaskManager:
         tool_use_id: str | None = None,
         working_dir: str | None = None,
     ) -> tuple[str, int]:
-        state = self.create_task_state(
-            TaskType.LOCAL_BASH, description, tool_use_id
-        )
+        state = self.create_task_state(TaskType.LOCAL_BASH, description, tool_use_id)
         state.status = TaskStatus.RUNNING
         self.app_state.update_task(state)
 
@@ -142,9 +139,7 @@ class TaskManager:
         tool_use_id: str | None = None,
         subagent_type: str = "local",
     ) -> str:
-        state = self.create_task_state(
-            TaskType.LOCAL_AGENT, description, tool_use_id
-        )
+        state = self.create_task_state(TaskType.LOCAL_AGENT, description, tool_use_id)
         state.status = TaskStatus.RUNNING
         self.app_state.update_task(state)
 
@@ -190,8 +185,4 @@ class TaskManager:
             self.app_state.update_task(state)
 
     def get_active_tasks(self) -> list[TaskState]:
-        return [
-            t
-            for t in self.app_state.get_all_tasks()
-            if not is_terminal_task_status(t.status)
-        ]
+        return [t for t in self.app_state.get_all_tasks() if not is_terminal_task_status(t.status)]
