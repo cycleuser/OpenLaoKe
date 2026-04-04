@@ -84,15 +84,317 @@ class ClearCommand(SlashCommand):
 class ModelCommand(SlashCommand):
     name = "model"
     description = "Show or change the current model"
+    aliases = ["m"]
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
         args = ctx.args.strip()
-        if not args:
-            current = ctx.app_state.session_config.model
-            return CommandResult(message=f"Current model: {current}")
 
+        # Show current model and available models
+        if not args:
+            return self._show_model_info(ctx)
+
+        # Interactive selection with flags
+        if args.startswith("-"):
+            if args in ["-l", "-list", "--list"]:
+                return self._list_all_models(ctx)
+            if args in ["-p", "-provider", "--provider"]:
+                return self._list_providers(ctx)
+            return CommandResult(
+                success=False, message=f"Unknown option: {args}. Use: -l (list), -p (providers)"
+            )
+
+        # Check if input is a number (select by index)
+        if args.isdigit() or (args.startswith("#") and args[1:].isdigit()):
+            return self._select_by_index(ctx, args)
+
+        # Direct model name provided (with optional provider/model format)
+        if "/" in args:
+            provider_name, model_name = args.split("/", 1)
+            return self._switch_provider_and_model(ctx, provider_name, model_name)
+
+        # Set model name directly
         ctx.app_state.session_config.model = args
         return CommandResult(message=f"Model set to: {args}")
+
+    def _select_by_index(self, ctx: CommandContext, index_str: str) -> CommandResult:
+        """Select model by numeric index."""
+        # Parse index (support "#1" or "1" format)
+        if index_str.startswith("#"):
+            index_str = index_str[1:]
+
+        try:
+            index = int(index_str)
+        except ValueError:
+            return CommandResult(success=False, message=f"Invalid index: {index_str}")
+
+        if not ctx.app_state.multi_provider_config:
+            return CommandResult(message="No provider configured. Run --config first.")
+
+        provider_name = ctx.app_state.multi_provider_config.active_provider
+        provider = ctx.app_state.multi_provider_config.providers.get(provider_name)
+
+        if not provider or not provider.models:
+            return CommandResult(message=f"No models available for provider: {provider_name}")
+
+        models = provider.models
+        if index < 1 or index > len(models):
+            return CommandResult(
+                success=False,
+                message=f"Invalid index {index}. Available models: 1-{len(models)}",
+            )
+
+        selected_model = models[index - 1]
+        ctx.app_state.session_config.model = selected_model
+
+        lines = [
+            f"[green]✓[/green] Model set to: {selected_model}",
+            f"[dim]Provider: {provider_name}[/dim]",
+            "",
+            "[dim]Tip: You can also use the model name directly[/dim]",
+        ]
+        return CommandResult(message="\n".join(lines))
+
+    def _switch_provider_and_model(
+        self, ctx: CommandContext, provider_name: str, model_name: str
+    ) -> CommandResult:
+        """Switch to a different provider and model."""
+        if not ctx.app_state.multi_provider_config:
+            return CommandResult(message="No provider configured. Run --config first.")
+
+        provider_name = provider_name.lower()
+
+        if provider_name not in ctx.app_state.multi_provider_config.providers:
+            available = [
+                name
+                for name, p in ctx.app_state.multi_provider_config.providers.items()
+                if p.enabled
+            ]
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' not found. Available: {', '.join(available)}",
+            )
+
+        provider = ctx.app_state.multi_provider_config.providers[provider_name]
+        if not provider.enabled:
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' is disabled. Run --config to enable.",
+            )
+
+        if not provider.is_configured() and not provider.is_local:
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' is not configured. Run --config to set API key.",
+            )
+
+        # Switch provider
+        ctx.app_state.multi_provider_config.active_provider = provider_name
+
+        # Handle model selection (can be index or name)
+        if model_name.isdigit() or (model_name.startswith("#") and model_name[1:].isdigit()):
+            # Select by index
+            if model_name.startswith("#"):
+                model_name = model_name[1:]
+            try:
+                index = int(model_name)
+                if provider.models and 1 <= index <= len(provider.models):
+                    model_name = provider.models[index - 1]
+                else:
+                    ctx.app_state.session_config.model = provider.default_model or (
+                        provider.models[0] if provider.models else ""
+                    )
+                    return CommandResult(
+                        success=False,
+                        message=f"Invalid model index {index}. Using default: {ctx.app_state.session_config.model}",
+                    )
+            except ValueError:
+                pass
+
+        ctx.app_state.session_config.model = model_name
+
+        return CommandResult(
+            message=f"[green]✓[/green] Switched to provider: {provider_name}\nModel: {model_name}"
+        )
+
+    def _show_model_info(self, ctx: CommandContext) -> CommandResult:
+        """Show current model and available models for current provider."""
+        current_model = ctx.app_state.session_config.model
+        provider_name = "unknown"
+
+        if ctx.app_state.multi_provider_config:
+            provider_name = ctx.app_state.multi_provider_config.active_provider
+            provider = ctx.app_state.multi_provider_config.providers.get(provider_name)
+            if provider:
+                models = provider.models
+                lines = [
+                    f"[bold]Current provider:[/bold] {provider_name}",
+                    f"[bold]Current model:[/bold] {current_model}",
+                    "",
+                    f"[bold]Available models ({provider_name}):[/bold]",
+                ]
+                for i, model in enumerate(models, 1):
+                    marker = " [cyan](current)[/cyan]" if model == current_model else ""
+                    lines.append(f"  [{i}] {model}{marker}")
+                lines.extend(
+                    [
+                        "",
+                        "[dim]Usage:[/dim]",
+                        "  /model <name>        - Switch to specific model",
+                        "  /model <1-8>         - Select by index number",
+                        "  /model #<1-8>        - Select by index (with # prefix)",
+                        "  /model <provider>/<model> - Switch provider and model",
+                        "  /model -l            - List all models from all providers",
+                        "  /model -p            - List all providers",
+                    ]
+                )
+                return CommandResult(message="\n".join(lines))
+
+        return CommandResult(message=f"Current model: {current_model}")
+
+    def _list_all_models(self, ctx: CommandContext) -> CommandResult:
+        """List models from all configured providers."""
+        lines = ["[bold]Available models from all providers:[/bold]", ""]
+
+        if not ctx.app_state.multi_provider_config:
+            return CommandResult(message="No provider configured. Run --config first.")
+
+        current_provider = ctx.app_state.multi_provider_config.active_provider
+        current_model = ctx.app_state.session_config.model
+
+        for provider_name, provider in ctx.app_state.multi_provider_config.providers.items():
+            if not provider.enabled:
+                continue
+
+            is_current = provider_name == current_provider
+            header = f"[bold cyan]{provider_name}[/bold cyan]"
+            if is_current:
+                header += " [green](active)[/green]"
+            lines.append(header)
+
+            for model in provider.models:
+                marker = ""
+                if is_current and model == current_model:
+                    marker = " [cyan](current)[/cyan]"
+                lines.append(f"  {model}{marker}")
+            lines.append("")
+
+        lines.append("[dim]Usage: /model <provider>/<model> or just /model <model>[/dim]")
+        return CommandResult(message="\n".join(lines))
+
+    def _list_providers(self, ctx: CommandContext) -> CommandResult:
+        """List all available providers."""
+        lines = ["[bold]Available providers:[/bold]", ""]
+
+        if not ctx.app_state.multi_provider_config:
+            return CommandResult(message="No provider configured. Run --config first.")
+
+        current_provider = ctx.app_state.multi_provider_config.active_provider
+
+        for provider_name, provider in ctx.app_state.multi_provider_config.providers.items():
+            status = ""
+            if provider_name == current_provider:
+                status = " [green](active)[/green]"
+            elif provider.enabled and provider.is_configured():
+                status = " [yellow](configured)[/yellow]"
+            elif provider.enabled:
+                status = " [dim](available)[/dim]"
+            else:
+                status = " [dim](disabled)[/dim]"
+
+            model_info = provider.default_model or provider.models[0] if provider.models else ""
+            lines.append(f"  {provider_name}{status}")
+            if model_info:
+                lines.append(f"    [dim]Model: {model_info}[/dim]")
+
+        lines.extend(
+            [
+                "",
+                "[dim]Usage: /provider <name> to switch active provider[/dim]",
+            ]
+        )
+        return CommandResult(message="\n".join(lines))
+
+
+class ProviderCommand(SlashCommand):
+    name = "provider"
+    description = "Switch to a different provider"
+    aliases = ["p"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        args = ctx.args.strip()
+
+        if not ctx.app_state.multi_provider_config:
+            return CommandResult(message="No provider configured. Run --config first.")
+
+        # Show current provider if no args
+        if not args:
+            current_provider = ctx.app_state.multi_provider_config.active_provider
+            current_model = ctx.app_state.session_config.model
+            lines = [
+                f"[bold]Current provider:[/bold] {current_provider}",
+                f"[bold]Current model:[/bold] {current_model}",
+                "",
+                "[bold]Available providers:[/bold]",
+            ]
+
+            for provider_name, provider in ctx.app_state.multi_provider_config.providers.items():
+                if not provider.enabled:
+                    continue
+
+                status = ""
+                if provider_name == current_provider:
+                    status = " [green](active)[/green]"
+                elif provider.is_configured():
+                    status = " [yellow](ready)[/yellow]"
+
+                lines.append(f"  {provider_name}{status}")
+
+            lines.extend(
+                [
+                    "",
+                    "[dim]Usage: /provider <name> - Switch to a different provider[/dim]",
+                ]
+            )
+            return CommandResult(message="\n".join(lines))
+
+        # Switch to specified provider
+        provider_name = args.lower()
+
+        if provider_name not in ctx.app_state.multi_provider_config.providers:
+            available = [
+                name
+                for name, p in ctx.app_state.multi_provider_config.providers.items()
+                if p.enabled
+            ]
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' not found. Available: {', '.join(available)}",
+            )
+
+        provider = ctx.app_state.multi_provider_config.providers[provider_name]
+        if not provider.enabled:
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' is disabled. Run --config to enable.",
+            )
+
+        if not provider.is_configured() and not provider.is_local:
+            return CommandResult(
+                success=False,
+                message=f"Provider '{provider_name}' is not configured. Run --config to set API key.",
+            )
+
+        # Switch provider
+        ctx.app_state.multi_provider_config.active_provider = provider_name
+
+        # Set default model for this provider
+        default_model = provider.default_model or provider.models[0] if provider.models else ""
+        if default_model:
+            ctx.app_state.session_config.model = default_model
+
+        return CommandResult(
+            message=f"[green]✓[/green] Switched to provider: {provider_name}\nModel: {default_model}"
+        )
 
 
 class PermissionCommand(SlashCommand):

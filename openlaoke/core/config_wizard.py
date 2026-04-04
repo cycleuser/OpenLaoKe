@@ -156,11 +156,37 @@ def _get_proxy_display(config: AppConfig) -> str:
     return "unknown"
 
 
+def _get_env_var_name(provider_type: ProviderType) -> str:
+    """Get environment variable name for a provider type."""
+    env_map = {
+        ProviderType.ANTHROPIC: "ANTHROPIC_API_KEY",
+        ProviderType.OPENAI: "OPENAI_API_KEY",
+        ProviderType.MINIMAX: "MINIMAX_API_KEY",
+        ProviderType.ALIYUN_CODING_PLAN: "ALIYUN_API_KEY",
+        ProviderType.AZURE_OPENAI: "AZURE_OPENAI_API_KEY",
+        ProviderType.GOOGLE: "GOOGLE_API_KEY",
+        ProviderType.GOOGLE_VERTEX: "GOOGLE_APPLICATION_CREDENTIALS",
+        ProviderType.AWS_BEDROCK: "AWS_ACCESS_KEY_ID",
+        ProviderType.XAI: "XAI_API_KEY",
+        ProviderType.MISTRAL: "MISTRAL_API_KEY",
+        ProviderType.GROQ: "GROQ_API_KEY",
+        ProviderType.CEREBRAS: "CEREBRAS_API_KEY",
+        ProviderType.COHERE: "COHERE_API_KEY",
+        ProviderType.DEEPINFRA: "DEEPINFRA_API_KEY",
+        ProviderType.TOGETHERAI: "TOGETHERAI_API_KEY",
+        ProviderType.PERPLEXITY: "PERPLEXITY_API_KEY",
+        ProviderType.OPENROUTER: "OPENROUTER_API_KEY",
+        ProviderType.GITHUB_COPILOT: "GITHUB_TOKEN",
+        ProviderType.OPENAI_COMPATIBLE: "OPENAI_API_KEY",
+    }
+    return env_map.get(provider_type, "")
+
+
 def _get_provider_status(provider: ProviderConfig) -> str:
     if provider.is_local:
         return "[green]✓ local[/green]"
     if provider.api_key:
-        return "[green]✓ configured[/green]"
+        return "[green]✓ stored[/green]"
     env_key = ""
     if provider.provider_type == ProviderType.ANTHROPIC:
         env_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -265,6 +291,72 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         return config
 
     console.print(f"\n[bold]Configuring {key}[/bold]")
+
+    # Check available configurations
+    stored_key = provider.api_key
+    env_var_name = _get_env_var_name(provider.provider_type)
+    env_key = os.environ.get(env_var_name, "")
+
+    # Show configuration options
+    if stored_key or env_key:
+        console.print()
+        table = Table(show_header=False, box=None)
+        table.add_column("Option", style="cyan")
+        table.add_column("Source", style="bold")
+        table.add_column("Details", style="dim")
+
+        options = []
+        default_choice = "1"
+
+        if stored_key:
+            masked_key = (
+                f"{stored_key[:8]}...{stored_key[-4:]}" if len(stored_key) > 12 else stored_key
+            )
+            table.add_row(
+                "  [1]", "Stored config", f"Key: {masked_key}, Model: {provider.default_model}"
+            )
+            options.append("1")
+            default_choice = "1"
+
+        if env_key:
+            masked_env = f"{env_key[:8]}...{env_key[-4:]}" if len(env_key) > 12 else env_key
+            option_num = str(len(options) + 1)
+            table.add_row(f"  [{option_num}]", "Environment var", f"{env_var_name}={masked_env}")
+            options.append(option_num)
+            if not stored_key:
+                default_choice = option_num
+
+        option_num = str(len(options) + 1)
+        table.add_row(f"  [{option_num}]", "Reconfigure", "Enter new API key and settings")
+        options.append(option_num)
+
+        console.print(table)
+        console.print()
+
+        choice = Prompt.ask(
+            "Select configuration source",
+            choices=options,
+            default=default_choice,
+        )
+
+        # Use stored configuration (complete config, can return)
+        if choice == "1" and stored_key:
+            console.print(f"[green]✓ Using stored configuration for {key}[/green]")
+            return config
+
+        # Use environment variable (need to continue config for model selection)
+        if env_key:
+            env_option_idx = 2 if stored_key else 1
+            if choice == str(env_option_idx):
+                provider.api_key = env_key
+                console.print(f"[green]✓ Using {env_var_name} from environment[/green]")
+                console.print("[dim]Continue with model selection...[/dim]\n")
+            elif choice == options[-1]:
+                # Reconfigure - will ask for new API key below
+                console.print("\n[yellow]Reconfiguring...[/yellow]")
+        elif choice == options[-1]:
+            console.print("\n[yellow]Reconfiguring...[/yellow]")
+
     console.print("[dim]Press Enter to use default value[/dim]\n")
 
     if provider.is_local:
@@ -298,20 +390,8 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         )
         provider.base_url = base_url
 
-        # Check for API key in environment
-        env_key = os.environ.get("OPENAI_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found OPENAI_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                api_key = Prompt.ask(
-                    "API Key (required for this provider)",
-                    password=True,
-                )
-                provider.api_key = api_key
-        else:
+        # Ask for API key if not already set
+        if not provider.api_key:
             api_key = Prompt.ask(
                 "API Key (required for this provider)",
                 password=True,
@@ -328,15 +408,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         provider.default_model = default_model
 
     elif provider.provider_type == ProviderType.MINIMAX:
-        env_key = os.environ.get("MINIMAX_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found MINIMAX_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter MiniMax API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter MiniMax API Key", password=True)
 
         base_url = Prompt.ask(
@@ -348,17 +420,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
-        env_key = os.environ.get("ALIYUN_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found ALIYUN_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask(
-                    "Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True
-                )
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask(
                 "Enter Aliyun Coding Plan API Key (format: sk-sp-xxxxx)", password=True
             )
@@ -373,45 +435,31 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
 
     elif provider.provider_type == ProviderType.AZURE_OPENAI:
         console.print("[dim]Azure OpenAI requires endpoint and API key[/dim]")
+
+        # Endpoint configuration
         env_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
-        if env_endpoint:
+        if env_endpoint and not provider.base_url:
             console.print("[green]✓ Found AZURE_OPENAI_ENDPOINT in environment[/green]")
             use_env = Confirm.ask("Use this endpoint?", default=True)
             if use_env:
                 provider.base_url = env_endpoint
-            else:
-                provider.base_url = Prompt.ask(
-                    "Enter Azure OpenAI Endpoint (e.g., https://your-resource.openai.azure.com)"
-                )
-        else:
+
+        if not provider.base_url:
             provider.base_url = Prompt.ask(
                 "Enter Azure OpenAI Endpoint (e.g., https://your-resource.openai.azure.com)"
             )
-        env_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found AZURE_OPENAI_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Azure OpenAI API Key", password=True)
-        else:
+
+        # API key configuration
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Azure OpenAI API Key", password=True)
+
         console.print(
             f"\n[dim]Available models (deployment names): {', '.join(provider.models)}[/dim]"
         )
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.GOOGLE:
-        env_key = os.environ.get("GOOGLE_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found GOOGLE_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Google AI API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Google AI API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
@@ -452,161 +500,67 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.XAI:
-        env_key = os.environ.get("XAI_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found XAI_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter xAI API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter xAI API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.MISTRAL:
-        env_key = os.environ.get("MISTRAL_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found MISTRAL_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Mistral API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Mistral API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.GROQ:
-        env_key = os.environ.get("GROQ_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found GROQ_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Groq API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Groq API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.CEREBRAS:
-        env_key = os.environ.get("CEREBRAS_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found CEREBRAS_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Cerebras API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Cerebras API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.COHERE:
-        env_key = os.environ.get("COHERE_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found COHERE_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Cohere API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Cohere API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.DEEPINFRA:
-        env_key = os.environ.get("DEEPINFRA_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found DEEPINFRA_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter DeepInfra API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter DeepInfra API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.TOGETHERAI:
-        env_key = os.environ.get("TOGETHERAI_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found TOGETHERAI_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Together AI API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Together AI API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.PERPLEXITY:
-        env_key = os.environ.get("PERPLEXITY_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found PERPLEXITY_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter Perplexity API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter Perplexity API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.OPENROUTER:
-        env_key = os.environ.get("OPENROUTER_API_KEY", "")
-        if env_key:
-            console.print("[green]✓ Found OPENROUTER_API_KEY in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter OpenRouter API Key", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter OpenRouter API Key", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     elif provider.provider_type == ProviderType.GITHUB_COPILOT:
-        env_key = os.environ.get("GITHUB_TOKEN", "")
-        if env_key:
-            console.print("[green]✓ Found GITHUB_TOKEN in environment[/green]")
-            use_env = Confirm.ask("Use this token?", default=True)
-            if use_env:
-                provider.api_key = env_key
-            else:
-                provider.api_key = Prompt.ask("Enter GitHub Personal Access Token", password=True)
-        else:
+        if not provider.api_key:
             provider.api_key = Prompt.ask("Enter GitHub Personal Access Token", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
 
     else:
-        env_var = "ANTHROPIC_API_KEY" if key == "anthropic" else "OPENAI_API_KEY"
-        env_value = os.environ.get(env_var, "")
-
-        if env_value:
-            console.print(f"[green]✓ Found {env_var} in environment[/green]")
-            use_env = Confirm.ask("Use this key?", default=True)
-            if use_env:
-                provider.api_key = env_value
-            else:
-                api_key = Prompt.ask(
-                    f"Enter {key} API Key",
-                    password=True,
-                )
-                provider.api_key = api_key
-        else:
+        if not provider.api_key:
             api_key = Prompt.ask(
                 f"Enter your {key} API Key",
                 password=True,
