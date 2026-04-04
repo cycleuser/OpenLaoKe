@@ -716,7 +716,7 @@ class HyperAutoCommand(SlashCommand):
             ha_config = HAutoConfig(
                 mode=hyperauto_config.mode,
                 max_iterations=hyperauto_config.max_iterations,
-                timeout_seconds=hyperauto_config.timeout_seconds,
+                timeout_per_task=hyperauto_config.timeout_seconds,
                 learning_enabled=hyperauto_config.learning_enabled,
                 reflection_enabled=True,
             )
