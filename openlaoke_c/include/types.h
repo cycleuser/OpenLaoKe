@@ -50,49 +50,6 @@ typedef enum {
     TASK_STATUS_KILLED
 } TaskStatus;
 
-static inline bool is_terminal_task_status(TaskStatus status) {
-    return status == TASK_STATUS_COMPLETED || 
-           status == TASK_STATUS_FAILED || 
-           status == TASK_STATUS_KILLED;
-}
-
-/* String conversion helpers */
-const char* permission_mode_to_string(PermissionMode mode);
-const char* hyperauto_mode_to_string(HyperAutoMode mode);
-const char* permission_result_to_string(PermissionResult result);
-const char* task_type_to_string(TaskType type);
-const char* task_status_to_string(TaskStatus status);
-
-PermissionMode string_to_permission_mode(const char* str);
-HyperAutoMode string_to_hyperauto_mode(const char* str);
-PermissionResult string_to_permission_result(const char* str);
-TaskType string_to_task_type(const char* str);
-TaskStatus string_to_task_status(const char* str);
-
-/* Token usage tracking */
-typedef struct {
-    int prompt_tokens;
-    int completion_tokens;
-    int total_tokens;
-} TokenUsage;
-
-/* Cost information */
-typedef struct {
-    double prompt_cost;
-    double completion_cost;
-    double total_cost;
-} CostInfo;
-
-/* Tool progress callback */
-typedef void (*ProgressCallback)(const char* message, void* user_data);
-
-/* Validation result */
-typedef struct {
-    bool result;
-    char* message;
-    char* error_code;
-} ValidationResult;
-
 /* Tool result block */
 typedef struct {
     char* tool_use_id;
@@ -100,9 +57,6 @@ typedef struct {
     bool is_error;
     char* error_message;
 } ToolResultBlock;
-
-ToolResultBlock* tool_result_block_create(const char* tool_use_id, const char* content, bool is_error);
-void tool_result_block_destroy(ToolResultBlock* block);
 
 /* Message structure */
 typedef enum {
@@ -118,9 +72,19 @@ typedef struct {
     char* tool_name;
 } Message;
 
-Message* message_create(MessageRole role, const char* content);
-void message_destroy(Message* msg);
-char* message_to_json(const Message* msg);
+/* Token usage tracking */
+typedef struct {
+    int prompt_tokens;
+    int completion_tokens;
+    int total_tokens;
+} TokenUsage;
+
+/* Cost information */
+typedef struct {
+    double prompt_cost;
+    double completion_cost;
+    double total_cost;
+} CostInfo;
 
 /* Task state */
 typedef struct {
@@ -130,6 +94,27 @@ typedef struct {
     char* description;
     void* data;
 } TaskState;
+
+/* String conversion helpers */
+const char* permission_mode_to_string(PermissionMode mode);
+const char* hyperauto_mode_to_string(HyperAutoMode mode);
+const char* permission_result_to_string(PermissionResult result);
+const char* task_type_to_string(TaskType type);
+const char* task_status_to_string(TaskStatus status);
+
+PermissionMode string_to_permission_mode(const char* str);
+HyperAutoMode string_to_hyperauto_mode(const char* str);
+PermissionResult string_to_permission_result(const char* str);
+TaskType string_to_task_type(const char* str);
+TaskStatus string_to_task_status(const char* str);
+
+/* Memory management */
+ToolResultBlock* tool_result_block_create(const char* tool_use_id, const char* content, bool is_error);
+void tool_result_block_destroy(ToolResultBlock* block);
+
+Message* message_create(MessageRole role, const char* content);
+void message_destroy(Message* msg);
+char* message_to_json(const Message* msg);
 
 TaskState* task_state_create(TaskType type, const char* task_id);
 void task_state_destroy(TaskState* state);
