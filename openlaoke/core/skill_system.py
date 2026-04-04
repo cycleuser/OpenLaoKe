@@ -13,6 +13,53 @@ from pathlib import Path
 from typing import Any
 
 
+def _sanitize_frontmatter(frontmatter: str) -> str:
+    """Sanitize YAML frontmatter that contains invalid syntax.
+    
+    Mirrors OpenCode's fallbackSanitization: when a value contains colons,
+    convert it to a block scalar (|-) so the YAML parser can handle it.
+    """
+    lines = frontmatter.splitlines()
+    result = []
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Skip comments and empty lines
+        if stripped.startswith("#") or stripped == "":
+            result.append(line)
+            continue
+        
+        # Skip continuation lines (indented)
+        if line.startswith((" ", "\t")):
+            result.append(line)
+            continue
+        
+        # Match key: value pattern
+        kv = re.match(r'^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$', line)
+        if not kv:
+            result.append(line)
+            continue
+        
+        key = kv.group(1)
+        value = kv.group(2).strip()
+        
+        # Skip if value is empty, already quoted, or uses block scalar
+        if not value or value in (">", "|") or value.startswith(('"', "'")):
+            result.append(line)
+            continue
+        
+        # If value contains a colon, convert to block scalar
+        if ":" in value:
+            result.append(f"{key}: |-")
+            result.append(f"  {value}")
+            continue
+        
+        result.append(line)
+    
+    return "\n".join(result)
+
+
 @dataclass
 class Skill:
     """A skill definition loaded from SKILL.md file."""
@@ -49,12 +96,30 @@ class Skill:
             if len(parts) >= 3:
                 frontmatter = parts[1].strip()
                 body = parts[2].strip()
+                
+                # Try parsing YAML directly first
                 try:
                     metadata = yaml.safe_load(frontmatter) or {}
                 except yaml.YAMLError:
-                    pass
+                    # Fallback: sanitize frontmatter like OpenCode does
+                    try:
+                        sanitized = _sanitize_frontmatter(frontmatter)
+                        metadata = yaml.safe_load(sanitized) or {}
+                    except yaml.YAMLError:
+                        # Last resort: manual key-value extraction
+                        metadata = cls._extract_frontmatter_manual(frontmatter)
         
-        name = metadata.get("name", path.stem if path else "unknown")
+        # Determine skill name: prefer frontmatter, fallback to directory name
+        name = metadata.get("name", "")
+        if not name or name == "SKILL":
+            # Use parent directory name as fallback
+            if path and path.parent:
+                name = path.parent.name
+            elif path:
+                name = path.stem
+            else:
+                name = "unknown"
+        
         description = metadata.get("description", "")
         if isinstance(description, str):
             description = description.strip()
@@ -70,6 +135,19 @@ class Skill:
             path=path,
             metadata=metadata,
         )
+    
+    @staticmethod
+    def _extract_frontmatter_manual(frontmatter: str) -> dict[str, Any]:
+        """Extract key-value pairs from broken frontmatter as last resort."""
+        result = {}
+        for line in frontmatter.splitlines():
+            kv = re.match(r'^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$', line.strip())
+            if kv:
+                key = kv.group(1)
+                value = kv.group(2).strip()
+                if value:
+                    result[key] = value
+        return result
     
     def get_preamble(self) -> str | None:
         """Extract preamble bash code block if present."""
@@ -143,30 +221,33 @@ class SkillRegistry:
 def get_default_skill_dirs() -> list[Path]:
     """Get default skill directories to search.
     
-    Searches in order:
-    1. ~/.config/opencode/skills (OpenCode)
-    2. ~/.claude/skills (Claude Code)
-    3. ~/.opencode/skills (alternative OpenCode path)
-    4. ~/.openlaoke/skills (OpenLaoKe)
+    Loads in priority order (later dirs overwrite earlier ones):
+    1. ~/.claude/skills (Claude Code) - lowest priority
+    2. ~/.openlaoke/skills (OpenLaoKe installed)
+    3. ~/.config/opencode/skills (OpenCode) - highest priority
+    4. ~/.opencode/skills (alternative OpenCode path)
     """
     home = Path.home()
     dirs = []
     
-    opencode_config_skills = home / ".config" / "opencode" / "skills"
-    if opencode_config_skills.exists():
-        dirs.append(opencode_config_skills)
-    
+    # Load Claude first (lowest priority)
     claude_skills = home / ".claude" / "skills"
     if claude_skills.exists():
         dirs.append(claude_skills)
     
-    opencode_skills = home / ".opencode" / "skills"
-    if opencode_skills.exists():
-        dirs.append(opencode_skills)
-    
+    # Then OpenLaoKe installed skills
     openlaoke_skills = home / ".openlaoke" / "skills"
     if openlaoke_skills.exists():
         dirs.append(openlaoke_skills)
+    
+    # OpenCode overrides (highest priority - these are the originals)
+    opencode_config_skills = home / ".config" / "opencode" / "skills"
+    if opencode_config_skills.exists():
+        dirs.append(opencode_config_skills)
+    
+    opencode_skills = home / ".opencode" / "skills"
+    if opencode_skills.exists():
+        dirs.append(opencode_skills)
     
     return dirs
 
@@ -185,6 +266,17 @@ def get_skill_registry() -> SkillRegistry:
             _global_registry.add_skill_directory(skill_dir)
     
     return _global_registry
+
+
+def rescan_skills() -> int:
+    """Rescan all skill directories and reload skills. Returns count of skills loaded."""
+    global _global_registry
+    _global_registry = SkillRegistry()
+    
+    for skill_dir in get_default_skill_dirs():
+        _global_registry.add_skill_directory(skill_dir)
+    
+    return len(_global_registry.list_skills())
 
 
 def load_skill(name: str) -> Skill | None:

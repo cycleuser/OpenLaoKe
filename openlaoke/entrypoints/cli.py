@@ -102,11 +102,6 @@ def main() -> None:
         help="Show current configuration",
     )
     parser.add_argument(
-        "--gui",
-        action="store_true",
-        help="Launch graphical interface",
-    )
-    parser.add_argument(
         "prompt",
         nargs="*",
         help="Direct prompt to execute (non-interactive mode)",
@@ -191,27 +186,12 @@ def main() -> None:
 
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
-
-    if args.gui:
-        return _run_gui(app_state, config)
     
     if args.prompt:
         prompt_text = " ".join(args.prompt)
         asyncio.run(_run_non_interactive(prompt_text, app_state, config))
     else:
         asyncio.run(_run_interactive(app_state, config))
-
-
-def _run_gui(app_state, config) -> int:
-    """Launch the graphical interface."""
-    try:
-        from openlaoke.gui.app import OpenLaoKeApp
-        app = OpenLaoKeApp(app_state=app_state, config=config)
-        return app.run()
-    except ImportError as e:
-        console.print(f"[red]Error loading GUI: {e}[/red]")
-        console.print("[yellow]Make sure PySide6 is installed: pip install PySide6[/yellow]")
-        return 1
 
 
 async def _run_interactive(app_state, config) -> None:
