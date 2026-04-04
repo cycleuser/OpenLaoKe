@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import traceback
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.types.core_types import ToolResultBlock
@@ -33,15 +32,11 @@ class ToolExecutor:
 
     async def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> ToolResultBlock:
         """Execute a single tool call."""
-        print(f"[EXECUTOR] Executing tool: {tool_name}")
-        print(f"[EXECUTOR] Input: {json.dumps(tool_input, indent=2)[:500]}...")
-
         try:
             registry = await self.get_tool_registry()
             tool = await registry.get_async(tool_name)
 
             if not tool:
-                print(f"[EXECUTOR] Tool not found: {tool_name}")
                 return ToolResultBlock(
                     type="tool_result",
                     tool_use_id="unknown",
@@ -58,24 +53,9 @@ class ToolExecutor:
 
             result = await tool.call(ctx, **tool_input)
 
-            print(f"[EXECUTOR] Tool result: {result.is_error=}")
-            if result.is_error:
-                print(
-                    f"[EXECUTOR] Error: {result.content[:200] if isinstance(result.content, str) else result.content}"
-                )
-            else:
-                content_preview = (
-                    result.content[:200]
-                    if isinstance(result.content, str)
-                    else str(result.content)[:200]
-                )
-                print(f"[EXECUTOR] Success: {content_preview}...")
-
             return result
 
         except Exception as e:
-            print(f"[EXECUTOR] Exception: {e}")
-            print(f"[EXECUTOR] Traceback:\n{traceback.format_exc()}")
             return ToolResultBlock(
                 type="tool_result",
                 tool_use_id="error",

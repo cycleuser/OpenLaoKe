@@ -23,6 +23,8 @@ class HyperAutoState(StrEnum):
     ANALYZING = "analyzing"
     PLANNING = "planning"
     EXECUTING = "executing"
+    VERIFYING = "verifying"
+    RETRYING = "retrying"
     REFLECTING = "reflecting"
     LEARNING = "learning"
     COMPLETED = "completed"
