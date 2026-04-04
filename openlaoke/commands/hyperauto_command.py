@@ -709,6 +709,7 @@ class HyperAutoCommand(SlashCommand):
             "current_task": "",
             "state": "idle",
             "start_time": 0.0,
+            "live_display": None,
         }
 
         def create_progress_display() -> Group:
@@ -820,6 +821,9 @@ class HyperAutoCommand(SlashCommand):
                 )
                 self._save_active_task(ctx, task)
 
+            if progress_state.get("live_display"):
+                progress_state["live_display"].update(create_progress_display())
+
         try:
             task = self._get_active_hyperauto_task(ctx)
             if task:
@@ -859,6 +863,7 @@ class HyperAutoCommand(SlashCommand):
                 refresh_per_second=4,
                 transient=False,
             ) as live:
+                progress_state["live_display"] = live
                 run_task = asyncio.create_task(
                     agent.run(task_description or "Autonomous operation")
                 )
@@ -868,6 +873,7 @@ class HyperAutoCommand(SlashCommand):
                     await asyncio.sleep(0.25)
 
                 result = run_task.result()
+                progress_state["live_display"] = None
 
             task = self._get_active_hyperauto_task(ctx)
             if task:

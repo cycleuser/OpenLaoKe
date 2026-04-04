@@ -77,7 +77,7 @@ class HyperAutoAgent:
         self._skill_registry: SkillRegistry | None = None
         self._execution_history: list[dict[str, Any]] = []
         self._learned_patterns: dict[str, list[str]] = {}
-        self._on_progress: ProgressCallback | None = None
+        self._on_progress = on_progress  # ← 关键修复！
         self._api_client = None
         self._tool_executor: ToolExecutor | None = None
 
@@ -90,29 +90,15 @@ class HyperAutoAgent:
     async def _get_api_client(self):
         """Get or create the API client."""
         if self._api_client is None:
-            print("[DEBUG] _get_api_client: Creating new API client...")
             from openlaoke.core.multi_provider_api import MultiProviderClient
 
             if self.app_state.multi_provider_config:
-                print("[DEBUG] _get_api_client: Using multi_provider_config from app_state")
-                print(
-                    f"[DEBUG] _get_api_client: Active provider: {self.app_state.multi_provider_config.active_provider}"
-                )
-                print(
-                    f"[DEBUG] _get_api_client: Active model: {self.app_state.multi_provider_config.get_active_model()}"
-                )
                 self._api_client = MultiProviderClient(self.app_state.multi_provider_config)
             else:
-                print(
-                    "[DEBUG] _get_api_client: WARNING - No multi_provider_config, creating defaults (Ollama)"
-                )
                 from openlaoke.types.providers import MultiProviderConfig
 
                 config = MultiProviderConfig.defaults()
                 self._api_client = MultiProviderClient(config)
-            print(f"[DEBUG] _get_api_client: Client created: {type(self._api_client).__name__}")
-        else:
-            print("[DEBUG] _get_api_client: Reusing existing client")
         return self._api_client
 
     def _get_tool_executor(self) -> ToolExecutor:
@@ -123,9 +109,6 @@ class HyperAutoAgent:
 
     async def run(self, request: str) -> dict[str, Any]:
         """Execute a request in HyperAuto mode."""
-        import traceback
-
-        print(f"[DEBUG] run: Starting HyperAuto for: {request[:100]}...")
         self.context = WorkflowContext(
             original_request=request,
             current_state=HyperAutoState.ANALYZING,
@@ -135,31 +118,23 @@ class HyperAutoAgent:
         try:
             while self.context.iteration < self.config.max_iterations:
                 self.context.iteration += 1
-                print(
-                    f"[DEBUG] run: Iteration {self.context.iteration}, state={self.context.current_state.value}"
-                )
 
                 if self.context.current_state == HyperAutoState.ANALYZING:
-                    print("[DEBUG] run: Analyzing request...")
                     await self._analyze_request()
                     self.context.current_state = HyperAutoState.PLANNING
 
                 elif self.context.current_state == HyperAutoState.PLANNING:
-                    print("[DEBUG] run: Creating plan...")
                     await self._create_plan()
                     self.context.current_state = HyperAutoState.EXECUTING
 
                 elif self.context.current_state == HyperAutoState.EXECUTING:
-                    print("[DEBUG] run: Executing plan...")
                     result = await self._execute_plan()
                     if result:
                         self.context.current_state = HyperAutoState.REFLECTING
                     else:
-                        print("[DEBUG] run: Execute plan returned False, breaking")
                         break
 
                 elif self.context.current_state == HyperAutoState.REFLECTING:
-                    print("[DEBUG] run: Reflecting...")
                     if self.config.reflection_enabled:
                         await self._reflect()
                     if self.config.learning_enabled:
@@ -168,7 +143,6 @@ class HyperAutoAgent:
                         self.context.current_state = HyperAutoState.COMPLETED
 
                 elif self.context.current_state == HyperAutoState.LEARNING:
-                    print("[DEBUG] run: Learning...")
                     await self._learn()
                     self.context.current_state = HyperAutoState.COMPLETED
 
@@ -176,18 +150,14 @@ class HyperAutoAgent:
                     self.context.current_state == HyperAutoState.COMPLETED
                     or self.context.current_state == HyperAutoState.FAILED
                 ):
-                    print(f"[DEBUG] run: Reached final state: {self.context.current_state.value}")
                     break
 
             self.context.end_time = time.time()
-            print(f"[DEBUG] run: Completed successfully after {self.context.iteration} iterations")
             return self._get_result()
 
         except Exception as e:
             self.context.current_state = HyperAutoState.FAILED
             self.context.end_time = time.time()
-            print(f"[DEBUG] run: ERROR: {e}")
-            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
             return {
                 "success": False,
                 "error": str(e),
@@ -196,14 +166,10 @@ class HyperAutoAgent:
 
     async def _analyze_request(self) -> AnalysisResult:
         """Analyze the request and identify sub-tasks using AI."""
-        import traceback
-
         request = self.context.original_request
 
         try:
-            print("[DEBUG] _analyze_request: Starting analysis...")
             api = await self._get_api_client()
-            print(f"[DEBUG] _analyze_request: API client type: {type(api).__name__}")
 
             system_prompt = "You are a task analyzer. Respond only with valid JSON."
             user_prompt = f"""Analyze this task and break it down:
@@ -223,7 +189,6 @@ JSON only, no other text."""
                 model = self.app_state.multi_provider_config.get_active_model()
             else:
                 model = "gemma3:1b"
-            print(f"[DEBUG] _analyze_request: Model={model}, calling API...")
 
             response_msg, token_usage, _ = await api.send_message(
                 system_prompt=system_prompt,
@@ -232,17 +197,12 @@ JSON only, no other text."""
                 max_tokens=1000,
             )
 
-            print("[DEBUG] _analyze_request: API call completed")
-
             if response_msg and response_msg.content:
                 import json
 
                 content = response_msg.content
                 if hasattr(content, "text"):
                     content = content.text
-
-                print(f"[DEBUG] _analyze_request: Response length={len(content)}")
-                print(f"[DEBUG] _analyze_request: Response preview: {content[:200]}...")
 
                 try:
                     data = json.loads(content)
@@ -251,11 +211,7 @@ JSON only, no other text."""
                     required_skills = data.get("required_skills", [])
                     required_tools = data.get("required_tools", [])
                     complexity = data.get("estimated_complexity", "medium")
-                    print(
-                        f"[DEBUG] _analyze_request: JSON parsed - type={task_type}, tasks={len(sub_tasks)}"
-                    )
-                except (json.JSONDecodeError, KeyError) as e:
-                    print(f"[DEBUG] _analyze_request: JSON parse error: {e}")
+                except (json.JSONDecodeError, KeyError):
                     task_type = self._classify_task(request)
                     sub_tasks = self._decompose_task(request, task_type)
                     required_skills = self._identify_required_skills(request, task_type)
@@ -264,14 +220,10 @@ JSON only, no other text."""
 
                 if token_usage:
                     self.context.total_tokens += token_usage.total_tokens
-                    print(f"[DEBUG] _analyze_request: Tokens={token_usage.total_tokens}")
             else:
-                print("[DEBUG] _analyze_request: No response content!")
                 raise ValueError("No response from API")
 
-        except Exception as e:
-            print(f"[DEBUG] _analyze_request: ERROR: {e}")
-            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
+        except Exception:
             task_type = self._classify_task(request)
             sub_tasks = self._decompose_task(request, task_type)
             required_skills = self._identify_required_skills(request, task_type)
@@ -298,7 +250,6 @@ JSON only, no other text."""
             )
             self.context.sub_tasks.append(sub_task)
 
-        print(f"[DEBUG] _analyze_request: Complete - {len(sub_tasks)} sub-tasks")
         return analysis
 
     async def _create_plan(self) -> list[SubTask]:
@@ -314,48 +265,36 @@ JSON only, no other text."""
 
     async def _execute_plan(self) -> bool:
         """Execute the plan by running sub-tasks."""
-        print("[DEBUG] _execute_plan: Starting execution")
         pending = self.context.get_pending_tasks()
-        print(f"[DEBUG] _execute_plan: Pending tasks: {len(pending)}")
 
         if not pending:
-            print("[DEBUG] _execute_plan: No pending tasks, returning True")
             return True
 
         running_tasks = []
         for task in pending[: self.config.max_parallel_tasks]:
             if self._can_execute_task(task):
-                print(f"[DEBUG] _execute_plan: Starting task: {task.name}")
                 running_tasks.append(asyncio.create_task(self._execute_sub_task(task)))
 
         if running_tasks:
-            print(f"[DEBUG] _execute_plan: Waiting for {len(running_tasks)} tasks...")
             await asyncio.gather(*running_tasks, return_exceptions=True)
-            print("[DEBUG] _execute_plan: All tasks completed")
 
         all_done = all(
             t.status in (SubTaskStatus.COMPLETED, SubTaskStatus.FAILED, SubTaskStatus.SKIPPED)
             for t in self.context.sub_tasks
         )
 
-        print(f"[DEBUG] _execute_plan: all_done={all_done}")
         return all_done
 
     async def _execute_sub_task(self, task: SubTask) -> Any:
         """Execute a single sub-task using AI with tool calling."""
-        import traceback
-
-        print(f"[DEBUG] _execute_sub_task: Starting task '{task.name}'")
         task.status = SubTaskStatus.RUNNING
 
         try:
             if self.config.dry_run:
-                print("[DEBUG] _execute_sub_task: Dry run mode, skipping execution")
                 task.result = {"dry_run": True, "simulated": True}
                 task.status = SubTaskStatus.COMPLETED
                 return task.result
 
-            # Use the new task executor with tool calling
             from openlaoke.core.hyperauto.task_executor import execute_task_with_tools
 
             result = await execute_task_with_tools(
@@ -363,6 +302,8 @@ JSON only, no other text."""
                 task=task,
                 original_request=self.context.original_request,
                 max_iterations=10,
+                on_progress_callback=self._on_progress,
+                workflow_context=self.context,
             )
 
             task.result = result
@@ -371,22 +312,12 @@ JSON only, no other text."""
             if result.get("tokens"):
                 self.context.total_tokens += result["tokens"]
 
-            print(
-                f"[DEBUG] _execute_sub_task: Task completed in {result.get('iterations', 0)} iterations"
-            )
-            print(f"[DEBUG] _execute_sub_task: Tokens used: {result.get('tokens', 0)}")
-            print(
-                f"[DEBUG] _execute_sub_task: Tool calls made: {len(result.get('tool_results', []))}"
-            )
-
             if self.config.auto_run_tests and task.metadata.get("requires_test", False):
                 await self._run_tests_for_task(task)
 
             return task.result
 
         except Exception as e:
-            print(f"[DEBUG] _execute_sub_task: ERROR in task '{task.name}': {e}")
-            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
             task.error = str(e)
             task.status = SubTaskStatus.FAILED
 
