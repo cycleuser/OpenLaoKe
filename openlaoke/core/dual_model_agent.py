@@ -99,6 +99,35 @@ class DualModelAgent:
         self.pipeline = create_pipeline_for_model(ModelTier.TIER_5_LIMITED)
         self.knowledge_base = EnhancedKnowledgeBase()
 
+        self._hybrid_manager = None
+        self._models_selected = False
+
+    async def _select_optimal_models(self) -> dict[str, str]:
+        """Select optimal models based on available resources."""
+
+        from openlaoke.core.intelligent_model_selector import get_optimal_models
+
+        models = await get_optimal_models(self.app_state)
+
+        self.PLANNER_MODEL = models["planner"]
+        self.EXECUTOR_MODEL = models["executor"]
+        self.VALIDATOR_MODEL = models["validator"]
+
+        self._models_selected = True
+
+        return models
+
+    async def _get_hybrid_manager(self):
+        """Get or create hybrid model manager."""
+
+        if self._hybrid_manager is None:
+            from openlaoke.core.hybrid_model_manager import create_hybrid_manager
+
+            self._hybrid_manager = create_hybrid_manager(self.app_state)
+            await self._hybrid_manager.initialize()
+
+        return self._hybrid_manager
+
     async def _get_api_client(self) -> MultiProviderClient:
         """Get or create API client."""
         if self._api_client is None:
@@ -123,12 +152,15 @@ class DualModelAgent:
         try:
             preload_start = time.time()
 
-            from openlaoke.core.model_preloader import preload_dual_models
+            if not self._models_selected:
+                await self._select_optimal_models()
 
-            preload_result = await preload_dual_models(self.app_state)
+            manager = await self._get_hybrid_manager()
+
+            init_result = await manager.initialize()
 
             stats.preload_time = time.time() - preload_start
-            stats.models_preloaded = preload_result.get("success", False)
+            stats.models_preloaded = init_result["success"]
 
             api_client = await self._get_api_client()
 

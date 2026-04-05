@@ -1498,3 +1498,218 @@ class DualModelCommand(SlashCommand):
                 console.print(Panel(error_msg, title="Error", border_style="red"))
 
             return CommandResult(success=False, message=error_msg)
+
+
+class PreloadModelsCommand(SlashCommand):
+    name = "preload-models"
+    description = "Preload models for faster execution"
+    aliases = ["preload", "load-models"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from rich.panel import Panel
+        from rich.table import Table
+
+        from openlaoke.core.hybrid_model_manager import create_hybrid_manager
+
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        if console:
+            console.print(
+                Panel(
+                    "[bold cyan]Initializing Model Pool[/bold cyan]\n\n"
+                    "Strategy: CPU/GPU Hybrid\n"
+                    "- Planner (gemma3:1b) → CPU (always loaded)\n"
+                    "- Executor (gemma4:e4b) → GPU (on-demand)\n"
+                    "- Validator (gemma3:1b) → CPU (always loaded)\n\n"
+                    "This reduces VRAM usage by ~1.4 GB",
+                    title="Model Preloader",
+                    border_style="cyan",
+                )
+            )
+
+        manager = create_hybrid_manager(ctx.app_state)
+        result = await manager.initialize()
+
+        if result["success"]:
+            status = await manager.get_status()
+
+            lines = ["[bold green]✓ Models loaded successfully[/bold green]\n"]
+
+            if console:
+                table = Table(title="Model Pool Status", show_header=True)
+                table.add_column("Model", style="cyan")
+                table.add_column("Device", style="green")
+                table.add_column("Status", style="yellow")
+                table.add_column("Size", style="magenta")
+
+                for model in status.cpu_models:
+                    table.add_row(
+                        model.name,
+                        "CPU",
+                        "✓ Loaded" if model.is_loaded else "✗ Not loaded",
+                        f"{model.size_gb:.1f} GB",
+                    )
+
+                for model in status.gpu_models:
+                    table.add_row(
+                        model.name,
+                        "GPU",
+                        "✓ Loaded" if model.is_loaded else "✗ Not loaded",
+                        f"{model.size_gb:.1f} GB",
+                    )
+
+                console.print(table)
+
+                console.print(
+                    f"\n[dim]GPU Memory: {status.gpu_used_gb:.1f} / {status.gpu_total_gb:.1f} GB[/dim]"
+                )
+
+            return CommandResult(message="Models preloaded successfully")
+        else:
+            failed = [k for k, v in result["results"].items() if not v]
+            error_msg = f"[red]Failed to load models: {', '.join(failed)}[/red]"
+
+            if console:
+                console.print(Panel(error_msg, title="Error", border_style="red"))
+
+            return CommandResult(success=False, message=error_msg)
+
+
+class ModelStatusCommand(SlashCommand):
+    name = "model-status"
+    description = "Show current model pool status"
+    aliases = ["models-status", "pool-status"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from rich.panel import Panel
+        from rich.table import Table
+
+        from openlaoke.core.hybrid_model_manager import create_hybrid_manager
+
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        manager = create_hybrid_manager(ctx.app_state)
+        status = await manager.get_status()
+
+        if console:
+            table = Table(title="Current Model Pool", show_header=True)
+            table.add_column("Model", style="cyan")
+            table.add_column("Tier", style="blue")
+            table.add_column("Device", style="green")
+            table.add_column("Status", style="yellow")
+            table.add_column("Size", style="magenta")
+
+            for model in status.cpu_models:
+                table.add_row(
+                    model.name,
+                    model.tier,
+                    "CPU",
+                    "✓ Loaded" if model.is_loaded else "✗ Not loaded",
+                    f"{model.size_gb:.1f} GB",
+                )
+
+            for model in status.gpu_models:
+                table.add_row(
+                    model.name,
+                    model.tier,
+                    "GPU",
+                    "✓ Loaded" if model.is_loaded else "✗ Not loaded",
+                    f"{model.size_gb:.1f} GB",
+                )
+
+            console.print(table)
+
+            console.print(
+                Panel(
+                    f"GPU Memory Usage:\n"
+                    f"  Total: {status.gpu_total_gb:.1f} GB\n"
+                    f"  Used: {status.gpu_used_gb:.1f} GB\n"
+                    f"  Free: {status.gpu_free_gb:.1f} GB",
+                    title="Memory Status",
+                    border_style="blue",
+                )
+            )
+
+            return CommandResult(message="Model status displayed")
+        else:
+            return CommandResult(
+                message=f"CPU models: {len(status.cpu_models)}, "
+                f"GPU models: {len(status.gpu_models)}, "
+                f"VRAM used: {status.gpu_used_gb:.1f} GB"
+            )
+
+
+class ModelRecommendCommand(SlashCommand):
+    name = "model-recommend"
+    description = "Get model recommendation based on your system"
+    aliases = ["recommend-models", "optimal-models"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from rich.panel import Panel
+        from rich.table import Table
+
+        from openlaoke.core.intelligent_model_selector import IntelligentModelSelector
+
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        preference = ctx.args.strip().lower() if ctx.args else "balanced"
+
+        if preference not in ["cost", "quality", "balanced"]:
+            preference = "balanced"
+
+        selector = IntelligentModelSelector(ctx.app_state)
+        report = await selector.get_recommendation_report()
+
+        if console:
+            console.print(
+                Panel(
+                    f"Detected GPU Memory: [bold cyan]{report['detected_vram_gb']:.1f} GB[/bold cyan]",
+                    title="System Analysis",
+                    border_style="blue",
+                )
+            )
+
+            rec = report["recommended_combination"]
+
+            console.print(
+                Panel(
+                    f"[bold green]Recommended: {rec['name'].upper()}[/bold green]\n\n"
+                    f"Planner:   {rec['planner']}\n"
+                    f"Executor:  {rec['executor']}\n"
+                    f"Validator: {rec['validator']}\n\n"
+                    f"Estimated VRAM: {report['estimated']['vram_usage_gb']:.1f} GB\n"
+                    f"Quality Score:  {report['estimated']['quality_score']:.1f}/10\n"
+                    f"Cost Factor:    {report['estimated']['cost_factor']:.1f}x",
+                    title="Optimal Configuration",
+                    border_style="green",
+                )
+            )
+
+            if report["all_suitable_combinations"]:
+                table = Table(title="All Suitable Combinations", show_header=True)
+                table.add_column("Name", style="cyan")
+                table.add_column("VRAM", style="magenta")
+                table.add_column("Quality", style="green")
+                table.add_column("Cost", style="yellow")
+
+                for combo in report["all_suitable_combinations"]:
+                    table.add_row(
+                        combo["name"],
+                        f"{combo['vram_gb']:.1f} GB",
+                        f"{combo['quality']:.1f}/10",
+                        f"{combo['cost']:.1f}x",
+                    )
+
+                console.print(table)
+
+            console.print(f"\n[dim]Preference: {preference}[/dim]")
+
+            return CommandResult(message="Recommendation displayed")
+        else:
+            rec = report["recommended_combination"]
+            return CommandResult(
+                message=f"Recommended: {rec['name']} - "
+                f"Planner: {rec['planner']}, "
+                f"Executor: {rec['executor']}, "
+                f"VRAM: {report['estimated']['vram_usage_gb']:.1f} GB"
+            )
