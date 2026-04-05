@@ -152,6 +152,27 @@ class REPL:
 
     async def _handle_chat(self, user_input: str) -> None:
         """Process a chat message through the AI model."""
+        from openlaoke.core.intent_parser import IntentParser, IntentType
+        from openlaoke.core.translation import TranslationPipeline, Language
+
+        parser = IntentParser()
+        translation = TranslationPipeline()
+
+        english_input, original_lang = translation.prepare_for_processing(user_input)
+
+        if original_lang != Language.ENGLISH:
+            self.console.print(f"[dim]Translated to: {english_input[:60]}...[/dim]")
+
+        intent = parser.parse(english_input)
+
+        if intent.intent_type in [
+            IntentType.WRITE_PROGRAM,
+            IntentType.WRITE_FUNCTION,
+            IntentType.WRITE_CLASS,
+        ]:
+            await self._handle_command("atomic", english_input)
+            return
+
         self.app_state.is_running = True
         self.app_state.set_error(None)
 
@@ -211,9 +232,7 @@ class REPL:
                             self.app_state.add_message(user_msg)
                             continue
                         else:
-                            self.console.print(
-                                "\n[red]Max retries reached. Task incomplete.[/red]"
-                            )
+                            self.console.print("\n[red]Max retries reached. Task incomplete.[/red]")
                             self.console.print(
                                 f"[dim]Missing: {', '.join(result.missing_requirements[:3])}[/dim]"
                             )
