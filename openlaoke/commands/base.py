@@ -1227,7 +1227,6 @@ class HistoryCommand(SlashCommand):
     async def execute(self, ctx: CommandContext) -> CommandResult:
         from openlaoke.utils.file_history import (
             clear_history,
-            format_history_list,
         )
 
         args = ctx.args.strip()
@@ -1277,4 +1276,134 @@ class HistoryCommand(SlashCommand):
                 return CommandResult(message=f"History cleared for {abs_path}")
             return CommandResult(success=False, message=f"Failed to clear history for {abs_path}")
 
-        return CommandResult(message=format_history_list(abs_path))
+
+class AtomicCommand(SlashCommand):
+    name = "atomic"
+    description = "Generate code using atomic task decomposition (for small models)"
+    aliases = ["atom", "decompose"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from pathlib import Path
+
+        from rich.panel import Panel
+
+        from openlaoke.core.atomic_generator_api import create_generator_with_api
+        from openlaoke.core.intent_pipeline import create_pipeline_for_model
+        from openlaoke.core.model_assessment.types import ModelTier
+
+        request = ctx.args.strip()
+        if not request:
+            return CommandResult(
+                message="Usage: /atomic <your request>\n"
+                "Example: /atomic write a CPU benchmark program"
+            )
+
+        model_name = (
+            ctx.app_state.session_config.model
+            if hasattr(ctx.app_state, "session_config")
+            else "unknown"
+        )
+        tier = ModelTier.TIER_5_LIMITED
+
+        known_models = {
+            "gemma3:1b": ModelTier.TIER_5_LIMITED,
+            "qwen3.5:0.8b": ModelTier.TIER_5_LIMITED,
+            "llama3.2:1b": ModelTier.TIER_5_LIMITED,
+        }
+        model_lower = model_name.lower()
+        for known, known_tier in known_models.items():
+            if known in model_lower:
+                tier = known_tier
+                break
+
+        cwd = ctx.app_state.get_cwd() if hasattr(ctx.app_state, "get_cwd") else Path.cwd()
+
+        pipeline = create_pipeline_for_model(tier, Path(cwd))
+        result = pipeline.process_request(request)
+
+        if not result.success:
+            return CommandResult(
+                success=False,
+                message="[red]Failed to process request:[/red]\n" + "\n".join(result.errors),
+            )
+
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        lines = []
+        lines.append(f"[bold green]Intent parsed:[/bold green] {result.intent.intent_type.value}")
+        lines.append(f"[bold green]Task name:[/bold green] {result.intent.task_name}")
+        lines.append(f"[bold green]Complexity:[/bold green] {result.intent.complexity.value}")
+
+        plan = pipeline.get_execution_plan(result)
+        lines.append("")
+        lines.append("[bold cyan]Task Decomposition Plan:[/bold cyan]")
+        lines.append(f"  Total tasks: {plan['total_tasks']}")
+        lines.append(f"  Estimated total lines: {plan['estimated_lines_total']}")
+        lines.append(f"  Ready to execute: {len(plan['ready_tasks'])}")
+
+        if plan["ready_tasks"]:
+            lines.append("")
+            lines.append("[bold]Ready tasks:[/bold]")
+            for task_info in plan["ready_tasks"][:5]:
+                lines.append(f"  • {task_info['task_id']} ({task_info['estimated_lines']} lines)")
+
+        generator = create_generator_with_api(tier, Path(cwd), ctx.app_state)
+        completed_code = {}
+
+        if console:
+            console.print(Panel("\n".join(lines), title="Atomic Task Plan", border_style="cyan"))
+
+        if result.task_graph:
+            graph = result.task_graph
+            iteration = 0
+            max_iterations = 20
+
+            while len(graph.completed) < len(graph.tasks) and iteration < max_iterations:
+                ready_tasks = graph.get_ready_tasks()
+
+                if not ready_tasks:
+                    break
+
+                for task in ready_tasks[:1]:
+                    if console:
+                        console.print(f"\n[cyan]Processing task: {task.task_id}[/cyan]")
+                        console.print(f"  Description: {task.description}")
+
+                    code_result = await generator.generate_code_for_task_async(task, completed_code)
+
+                    if code_result.success:
+                        completed_code[task.task_id] = code_result.code
+                        graph.mark_completed(task.task_id)
+
+                        if console:
+                            console.print(
+                                f"  [green]✓ Generated {len(code_result.code)} characters[/green]"
+                            )
+                    else:
+                        graph.mark_failed(task.task_id)
+                        if console:
+                            console.print(f"  [red]✗ Failed: {', '.join(code_result.errors)}[/red]")
+
+                iteration += 1
+
+        final_code = generator.assemble_final_code(result.task_graph, completed_code)
+
+        if final_code:
+            output_file = Path(cwd) / f"{result.intent.task_name.replace(' ', '_')}.py"
+            try:
+                output_file.write_text(final_code)
+                return CommandResult(
+                    message=f"[green]✓ Generated code saved to:[/green] {output_file}\n"
+                    f"[green]Total tasks completed:[/green] {len(graph.completed)}/{len(graph.tasks)}\n"
+                    f"[green]Code size:[/green] {len(final_code)} bytes"
+                )
+            except Exception as e:
+                return CommandResult(
+                    success=False,
+                    message=f"[red]Failed to save code:[/red] {e}\n\nGenerated code:\n{final_code[:500]}...",
+                )
+        else:
+            return CommandResult(
+                success=False,
+                message="[red]No code was generated[/red]",
+            )
