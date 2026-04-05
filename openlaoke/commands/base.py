@@ -1407,3 +1407,94 @@ class AtomicCommand(SlashCommand):
                 success=False,
                 message="[red]No code was generated[/red]",
             )
+
+
+class DualModelCommand(SlashCommand):
+    name = "dual"
+    description = "Generate code using dual-model collaboration (small planner + large executor)"
+    aliases = ["dual-model", "collab"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from pathlib import Path
+
+        from rich.panel import Panel
+
+        from openlaoke.core.dual_model_agent import create_dual_model_agent
+
+        request = ctx.args.strip()
+        if not request:
+            return CommandResult(
+                message="Usage: /dual <your request>\n"
+                "Example: /dual write a CPU benchmark program\n\n"
+                "This command uses:\n"
+                "  - Small model (gemma3:1b) for planning and validation\n"
+                "  - Large model (gemma4:e4b) for code generation\n"
+                "  - Cost reduction: ~60-80%\n"
+                "  - Quality improvement: Better decomposition + Better code"
+            )
+
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        if console:
+            console.print(
+                Panel(
+                    "[bold cyan]Dual-Model Agent[/bold cyan]\n\n"
+                    "Planner: gemma3:1b (cheap, fast)\n"
+                    "Executor: gemma4:e4b (capable, precise)\n\n"
+                    "Workflow:\n"
+                    "1. Planner analyzes and decomposes tasks\n"
+                    "2. Executor generates code for each task\n"
+                    "3. Validator checks code correctness\n"
+                    "4. Assembler combines final result",
+                    title="Starting Dual-Model Collaboration",
+                    border_style="cyan",
+                )
+            )
+
+        cwd = ctx.app_state.get_cwd() if hasattr(ctx.app_state, "get_cwd") else Path.cwd()
+
+        agent = create_dual_model_agent(ctx.app_state)
+
+        result = await agent.execute(request, Path(cwd))
+
+        if result.success:
+            lines = []
+            lines.append("[bold green]✓ Dual-model execution completed[/bold green]")
+            lines.append("")
+            lines.append(f"[bold]Model Preloading:[/bold]")
+            lines.append(f"  Preloaded: {'✓ Yes' if result.stats.models_preloaded else '✗ No'}")
+            lines.append(f"  Preload time: {result.stats.preload_time:.2f}s")
+            lines.append("")
+            lines.append(f"[bold]Statistics:[/bold]")
+            lines.append(
+                f"  Planner calls: {result.stats.planner_calls} ({result.stats.planner_tokens} tokens)"
+            )
+            lines.append(
+                f"  Executor calls: {result.stats.executor_calls} ({result.stats.executor_tokens} tokens)"
+            )
+            lines.append(
+                f"  Validator calls: {result.stats.validator_calls} ({result.stats.validator_tokens} tokens)"
+            )
+            lines.append(f"  Retry count: {result.stats.retry_count}")
+            lines.append(f"  Total time: {result.stats.total_time:.2f}s")
+            lines.append(f"  Estimated cost: ${result.stats.total_cost:.4f}")
+            lines.append(f"  Code size: {len(result.code)} bytes")
+
+            if result.output_file:
+                lines.append(f"\n[green]Code saved to:[/green] {result.output_file}")
+
+            if console:
+                console.print(
+                    Panel("\n".join(lines), title="Dual-Model Result", border_style="green")
+                )
+
+            return CommandResult(message="\n".join(lines))
+        else:
+            error_msg = "[red]Dual-model execution failed[/red]\n\n"
+            if result.errors:
+                error_msg += "[bold]Errors:[/bold]\n" + "\n".join(f"  - {e}" for e in result.errors)
+
+            if console:
+                console.print(Panel(error_msg, title="Error", border_style="red"))
+
+            return CommandResult(success=False, message=error_msg)
