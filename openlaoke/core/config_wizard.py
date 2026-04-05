@@ -369,10 +369,14 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         if key == "ollama":
             models = _detect_ollama_models(base_url)
             if models:
+                console.print(f"[green]✓ Detected {len(models)} models from Ollama[/green]")
                 provider.models = models
                 provider.default_model = _select_model_from_list(models, provider.default_model)
             else:
-                console.print("[yellow]No models detected. Using default list.[/yellow]")
+                console.print("\n[yellow]⚠ Could not detect models from Ollama.[/yellow]")
+                console.print("[dim]Make sure Ollama is running: ollama serve[/dim]")
+                console.print("[dim]Or pull some models: ollama pull gemma3:1b[/dim]\n")
+                console.print("[bold]Using default model list (you can change this later):[/bold]")
                 provider.default_model = _select_model_from_list(
                     provider.models, provider.default_model
                 )
@@ -634,13 +638,36 @@ def _detect_ollama_models(base_url: str) -> list[str]:
         import httpx
 
         url = base_url.replace("/v1", "/api/tags")
-        # Don't use proxy for local Ollama
+
         with httpx.Client(timeout=5.0, proxy=None) as client:
             response = client.get(url)
             if response.status_code == 200:
                 data = response.json()
-                return [m["name"] for m in data.get("models", [])]
-    except Exception:
+                all_models = [m["name"] for m in data.get("models", [])]
+
+                embedding_keywords = [
+                    "embed",
+                    "embedding",
+                    "rerank",
+                    "reranker",
+                    "minilm",
+                    "arctic-embed",
+                    "bge-",
+                    "nomic-embed",
+                    "paraphrase",
+                    "granite-embedding",
+                ]
+
+                generation_models = []
+                for model in all_models:
+                    model_lower = model.lower()
+                    is_embedding = any(kw in model_lower for kw in embedding_keywords)
+
+                    if not is_embedding:
+                        generation_models.append(model)
+
+                return generation_models if generation_models else all_models
+    except Exception as e:
         pass
     return []
 

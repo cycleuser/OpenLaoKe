@@ -100,6 +100,7 @@ class MultiProviderConfig:
                         "gemma4:e2b",
                         "gemma4:e4b",
                         "gemma3:1b",
+                        "qwen3.5:0.8B",
                         "llama3.2",
                         "llama3.1",
                         "codellama",
