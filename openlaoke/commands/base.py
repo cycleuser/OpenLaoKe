@@ -1721,65 +1721,88 @@ class DualModelConfigCommand(SlashCommand):
     aliases = ["config-dual", "dual-setup"]
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
+        from rich.console import Console
         from rich.panel import Panel
         from rich.table import Table
 
         from openlaoke.core.dual_model_config import create_config_manager
 
         args = ctx.args.strip()
-        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        console = None
+        if hasattr(ctx.app_state, "console"):
+            console = ctx.app_state.console
+        elif hasattr(ctx, "console"):
+            console = ctx.console
+        else:
+            console = Console()
 
         manager = create_config_manager(ctx.app_state)
 
         if not args:
-            if console:
-                lines = ["[bold cyan]Dual-Model Configuration[/bold cyan]\n"]
-                lines.append(f"Active: [bold green]{manager.active_config_name}[/bold green]\n")
-                lines.append("[bold]Available Configurations:[/bold]")
+            lines = []
+            lines.append("\n[bold cyan]═══════════════════════════════════════[/bold cyan]")
+            lines.append("[bold cyan]    Dual-Model Configuration[/bold cyan]")
+            lines.append("[bold cyan]═══════════════════════════════════════[/bold cyan]\n")
 
-                table = Table(show_header=True)
-                table.add_column("Name", style="cyan")
-                table.add_column("Planner", style="blue")
-                table.add_column("Executor", style="green")
-                table.add_column("Type", style="magenta")
+            lines.append(
+                f"[bold green]✓ Active Configuration:[/bold green] [bold]{manager.active_config_name}[/bold]\n"
+            )
 
-                for name, config in manager.configs.items():
-                    if config.planner and config.executor:
-                        active_marker = " (active)" if name == manager.active_config_name else ""
-                        provider_type = (
-                            "local" if config.planner.provider.value == "ollama" else "online"
-                        )
+            lines.append("[bold]Available Configurations:[/bold]\n")
 
-                        if config.executor.provider.value != config.planner.provider.value:
-                            provider_type = "hybrid"
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Planner", style="blue")
+            table.add_column("Executor", style="green")
+            table.add_column("Type", style="magenta")
+            table.add_column("Status", style="yellow")
 
-                        table.add_row(
-                            f"{name}{active_marker}",
-                            f"{config.planner.model_name} ({config.planner.provider.value})",
-                            f"{config.executor.model_name} ({config.executor.provider.value})",
-                            provider_type,
-                        )
+            for name, config in manager.configs.items():
+                if config.planner and config.executor:
+                    active_marker = " ★" if name == manager.active_config_name else ""
 
-                console.print("\n".join(lines))
-                console.print(table)
+                    if (
+                        config.planner.provider.value == "ollama"
+                        and config.executor.provider.value == "ollama"
+                    ):
+                        provider_type = "local"
+                    elif config.planner.provider.value != config.executor.provider.value:
+                        provider_type = "hybrid"
+                    else:
+                        provider_type = "online"
 
-                console.print(
-                    Panel(
-                        "[bold]Usage:[/bold]\n"
-                        "  /dual-config list              - Show all configs\n"
-                        "  /dual-config use <name>        - Select active config\n"
-                        "  /dual-config check             - Check availability\n"
-                        "  /dual-config create <name>     - Create custom config\n"
-                        "\n[bold]Quick Examples:[/bold]\n"
-                        "  /dual-config use local_balanced      # Local models\n"
-                        "  /dual-config use hybrid_openai       # Local + OpenAI\n"
-                        "  /dual-config use online_premium      # Online models",
-                        title="Command Help",
-                        border_style="yellow",
+                    status = "active" if name == manager.active_config_name else "ready"
+
+                    table.add_row(
+                        f"{name}{active_marker}",
+                        f"{config.planner.model_name}",
+                        f"{config.executor.model_name}",
+                        provider_type,
+                        status,
                     )
-                )
 
-            return CommandResult(message="Configuration list displayed")
+            console.print("\n".join(lines))
+            console.print(table)
+
+            console.print("\n")
+            console.print(
+                Panel(
+                    "[bold yellow]Commands:[/bold yellow]\n"
+                    "  [cyan]/dual-config list[/cyan]              - Show all configs\n"
+                    "  [cyan]/dual-config use <name>[/cyan]        - Select active config\n"
+                    "  [cyan]/dual-config check[/cyan]             - Check availability\n"
+                    "  [cyan]/dual-config create <name>[/cyan]     - Create custom config\n"
+                    "\n[bold green]Quick Examples:[/bold green]\n"
+                    "  [dim]/dual-config use local_balanced[/dim]      [italic]# Local models (free)[/italic]\n"
+                    "  [dim]/dual-config use hybrid_openai[/dim]       [italic]# Local + OpenAI[/italic]\n"
+                    "  [dim]/dual-config use online_premium[/dim]      [italic]# Best quality[/italic]",
+                    title="[bold]Usage Guide[/bold]",
+                    border_style="yellow",
+                )
+            )
+
+            return CommandResult(message="Configuration displayed")
 
         parts = args.split(maxsplit=1)
         action = parts[0].lower()
