@@ -331,12 +331,62 @@ class TaskCompletionChecker:
         has_content = len(content) > 100
         has_files = len(output_files) > 0
 
+        issues = []
+        suggestions = []
+
+        if has_files:
+            for file_path in output_files:
+                if file_path.endswith((".py", ".js", ".ts")):
+                    try:
+                        with open(file_path, encoding="utf-8") as f:
+                            code_content = f.read()
+
+                        import ast
+
+                        try:
+                            ast.parse(code_content)
+                        except SyntaxError as e:
+                            issues.append(f"Syntax error in {file_path}: {e}")
+                            suggestions.append(f"Fix syntax error: {e}")
+
+                        function_count = len(re.findall(r"^\s*def\s+\w+", code_content, re.MULTILINE))
+                        pass_count = len(re.findall(r"^\s*pass\s*$", code_content, re.MULTILINE))
+
+                        if pass_count > 0 and function_count > 0:
+                            if pass_count >= function_count * 0.5:
+                                issues.append(f"Too many 'pass' statements ({pass_count}) - implementation incomplete")
+                                suggestions.append("Replace 'pass' statements with actual implementation")
+
+                        has_import = bool(re.search(r"^import\s+|^from\s+\w+\s+import", code_content, re.MULTILINE))
+                        has_loop = bool(re.search(r"\bfor\s+\w+\s+in\s+|\bwhile\s+", code_content))
+                        has_condition = bool(re.search(r"\bif\s+", code_content))
+                        has_return = bool(re.search(r"\breturn\s+", code_content))
+
+                        if function_count > 0:
+                            if not has_loop and not has_condition and not has_return:
+                                issues.append("Functions lack computational logic (no loops/conditions/returns)")
+                                suggestions.append("Add actual computational logic to functions")
+
+                            if requirement.name == "no_placeholder_pass" and pass_count > 0:
+                                issues.append(f"Found {pass_count} placeholder 'pass' statements")
+                                suggestions.append("Replace all 'pass' statements with actual code")
+
+                    except Exception as e:
+                        issues.append(f"Could not analyze {file_path}: {e}")
+
         satisfied = has_content or has_files
+        if issues and requirement.critical:
+            satisfied = False
+
+        message = f"Has content: {has_content}, Has files: {has_files}"
+        if issues:
+            message += f". Issues: {'; '.join(issues)}"
 
         return RequirementCheckResult(
             requirement=requirement,
             satisfied=satisfied,
-            message=f"Has content: {has_content}, Has files: {has_files}",
+            message=message,
+            details={"issues": issues, "suggestions": suggestions},
         )
 
     def _check_references_exist(

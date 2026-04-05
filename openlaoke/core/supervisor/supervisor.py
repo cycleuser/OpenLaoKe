@@ -215,6 +215,91 @@ class TaskSupervisor:
                 ]
             )
 
+        if any(
+            pattern in request_lower
+            for pattern in ["写一个", "创建一个", "编写一个", "write a", "create a", "build a"]
+        ) and any(
+            pattern in request_lower
+            for pattern in ["程序", "脚本", "program", "script", "application", "app"]
+        ):
+            requirements.extend(
+                [
+                    TaskRequirements(
+                        name="program_file_created",
+                        description="Must create an executable program file (.py, .js, etc.)",
+                        check_type="files_created",
+                        patterns=["*.py", "*.js", "*.ts", "*.go", "*.rs"],
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="program_is_functional",
+                        description="Program must have actual implementation, not just placeholders or print statements",
+                        check_type="contains",
+                        patterns=["def ", "class ", "function ", "import "],
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="program_has_logic",
+                        description="Program must contain computational logic (loops, calculations, operations)",
+                        check_type="contains",
+                        patterns=["for ", "while ", "if ", "return ", "calc", "compute", "measure"],
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="program_runnable",
+                        description="Program should be syntactically correct and runnable",
+                        check_type="general",
+                        critical=False,
+                    ),
+                ]
+            )
+
+            if any(
+                word in request_lower
+                for word in [
+                    "计算",
+                    "算力",
+                    "benchmark",
+                    "performance",
+                    "cpu",
+                    "measure",
+                    "calculate",
+                ]
+            ):
+                requirements.extend(
+                    [
+                        TaskRequirements(
+                            name="has_calculation",
+                            description="Must perform actual calculation, not just retrieve information",
+                            check_type="contains",
+                            patterns=[
+                                "for ",
+                                "range",
+                                "while ",
+                                "time.time",
+                                "time.perf",
+                                "calculate",
+                                "compute",
+                                "measure",
+                                "benchmark",
+                            ],
+                            critical=True,
+                        ),
+                        TaskRequirements(
+                            name="has_performance_metrics",
+                            description="Must output quantitative performance metrics (ops/sec, GFLOPS, time, etc.)",
+                            check_type="has_numbers",
+                            critical=True,
+                        ),
+                        TaskRequirements(
+                            name="no_placeholder_pass",
+                            description="Code must not contain placeholder 'pass' statements in main logic",
+                            check_type="general",
+                            critical=True,
+                        ),
+                    ]
+                )
+
         if not requirements:
             requirements.append(
                 TaskRequirements(
@@ -398,6 +483,70 @@ class TaskSupervisor:
                     "  - Add SPECIFIC: numbers, citations, code references",
                     "  - Remove GENERIC: lists without substance, vague claims",
                     "  - Reference REAL: actual papers, actual code lines",
+                ]
+            )
+
+        code_issues = [
+            m
+            for m in missing
+            if any(
+                keyword in m.lower()
+                for keyword in [
+                    "pass",
+                    "placeholder",
+                    "syntax",
+                    "logic",
+                    "implementation",
+                    "function",
+                ]
+            )
+        ]
+
+        if code_issues:
+            lines.extend(
+                [
+                    "",
+                    "💻 Code Quality Issues:",
+                    "  - Code must have ACTUAL implementation, not placeholders",
+                    "  - Replace all 'pass' statements with working code",
+                    "  - Add computational logic (loops, calculations, operations)",
+                    "  - Ensure code is runnable and produces expected output",
+                    "",
+                    "💡 Example of good code:",
+                    "    # Bad: def calculate(): pass",
+                    "    # Good: def calculate(data):",
+                    "    #          result = sum(x * 2 for x in data)",
+                    "    #          return result",
+                ]
+            )
+
+        calculation_issues = [
+            m
+            for m in missing
+            if any(
+                keyword in m.lower()
+                for keyword in ["calculation", "measure", "benchmark", "performance"]
+            )
+        ]
+
+        if calculation_issues:
+            lines.extend(
+                [
+                    "",
+                    "📊 Calculation/Benchmark Requirements:",
+                    "  - Must perform REAL calculations, not just retrieve information",
+                    "  - Use loops/iterations to measure performance",
+                    "  - Include timing: time.time() or time.perf_counter()",
+                    "  - Output quantitative metrics: ops/sec, GFLOPS, elapsed time",
+                    "",
+                    "💡 Example for CPU benchmark:",
+                    "    import time",
+                    "    start = time.perf_counter()",
+                    "    for _ in range(1000000):",
+                    "        _ = 2 * 2  # Actual calculation",
+                    "    end = time.perf_counter()",
+                    "    ops_per_sec = 1000000 / (end - start)",
+                    "    print(f'Performance: {ops_per_sec:,.0f} ops/sec')",
                 ]
             )
 
