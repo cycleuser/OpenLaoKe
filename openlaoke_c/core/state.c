@@ -148,6 +148,7 @@ char* app_state_to_json(AppState* state) {
 }
 
 AppState* app_state_load(const char* filepath) {
+    (void)filepath;
     /* TODO: Implement state loading from JSON file */
     return NULL;
 }

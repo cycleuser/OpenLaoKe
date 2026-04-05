@@ -1,20 +1,20 @@
-/* OpenLaoKe C - Multi-provider API client */
-
 #ifndef OPENLAOKE_API_CLIENT_H
 #define OPENLAOKE_API_CLIENT_H
 
 #include "types.h"
+#include "types_extended.h"
+#include "tool_registry.h"
 
-/* API provider types */
 typedef enum {
-    PROVIDER_OPENAI,
-    PROVIDER_ANTHROPIC,
-    PROVIDER_OLLAMA,
-    PROVIDER_MINIMAX,
-    PROVIDER_CUSTOM
+    API_PROVIDER_OPENAI,
+    API_PROVIDER_ANTHROPIC,
+    API_PROVIDER_OLLAMA,
+    API_PROVIDER_AZURE,
+    API_PROVIDER_GEMINI,
+    API_PROVIDER_MINIMAX,
+    API_PROVIDER_CUSTOM
 } APIProvider;
 
-/* API configuration */
 typedef struct {
     APIProvider provider;
     char* api_key;
@@ -22,10 +22,8 @@ typedef struct {
     char* model;
     int max_tokens;
     double temperature;
-    void* user_data;
 } APIConfig;
 
-/* API response */
 typedef struct {
     char* content;
     TokenUsage token_usage;
@@ -34,17 +32,14 @@ typedef struct {
     char* error_message;
 } APIResponse;
 
-/* API client */
 typedef struct {
     APIConfig* config;
-    void* http_client;  /* HTTP client implementation */
+    void* http_client;
 } APIClient;
 
-/* Client functions */
 APIClient* api_client_create(APIConfig* config);
 void api_client_destroy(APIClient* client);
 
-/* API calls */
 APIResponse* api_client_send_message(
     APIClient* client,
     const char* system_prompt,
@@ -57,16 +52,14 @@ APIResponse* api_client_send_message_with_tools(
     const char* system_prompt,
     Message** messages,
     int message_count,
-    Tool** tools,
+    struct Tool** tools,
     int tool_count
 );
 
-/* Configuration */
 APIConfig* api_config_create(APIProvider provider, const char* api_key, const char* model);
 void api_config_destroy(APIConfig* config);
 
-/* Response management */
 APIResponse* api_response_create(void);
 void api_response_destroy(APIResponse* response);
 
-#endif /* OPENLAOKE_API_CLIENT_H */
+#endif

@@ -1,89 +1,54 @@
-# OpenLaoKe C - Build configuration
+CC=gcc
+CFLAGS=-Wall -Wextra -O2 -I./include
+LDFLAGS=-lpthread -lcurl
 
-CC = gcc
-CFLAGS = -Wall -Wextra -O2 -I./include
-LDFLAGS = -lcurl -ljansson -lpthread
+SRCS=main.c core/state.c core/tool_registry.c core/repl.c core/sessions.c \
+     core/config.c core/types_extended.c core/hyperauto_types.c \
+     core/system_prompt.c core/config_wizard.c core/hyperauto_engine.c \
+     core/error_handler.c \
+     tools/tools.c tools/bash_tool.c tools/read_tool.c tools/write_tool.c \
+     tools/edit_tool.c tools/glob_tool.c tools/grep_tool.c tools/git_tool.c \
+     tools/agent_tool.c tools/batch_tool.c tools/webfetch_tool.c tools/websearch_tool.c \
+     tools/todo_tool.c tools/ls_tool.c tools/sleep_tool.c tools/question_tool.c \
+     tools/tmux_tool.c tools/cron_tool.c tools/taskkill_tool.c tools/notebook_tool.c \
+     tools/plan_tool.c tools/lsp_tool.c tools/brief_tool.c tools/patch_tool.c \
+     tools/powershell_tool.c tools/repl_tool.c tools/reference_tool.c tools/browser_tool.c \
+     types/types.c commands/commands.c
 
-# Directories
-SRC_DIR = .
-BUILD_DIR = build
-BIN_DIR = bin
-OBJ_DIR = obj
+OBJS=$(SRCS:%.c=obj/%.o)
 
-# Source files
-SOURCES = main.c \
-          core/state.c \
-          core/tool_registry.c \
-          tools/tools.c \
-          types/types.c
+all: bin/openlaoke tests/test_core tests/test_hyperauto tests/test_functionality
 
-OBJECTS = $(SOURCES:%.c=$(OBJ_DIR)/%.o)
-TARGET = $(BIN_DIR)/openlaoke
+bin/openlaoke: $(OBJS)
+	mkdir -p bin
+	$(CC) $^ -o $@ $(LDFLAGS)
+	@echo "✓ Build complete: $@"
 
-# Default target
-all: directories $(TARGET)
+tests/test_core: tests/test_core.c obj/core/state.o obj/core/tool_registry.o obj/types/types.o
+	mkdir -p tests
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "✓ Test build: $@"
 
-# Create necessary directories
-directories:
-	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(BIN_DIR)
-	@mkdir -p $(OBJ_DIR)
-	@mkdir -p $(OBJ_DIR)/core
-	@mkdir -p $(OBJ_DIR)/tools
-	@mkdir -p $(OBJ_DIR)/types
+tests/test_hyperauto: tests/test_hyperauto.c obj/core/state.o obj/core/tool_registry.o obj/types/types.o obj/core/types_extended.o obj/core/hyperauto_types.o
+	mkdir -p tests
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "✓ Test build: $@"
 
-# Link the executable
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
-	@echo "Build complete: $@"
+tests/test_functionality: tests/test_functionality.c obj/core/state.o obj/core/tool_registry.o obj/types/types.o obj/core/types_extended.o obj/core/error_handler.o
+	mkdir -p tests
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "✓ Test build: $@"
 
-# Compile source files
-$(OBJ_DIR)/%.o: %.c
+obj/%.o: %.c
+	mkdir -p obj obj/core obj/tools obj/types obj/commands
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean build artifacts
+test: tests/test_core tests/test_hyperauto tests/test_functionality
+	./tests/test_core
+	./tests/test_hyperauto
+	./tests/test_functionality
+
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR) $(OBJ_DIR)
-	@echo "Clean complete"
+	rm -rf obj bin tests/test_core tests/test_hyperauto tests/test_functionality
 
-# Install to system
-install: $(TARGET)
-	install -m 755 $(TARGET) /usr/local/bin/
-	@echo "Installed to /usr/local/bin/openlaoke"
-
-# Uninstall from system
-uninstall:
-	rm -f /usr/local/bin/openlaoke
-	@echo "Uninstalled from /usr/local/bin"
-
-# Run tests
-test: $(TARGET)
-	@echo "Running tests..."
-	./$(TARGET) --version
-
-# Debug build
-debug: CFLAGS += -g -DDEBUG
-debug: clean all
-
-# Release build
-release: CFLAGS += -DNDEBUG
-release: clean all
-
-# Format code
-format:
-	find . -name "*.c" -o -name "*.h" | xargs clang-format -i
-
-# Static analysis
-analyze:
-	scan-build make clean all
-
-# Package for distribution
-package: release
-	tar -czf openlaoke-c-$(shell date +%Y%m%d).tar.gz \
-		--exclude='*.o' \
-		--exclude='build' \
-		--exclude='bin' \
-		--exclude='obj' \
-		.
-
-.PHONY: all clean install uninstall test debug release format analyze package directories
+.PHONY: all clean test
