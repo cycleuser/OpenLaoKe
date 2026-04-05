@@ -1,6 +1,6 @@
 /* OpenLaoKe C - Type implementation */
 
-#include "include/types.h"
+#include "../include/types.h"
 #include <stdio.h>
 
 /* String conversion functions */

@@ -108,12 +108,21 @@ class HyperAutoAgent:
         return self._tool_executor
 
     async def run(self, request: str) -> dict[str, Any]:
-        """Execute a request in HyperAuto mode."""
+        """Execute a request in HyperAuto mode with automatic verification.
+
+        This method runs completely autonomously after the initial input:
+        - No human interaction required
+        - Automatically runs verification loops
+        - Repeats until task is perfectly completed
+        """
         self.context = WorkflowContext(
             original_request=request,
             current_state=HyperAutoState.ANALYZING,
             start_time=time.time(),
         )
+
+        files_created: list[str] = []
+        files_modified: list[str] = []
 
         try:
             while self.context.iteration < self.config.max_iterations:
@@ -129,10 +138,39 @@ class HyperAutoAgent:
 
                 elif self.context.current_state == HyperAutoState.EXECUTING:
                     result = await self._execute_plan()
+
                     if result:
-                        self.context.current_state = HyperAutoState.REFLECTING
+                        if self.config.auto_run_tests:
+                            self.context.current_state = HyperAutoState.VERIFYING
+                        elif self.config.reflection_enabled:
+                            self.context.current_state = HyperAutoState.REFLECTING
+                        else:
+                            self.context.current_state = HyperAutoState.COMPLETED
                     else:
                         break
+
+                elif self.context.current_state == HyperAutoState.VERIFYING:
+                    verification_result = await self._verify_completion(
+                        files_created=files_created,
+                        files_modified=files_modified,
+                    )
+
+                    if verification_result.is_perfect:
+                        self.context.current_state = HyperAutoState.COMPLETED
+                    elif verification_result.pass_rate >= 0.8:
+                        if self.config.reflection_enabled:
+                            self.context.current_state = HyperAutoState.REFLECTING
+                        else:
+                            self.context.current_state = HyperAutoState.COMPLETED
+                    else:
+                        self.context.current_state = HyperAutoState.RETRYING
+
+                elif self.context.current_state == HyperAutoState.RETRYING:
+                    retry_success = await self._handle_retry()
+                    if retry_success:
+                        self.context.current_state = HyperAutoState.EXECUTING
+                    else:
+                        self.context.current_state = HyperAutoState.REFLECTING
 
                 elif self.context.current_state == HyperAutoState.REFLECTING:
                     if self.config.reflection_enabled:
@@ -163,6 +201,61 @@ class HyperAutoAgent:
                 "error": str(e),
                 "context": self.context.to_dict(),
             }
+
+    async def _verify_completion(
+        self,
+        files_created: list[str] | None = None,
+        files_modified: list[str] | None = None,
+    ) -> "VerificationResult":
+        """Verify that the task is perfectly completed.
+
+        This runs the autonomous verification loop that tests
+        repeatedly until completion is verified as perfect.
+        """
+        from openlaoke.core.hyperauto.verifier import (
+            HyperAutoVerifier,
+            VerificationConfig,
+        )
+
+        config = VerificationConfig(
+            max_iterations=10,
+            min_pass_rate=1.0,
+            enable_syntax_check=True,
+            enable_type_check=True,
+            enable_unit_tests=True,
+            enable_lint=True,
+            auto_fix_enabled=True,
+            retry_on_failure=True,
+        )
+
+        verifier = HyperAutoVerifier(self.app_state, config)
+
+        result = await verifier.verify_until_perfect(
+            task_description=self.context.original_request,
+            files_created=files_created or [],
+            files_modified=files_modified or [],
+        )
+
+        self.context.metadata["verification"] = result.to_dict()
+
+        return result
+
+    async def _handle_retry(self) -> bool:
+        """Handle retry after failed verification.
+
+        Returns True if retry should proceed, False otherwise.
+        """
+        failed_tasks = self.context.get_failed_tasks()
+
+        if not failed_tasks:
+            return False
+
+        for task in failed_tasks:
+            task.status = "pending"
+            task.error = None
+            task.result = None
+
+        return True
 
     async def _analyze_request(self) -> AnalysisResult:
         """Analyze the request and identify sub-tasks using AI."""

@@ -4,11 +4,11 @@
 #define OPENLAOKE_STATE_H
 
 #include "types.h"
+#include "types_extended.h"
 #include <time.h>
 
 /* Forward declarations */
 typedef struct ToolRegistry ToolRegistry;
-typedef struct MultiProviderConfig MultiProviderConfig;
 
 /* Application state */
 typedef struct {
@@ -31,7 +31,7 @@ typedef struct {
     bool hyperauto_enabled;
     
     /* Session data */
-    char** message_history;
+    Message** message_history;
     int message_count;
     int message_capacity;
     
