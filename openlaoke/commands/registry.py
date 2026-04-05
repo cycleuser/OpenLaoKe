@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from openlaoke.commands.base import (
     AgentsCommand,
+    AtomicCommand,
     ClearCommand,
     CommandsCommand,
     CompactCommand,
     CostCommand,
     CwdCommand,
     DoctorCommand,
+    DualModelCommand,
     ExitCommand,
     ExportCommand,
     HelpCommand,
@@ -32,6 +34,11 @@ from openlaoke.commands.base import (
 from openlaoke.commands.hyperauto_command import HyperAutoCommand
 from openlaoke.commands.skill_commands import SkillCommand, UseSkillCommand
 from openlaoke.commands.skill_shortcuts import register_skill_shortcuts
+from openlaoke.commands.scaffold_commands import (
+    ScaffoldCommand,
+    KnowledgeDownloadCommand,
+    QuickStartCommand,
+)
 
 _commands: dict[str, SlashCommand] = {}
 
@@ -40,12 +47,14 @@ def register_all() -> None:
     """Register all built-in slash commands."""
     commands = [
         AgentsCommand(),
+        AtomicCommand(),
         ClearCommand(),
         CommandsCommand(),
         CompactCommand(),
         CostCommand(),
         CwdCommand(),
         DoctorCommand(),
+        DualModelCommand(),
         ExitCommand(),
         ExportCommand(),
         HelpCommand(),
@@ -59,6 +68,9 @@ def register_all() -> None:
         PermissionCommand(),
         ProviderCommand(),
         ResumeCommand(),
+        ScaffoldCommand(),
+        KnowledgeDownloadCommand(),
+        QuickStartCommand(),
         SettingsCommand(),
         ThemeCommand(),
         UndoCommand(),
