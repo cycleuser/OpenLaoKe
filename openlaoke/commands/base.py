@@ -1713,3 +1713,197 @@ class ModelRecommendCommand(SlashCommand):
                 f"Executor: {rec['executor']}, "
                 f"VRAM: {report['estimated']['vram_usage_gb']:.1f} GB"
             )
+
+
+class DualModelConfigCommand(SlashCommand):
+    name = "dual-config"
+    description = "Configure dual-model workflow (local/online models)"
+    aliases = ["config-dual", "dual-setup"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from rich.panel import Panel
+        from rich.table import Table
+
+        from openlaoke.core.dual_model_config import create_config_manager
+
+        args = ctx.args.strip()
+        console = ctx.app_state.console if hasattr(ctx.app_state, "console") else None
+
+        manager = create_config_manager(ctx.app_state)
+
+        if not args:
+            if console:
+                lines = ["[bold cyan]Dual-Model Configuration[/bold cyan]\n"]
+                lines.append(f"Active: [bold green]{manager.active_config_name}[/bold green]\n")
+                lines.append("[bold]Available Configurations:[/bold]")
+
+                table = Table(show_header=True)
+                table.add_column("Name", style="cyan")
+                table.add_column("Planner", style="blue")
+                table.add_column("Executor", style="green")
+                table.add_column("Type", style="magenta")
+
+                for name, config in manager.configs.items():
+                    if config.planner and config.executor:
+                        active_marker = " (active)" if name == manager.active_config_name else ""
+                        provider_type = (
+                            "local" if config.planner.provider.value == "ollama" else "online"
+                        )
+
+                        if config.executor.provider.value != config.planner.provider.value:
+                            provider_type = "hybrid"
+
+                        table.add_row(
+                            f"{name}{active_marker}",
+                            f"{config.planner.model_name} ({config.planner.provider.value})",
+                            f"{config.executor.model_name} ({config.executor.provider.value})",
+                            provider_type,
+                        )
+
+                console.print("\n".join(lines))
+                console.print(table)
+
+                console.print(
+                    Panel(
+                        "[bold]Usage:[/bold]\n"
+                        "  /dual-config list              - Show all configs\n"
+                        "  /dual-config use <name>        - Select active config\n"
+                        "  /dual-config check             - Check availability\n"
+                        "  /dual-config create <name>     - Create custom config\n"
+                        "\n[bold]Quick Examples:[/bold]\n"
+                        "  /dual-config use local_balanced      # Local models\n"
+                        "  /dual-config use hybrid_openai       # Local + OpenAI\n"
+                        "  /dual-config use online_premium      # Online models",
+                        title="Command Help",
+                        border_style="yellow",
+                    )
+                )
+
+            return CommandResult(message="Configuration list displayed")
+
+        parts = args.split(maxsplit=1)
+        action = parts[0].lower()
+
+        if action == "list":
+            configs = manager.list_configs()
+            return CommandResult(
+                message=f"Available configs: {', '.join(configs)}\n"
+                f"Active: {manager.active_config_name}"
+            )
+
+        elif action == "use":
+            if len(parts) < 2:
+                return CommandResult(success=False, message="Usage: /dual-config use <config_name>")
+
+            config_name = parts[1].strip()
+
+            if manager.set_active_config(config_name):
+                return CommandResult(
+                    message=f"[green]✓ Active config set to: {config_name}[/green]"
+                )
+            else:
+                return CommandResult(
+                    success=False,
+                    message=f"[red]Config not found: {config_name}[/red]\n"
+                    f"Available: {', '.join(manager.list_configs())}",
+                )
+
+        elif action == "check":
+            results = await manager.check_config_availability()
+
+            if console:
+                table = Table(title="Model Availability", show_header=True)
+                table.add_column("Role", style="cyan")
+                table.add_column("Model", style="blue")
+                table.add_column("Status", style="green")
+                table.add_column("Message", style="yellow")
+
+                for role, (available, message) in results.items():
+                    config = manager.get_config()
+                    if config:
+                        endpoint = getattr(config, role, None)
+                        if endpoint:
+                            table.add_row(
+                                role,
+                                f"{endpoint.model_name} ({endpoint.provider.value})",
+                                "✓ Available" if available else "✗ Unavailable",
+                                message,
+                            )
+
+                console.print(table)
+
+            return CommandResult(message="Availability checked")
+
+        elif action == "create":
+            if len(parts) < 2:
+                return CommandResult(
+                    message="[bold]Create Custom Configuration[/bold]\n\n"
+                    "Usage: /dual-config create <name> <options>\n\n"
+                    "Options format:\n"
+                    "  planner=<provider>:<model>\n"
+                    "  executor=<provider>:<model>\n"
+                    "  validator=<provider>:<model>\n"
+                    "  planner-key=<api_key>\n"
+                    "  executor-key=<api_key>\n\n"
+                    "Examples:\n"
+                    "  /dual-config create my_config planner=ollama:gemma3:1b executor=openai:gpt-4 planner-key=sk-xxx\n"
+                    "  /dual-config create local planner=ollama:gemma3:1b executor=ollama:gemma4:e4b"
+                )
+
+            import shlex
+
+            try:
+                tokens = shlex.split(parts[1])
+            except Exception:
+                tokens = parts[1].split()
+
+            name = tokens[0] if tokens else "custom"
+
+            options = {}
+            for token in tokens[1:]:
+                if "=" in token:
+                    key, value = token.split("=", 1)
+                    options[key] = value
+
+            planner_parts = options.get("planner", "ollama:gemma3:1b").split(":", 1)
+            planner_provider = planner_parts[0]
+            planner_model = planner_parts[1] if len(planner_parts) > 1 else "gemma3:1b"
+
+            executor_parts = options.get("executor", "ollama:gemma4:e4b").split(":", 1)
+            executor_provider = executor_parts[0]
+            executor_model = executor_parts[1] if len(executor_parts) > 1 else "gemma4:e4b"
+
+            validator_provider = None
+            validator_model = None
+            if "validator" in options:
+                validator_parts = options["validator"].split(":", 1)
+                validator_provider = validator_parts[0]
+                validator_model = validator_parts[1] if len(validator_parts) > 1 else planner_model
+
+            config = manager.create_custom_config(
+                name=name,
+                planner_provider=planner_provider,
+                planner_model=planner_model,
+                executor_provider=executor_provider,
+                executor_model=executor_model,
+                validator_provider=validator_provider,
+                validator_model=validator_model,
+                planner_api_key=options.get("planner-key"),
+                executor_api_key=options.get("executor-key"),
+                validator_api_key=options.get("validator-key"),
+            )
+
+            manager.set_active_config(name)
+
+            return CommandResult(
+                message=f"[green]✓ Created and activated config: {name}[/green]\n"
+                f"  Planner: {config.planner.model_name} ({config.planner.provider.value})\n"
+                f"  Executor: {config.executor.model_name} ({config.executor.provider.value})\n"
+                f"  Validator: {config.validator.model_name} ({config.validator.provider.value})"
+            )
+
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown action: {action}\nAvailable: list, use, check, create",
+            )

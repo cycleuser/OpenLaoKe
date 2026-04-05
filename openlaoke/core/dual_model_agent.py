@@ -103,7 +103,28 @@ class DualModelAgent:
         self._models_selected = False
 
     async def _select_optimal_models(self) -> dict[str, str]:
-        """Select optimal models based on available resources."""
+        """Select optimal models based on configuration or available resources."""
+
+        from openlaoke.core.dual_model_config import create_config_manager
+
+        config_manager = create_config_manager(self.app_state)
+        config = config_manager.get_config()
+
+        if config and config.planner and config.executor:
+            self.PLANNER_MODEL = config.planner.model_name
+            self.EXECUTOR_MODEL = config.executor.model_name
+
+            if config.validator:
+                self.VALIDATOR_MODEL = config.validator.model_name
+
+            self._models_selected = True
+
+            return {
+                "planner": self.PLANNER_MODEL,
+                "executor": self.EXECUTOR_MODEL,
+                "validator": self.VALIDATOR_MODEL,
+                "config_name": config.name,
+            }
 
         from openlaoke.core.intelligent_model_selector import get_optimal_models
 
