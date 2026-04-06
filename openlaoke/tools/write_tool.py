@@ -23,7 +23,9 @@ class WriteTool(Tool):
     name = "Write"
     description = (
         "Write content to a file, creating the file if it doesn't exist. "
-        "This will overwrite the entire file contents."
+        "This will overwrite the entire file contents. "
+        "IMPORTANT: Both file_path and content parameters are REQUIRED. "
+        "Example: Write(file_path='/path/to/file.txt', content='file contents here')"
     )
     input_schema = WriteInput
     is_read_only = False
