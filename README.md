@@ -155,6 +155,27 @@ uv pip install -e ".[dev]"
 
 ## Usage
 
+### Running Modes
+
+OpenLaoKe supports two modes:
+
+#### Online Mode (Default)
+```bash
+openlaoke
+```
+- Direct API calls to cloud providers (OpenAI, Anthropic, MiniMax, etc.)
+- No atomic decomposition or task supervision
+- Best for powerful cloud models (GPT-4o, Claude 4, etc.)
+
+#### Local Mode
+```bash
+openlaoke --local
+```
+- Enables atomic task decomposition for small local models
+- Multi-model coordination (planner + executor)
+- Task supervision with automatic retry
+- Best for local models (Gemma 1B, Llama 3.2 1B, etc.)
+
 ### First Run
 ```bash
 # First run shows configuration wizard
@@ -181,7 +202,23 @@ openlaoke --cwd /path/to/project
 
 # Resume last session
 openlaoke --resume
+
+# Local mode for small models
+openlaoke --local --provider ollama -m gemma3:1b
 ```
+
+### Mode Comparison
+
+| Feature | Online Mode (Default) | Local Mode (`--local`) |
+|---------|----------------------|------------------------|
+| **Best for** | GPT-4o, Claude 4, MiniMax-M2.7 | Gemma 1B, Llama 3.2 1B |
+| **Task decomposition** | No (direct API calls) | Yes (atomic steps) |
+| **Intent parsing** | No | Yes |
+| **Task supervision** | No | Yes (auto-retry) |
+| **Multi-model coordination** | No | Yes (planner + executor) |
+| **Translation** | Yes (preserves original) | Yes (preserves original) |
+| **Speed** | Fast (single API call) | Slower (multiple calls) |
+| **Cost** | Higher (cloud API) | Lower (local inference) |
 
 ### Model Selection
 

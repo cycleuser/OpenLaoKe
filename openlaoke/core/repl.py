@@ -155,33 +155,40 @@ class REPL:
         from openlaoke.core.intent_parser import IntentParser, IntentType
         from openlaoke.core.translation import TranslationPipeline, Language
 
-        parser = IntentParser()
         translation = TranslationPipeline()
-
         english_input, original_lang = translation.prepare_for_processing(user_input)
 
         if original_lang != Language.ENGLISH:
-            self.console.print(f"[dim]Translated to: {english_input[:60]}...[/dim]")
+            self.console.print(f"[dim]Original: {user_input[:50]}...[/dim]")
+            self.console.print(f"[dim]Translated: {english_input[:50]}...[/dim]")
+            combined_input = f"[Original ({original_lang.value}): {user_input}]\n\n[English translation: {english_input}]"
+        else:
+            combined_input = user_input
 
-        intent = parser.parse(english_input)
+        if self.app_state.local_mode:
+            parser = IntentParser()
+            intent = parser.parse(english_input)
 
-        if intent.intent_type in [
-            IntentType.WRITE_PROGRAM,
-            IntentType.WRITE_FUNCTION,
-            IntentType.WRITE_CLASS,
-        ]:
-            await self._handle_command("atomic", english_input)
-            return
+            if original_lang == Language.ENGLISH and intent.intent_type in [
+                IntentType.WRITE_PROGRAM,
+                IntentType.WRITE_FUNCTION,
+                IntentType.WRITE_CLASS,
+            ]:
+                await self._handle_command("atomic", combined_input)
+                return
 
         self.app_state.is_running = True
         self.app_state.set_error(None)
 
-        self.supervisor.parse_request(user_input)
-        self._current_task_id = (
-            list(self.supervisor.tasks.keys())[-1] if self.supervisor.tasks else None
-        )
+        if self.app_state.local_mode:
+            self.supervisor.parse_request(user_input)
+            self._current_task_id = (
+                list(self.supervisor.tasks.keys())[-1] if self.supervisor.tasks else None
+            )
+        else:
+            self._current_task_id = None
 
-        user_msg = UserMessage(role=MessageRole.USER, content=user_input)
+        user_msg = UserMessage(role=MessageRole.USER, content=combined_input)
         self.app_state.add_message(user_msg)
 
         max_retry_attempts = 3
@@ -342,6 +349,7 @@ class REPL:
                     system_prompt=system_prompt,
                     messages=messages,
                     tools=tools,
+                    model=self.app_state.session_config.model,
                 )
 
                 spinner.stop()
@@ -520,6 +528,12 @@ class REPL:
         self.console.print(f"\n[bold]Provider:[/bold] {provider_name}")
         self.console.print(f"[bold]Model:[/bold] {self.app_state.session_config.model}")
         self.console.print(f"[bold]Working directory:[/bold] {self.app_state.get_cwd()}")
+        if self.app_state.local_mode:
+            self.console.print(
+                "[bold]Mode:[/bold] [yellow]Local (atomic decomposition enabled)[/yellow]"
+            )
+        else:
+            self.console.print("[bold]Mode:[/bold] [green]Online (direct API calls)[/green]")
         self.console.print(
             f"[bold]Tools:[/bold] {len(self.registry.get_all())} available{proxy_info}"
         )
