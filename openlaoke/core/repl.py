@@ -295,6 +295,7 @@ class REPL:
         """Main API interaction loop."""
         max_iterations = 100
         iteration = 0
+        failed_tool_calls: dict[str, int] = {}
 
         messages: list[dict[str, Any]] = []
         for msg in self.app_state.messages:
@@ -384,7 +385,29 @@ class REPL:
                     if not self._running:
                         break
 
+                    tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                    failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+
+                    if failed_tool_calls[tool_key] > 3:
+                        self.console.print(
+                            f"\n[red]Tool '{tool_use.name}' called too many times with same parameters. "
+                            f"Please review and fix your approach.[/red]"
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_use.id,
+                                "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters. "
+                                f"This suggests an error in your approach. Please try a different strategy or provide different parameters. "
+                                f"Your current parameters: {json.dumps(tool_use.input)}",
+                            }
+                        )
+                        continue
+
                     result = await self._execute_tool(tool_use)
+
+                    if result.is_error:
+                        tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
 
                     result_content = (
                         result.content if isinstance(result.content, str) else str(result.content)

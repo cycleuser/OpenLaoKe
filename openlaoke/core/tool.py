@@ -84,6 +84,19 @@ class Tool(ABC):
                             message=f"Field '{field_name}' must be a string",
                             error_code=400,
                         )
+        elif hasattr(self.input_schema, "model_json_schema"):
+            try:
+                schema = self.input_schema.model_json_schema()
+                required = schema.get("required", [])
+                for field_name in required:
+                    if field_name not in input_data or input_data.get(field_name) is None:
+                        return ValidationResult(
+                            result=False,
+                            message=f"Missing required field: {field_name}",
+                            error_code=400,
+                        )
+            except Exception:
+                pass
         return ValidationResult(result=True)
 
     def check_permissions(
