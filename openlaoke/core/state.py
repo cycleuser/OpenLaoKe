@@ -66,6 +66,7 @@ class AppState:
     verbose: bool = False
     auto_accept: bool = False
     resume_session: bool = True
+    local_mode: bool = False
     multi_provider_config: MultiProviderConfig | None = None
     app_config: Any = None
     active_skills: list[str] = field(default_factory=list)

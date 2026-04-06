@@ -114,6 +114,8 @@ class ModelCommand(SlashCommand):
 
         # Set model name directly
         ctx.app_state.session_config.model = args
+        if ctx.app_state.multi_provider_config:
+            ctx.app_state.multi_provider_config.active_model = args
         return CommandResult(message=f"Model set to: {args}")
 
     def _select_by_index(self, ctx: CommandContext, index_str: str) -> CommandResult:
@@ -145,6 +147,8 @@ class ModelCommand(SlashCommand):
 
         selected_model = models[index - 1]
         ctx.app_state.session_config.model = selected_model
+        if ctx.app_state.multi_provider_config:
+            ctx.app_state.multi_provider_config.active_model = selected_model
 
         lines = [
             f"[green]✓[/green] Model set to: {selected_model}",
@@ -211,6 +215,8 @@ class ModelCommand(SlashCommand):
                 pass
 
         ctx.app_state.session_config.model = model_name
+        if ctx.app_state.multi_provider_config:
+            ctx.app_state.multi_provider_config.active_model = model_name
 
         return CommandResult(
             message=f"[green]✓[/green] Switched to provider: {provider_name}\nModel: {model_name}"
@@ -391,6 +397,7 @@ class ProviderCommand(SlashCommand):
         default_model = provider.default_model or provider.models[0] if provider.models else ""
         if default_model:
             ctx.app_state.session_config.model = default_model
+            ctx.app_state.multi_provider_config.active_model = default_model
 
         return CommandResult(
             message=f"[green]✓[/green] Switched to provider: {provider_name}\nModel: {default_model}"

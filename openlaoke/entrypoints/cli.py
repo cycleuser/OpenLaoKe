@@ -141,6 +141,11 @@ def main() -> None:
         help="Show current configuration",
     )
     parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Enable local mode (for small local models with atomic decomposition, multi-model coordination)",
+    )
+    parser.add_argument(
         "prompt",
         nargs="*",
         help="Direct prompt to execute (non-interactive mode)",
@@ -237,6 +242,8 @@ def main() -> None:
         app_state.auto_accept = True
     if args.verbose:
         app_state.verbose = True
+    if args.local:
+        app_state.local_mode = True
 
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
