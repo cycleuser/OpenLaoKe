@@ -35,6 +35,14 @@ def main() -> None:
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
+    # Auth command
+    auth_parser = subparsers.add_parser("auth", help="Authentication management")
+    auth_parser.add_argument("provider", nargs="?", help="Provider to authenticate")
+    auth_parser.add_argument("--list", action="store_true", help="List authenticated providers")
+    auth_parser.add_argument("--remove", metavar="PROVIDER", help="Remove authentication")
+    auth_parser.add_argument("--show", metavar="PROVIDER", help="Show auth details")
+    auth_parser.add_argument("--test", metavar="PROVIDER", help="Test authentication")
+
     server_parser = subparsers.add_parser("server", help="Start HTTP API server")
     server_parser.add_argument(
         "--host",
@@ -165,6 +173,62 @@ def main() -> None:
         )
         console.print(f"[green]Starting OpenLaoKe server on {args.host}:{args.port}[/green]")
         server.run()
+        return
+
+    if args.command == "auth":
+        from openlaoke.core.extended_web import BrowserAuthManager
+        from openlaoke.core.extended_web.types import WEB_PROVIDERS
+
+        auth_manager = BrowserAuthManager()
+
+        if args.list:
+            auths = auth_manager.list_saved_auths()
+            if not auths:
+                console.print("[yellow]No authenticated providers.[/yellow]")
+            else:
+                console.print(f"[bold]Authenticated providers ({len(auths)})[/bold]")
+                for provider_type in auths:
+                    console.print(f"  ✓ {provider_type}")
+            return
+
+        if args.remove:
+            if auth_manager.delete_auth(args.remove):
+                console.print(f"[green]Removed auth for {args.remove}[/green]")
+            else:
+                console.print(f"[yellow]No auth found for {args.remove}[/yellow]")
+            return
+
+        if args.show:
+            auth_data = auth_manager.load_auth(args.show)
+            if not auth_data:
+                console.print(f"[yellow]No auth for {args.show}[/yellow]")
+            else:
+                cookie = auth_data.get("cookie", "")
+                console.print(f"[bold]{args.show}[/bold]")
+                console.print(
+                    f"  Cookie: {cookie[:20]}...{cookie[-20:] if len(cookie) > 40 else ''}"
+                )
+                console.print(f"  Length: {len(cookie)}")
+            return
+
+        if args.test:
+            console.print(f"[dim]Testing {args.test}...[/dim]")
+            auth_data = auth_manager.load_auth(args.test)
+            if not auth_data:
+                console.print(f"[red]No auth for {args.test}[/red]")
+                return
+            console.print(
+                f"[green]✓ Auth loaded (cookie length: {len(auth_data.get('cookie', ''))})[/green]"
+            )
+            return
+
+        if args.provider:
+            console.print(f"[dim]Authenticating {args.provider}...[/dim]")
+            console.print("[yellow]Note: Use browser-based auth command for full flow.[/yellow]")
+        else:
+            console.print(
+                "[dim]Use 'openlaoke auth extended-web login <provider>' for browser auth.[/dim]"
+            )
         return
 
     config = load_config()
