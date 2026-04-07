@@ -69,8 +69,20 @@ MODEL_PRICES: dict[str, ModelPricing] = {
     "command-r": ModelPricing(0.5, 1.5, 0.0, 0.0),
     "command": ModelPricing(1.0, 2.0, 0.0, 0.0),
     "command-light": ModelPricing(0.3, 0.6, 0.0, 0.0),
-    "llama-3.1-sonar-large-128k-online": ModelPricing(1.0, 1.0, 0.0, 0.0),
-    "llama-3.1-sonar-small-128k-online": ModelPricing(0.2, 0.2, 0.0, 0.0),
+    "big-pickle": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "mimo-v2-flash-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "minimax-m2.1-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "mimo-v2-omni-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "qwen3.6-plus-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "grok-code": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "kimi-k2.5-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "glm-5-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "gpt-5-nano": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "nemotron-3-super-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "minimax-m2.5-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "trinity-large-preview-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "glm-4.7-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
+    "mimo-v2-pro-free": ModelPricing(0.0, 0.0, 0.0, 0.0),
 }
 
 
@@ -139,6 +151,8 @@ class MultiProviderClient:
             env_key = os.environ.get("OPENROUTER_API_KEY", "")
         elif provider.provider_type == ProviderType.GITHUB_COPILOT:
             env_key = os.environ.get("GITHUB_TOKEN", "")
+        elif provider.provider_type == ProviderType.OPENCODE:
+            env_key = os.environ.get("OPENCODE_API_KEY", "public")
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_key = os.environ.get("OPENAI_API_KEY", "none")
 
@@ -184,6 +198,8 @@ class MultiProviderClient:
             env_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         elif provider.provider_type == ProviderType.GITHUB_COPILOT:
             env_url = os.environ.get("GITHUB_COPILOT_BASE_URL", "https://api.githubcopilot.com")
+        elif provider.provider_type == ProviderType.OPENCODE:
+            env_url = os.environ.get("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1")
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 

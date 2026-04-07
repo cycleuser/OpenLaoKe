@@ -8,7 +8,7 @@ Open-source terminal AI coding assistant with advanced automation and supervisio
 - **Interactive REPL** with rich terminal UI
 - **Command History** - Use ↑/↓ arrows to browse previous commands, Ctrl+R to search
 - **Smart Autocomplete** - Tab completion for commands and skills
-- **Multi-Provider Support** - 22 AI providers supported
+- **Multi-Provider Support** - 23 AI providers (including **free models**!)
 - **Tool System** - 30+ built-in tools
 - **MCP Support** - Connect to external MCP tool servers
 - **Permission System** - Three modes: default, auto, bypass
@@ -26,7 +26,15 @@ Open-source terminal AI coding assistant with advanced automation and supervisio
 - **Reference Download** - Automatic PDF download for academic writing
 - **Skill System** - YAML-based skill system with dynamic loading
 
-## Supported Providers (22)
+## Supported Providers (23)
+
+### 🆓 Free Models (No API Key Required)
+
+| Provider | Models | Notes |
+|----------|--------|-------|
+| **OpenCode Zen** | `big-pickle`, `gpt-5-nano` | Completely free, no registration needed |
+
+### Paid/Registered Providers
 
 | Provider | Type | API Key Required | Models |
 |----------|------|------------------|--------|
@@ -48,6 +56,7 @@ Open-source terminal AI coding assistant with advanced automation and supervisio
 | Perplexity | Cloud | Yes | Sonar models (online/chat) |
 | OpenRouter | Cloud | Yes | Multi-provider access (Claude, GPT-4, Gemini, Llama) |
 | GitHub Copilot | Cloud | Yes | GPT-4o, GPT-4o-mini, o1-preview, o1-mini |
+| OpenCode Zen | Cloud | **No** | **big-pickle**, **gpt-5-nano** (免费模型) |
 | Ollama | Local | No | Gemma 3/4, Llama 3.1/3.2, CodeLlama, Qwen 2.5, DeepSeek |
 | LM Studio | Local | No | Any local model |
 | OpenAI-Compatible | Custom | Optional | Any OpenAI-compatible endpoint |

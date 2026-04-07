@@ -40,28 +40,29 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         table.add_column("Status", style="dim")
 
         providers = [
-            ("1", "Anthropic", "anthropic", "cloud"),
-            ("2", "OpenAI (GPT-4)", "openai", "cloud"),
-            ("3", "MiniMax", "minimax", "cloud"),
-            ("4", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("5", "Azure OpenAI", "azure_openai", "cloud"),
-            ("6", "Google AI (Gemini)", "google", "cloud"),
-            ("7", "Google Vertex AI", "google_vertex", "cloud"),
-            ("8", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("9", "xAI Grok", "xai", "cloud"),
-            ("10", "Mistral AI", "mistral", "cloud"),
-            ("11", "Groq", "groq", "cloud"),
-            ("12", "Cerebras", "cerebras", "cloud"),
-            ("13", "Cohere", "cohere", "cloud"),
-            ("14", "DeepInfra", "deepinfra", "cloud"),
-            ("15", "Together AI", "togetherai", "cloud"),
-            ("16", "Perplexity", "perplexity", "cloud"),
-            ("17", "OpenRouter", "openrouter", "cloud"),
-            ("18", "GitHub Copilot", "github_copilot", "cloud"),
-            ("19", "Ollama (Local)", "ollama", "local"),
-            ("20", "LM Studio (Local)", "lm_studio", "local"),
-            ("21", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
-            ("22", "Skip (configure later)", "", ""),
+            ("1", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
+            ("2", "Anthropic", "anthropic", "cloud"),
+            ("3", "OpenAI (GPT-4)", "openai", "cloud"),
+            ("4", "MiniMax", "minimax", "cloud"),
+            ("5", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
+            ("6", "Azure OpenAI", "azure_openai", "cloud"),
+            ("7", "Google AI (Gemini)", "google", "cloud"),
+            ("8", "Google Vertex AI", "google_vertex", "cloud"),
+            ("9", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("10", "xAI Grok", "xai", "cloud"),
+            ("11", "Mistral AI", "mistral", "cloud"),
+            ("12", "Groq", "groq", "cloud"),
+            ("13", "Cerebras", "cerebras", "cloud"),
+            ("14", "Cohere", "cohere", "cloud"),
+            ("15", "DeepInfra", "deepinfra", "cloud"),
+            ("16", "Together AI", "togetherai", "cloud"),
+            ("17", "Perplexity", "perplexity", "cloud"),
+            ("18", "OpenRouter", "openrouter", "cloud"),
+            ("19", "GitHub Copilot", "github_copilot", "cloud"),
+            ("20", "Ollama (Local)", "ollama", "local"),
+            ("21", "LM Studio (Local)", "lm_studio", "local"),
+            ("22", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
+            ("23", "Skip (configure later)", "", ""),
         ]
 
         for opt, name, key, _ptype in providers:
@@ -79,35 +80,36 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
 
         choice = Prompt.ask(
             "Select provider",
-            choices=[str(i) for i in range(1, 23)],
-            default="19",
+            choices=[str(i) for i in range(1, 24)],
+            default="1",
         )
 
         provider_map = {
-            "1": "anthropic",
-            "2": "openai",
-            "3": "minimax",
-            "4": "aliyun_coding_plan",
-            "5": "azure_openai",
-            "6": "google",
-            "7": "google_vertex",
-            "8": "aws_bedrock",
-            "9": "xai",
-            "10": "mistral",
-            "11": "groq",
-            "12": "cerebras",
-            "13": "cohere",
-            "14": "deepinfra",
-            "15": "togetherai",
-            "16": "perplexity",
-            "17": "openrouter",
-            "18": "github_copilot",
-            "19": "ollama",
-            "20": "lm_studio",
-            "21": "openai_compatible",
+            "1": "opencode",
+            "2": "anthropic",
+            "3": "openai",
+            "4": "minimax",
+            "5": "aliyun_coding_plan",
+            "6": "azure_openai",
+            "7": "google",
+            "8": "google_vertex",
+            "9": "aws_bedrock",
+            "10": "xai",
+            "11": "mistral",
+            "12": "groq",
+            "13": "cerebras",
+            "14": "cohere",
+            "15": "deepinfra",
+            "16": "togetherai",
+            "17": "perplexity",
+            "18": "openrouter",
+            "19": "github_copilot",
+            "20": "ollama",
+            "21": "lm_studio",
+            "22": "openai_compatible",
         }
 
-        if choice == "22":
+        if choice == "23":
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
@@ -177,6 +179,7 @@ def _get_env_var_name(provider_type: ProviderType) -> str:
         ProviderType.PERPLEXITY: "PERPLEXITY_API_KEY",
         ProviderType.OPENROUTER: "OPENROUTER_API_KEY",
         ProviderType.GITHUB_COPILOT: "GITHUB_TOKEN",
+        ProviderType.OPENCODE: "OPENCODE_API_KEY",
         ProviderType.OPENAI_COMPATIBLE: "OPENAI_API_KEY",
     }
     return env_map.get(provider_type, "")
@@ -186,6 +189,8 @@ def _get_provider_status(provider: ProviderConfig) -> str:
     """Get human-readable status for a provider's API key configuration."""
     if provider.is_local:
         return "[green]✓ local[/green]"
+    if provider.provider_type == ProviderType.OPENCODE:
+        return "[green]✓ FREE (no key needed)[/green]"
     if provider.api_key:
         return "[green]✓ stored[/green]"
 
@@ -528,6 +533,26 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
             provider.api_key = Prompt.ask("Enter GitHub Personal Access Token", password=True)
         console.print(f"\n[dim]Available models: {', '.join(provider.models)}[/dim]")
         provider.default_model = _select_model_from_list(provider.models, provider.default_model)
+
+    elif provider.provider_type == ProviderType.OPENCODE:
+        console.print("[green]✓ No API key required - completely free![/green]")
+        console.print(f"\n[bold]Available free models:[/bold]")
+        for i, model in enumerate(provider.models, 1):
+            marker = " [cyan](default)[/cyan]" if model == provider.default_model else ""
+            console.print(f"  [{i}] {model}{marker}")
+
+        choices = [str(i) for i in range(1, len(provider.models) + 1)]
+        selection = Prompt.ask(
+            "\nSelect model",
+            choices=choices,
+            default="1",
+        )
+        provider.default_model = provider.models[int(selection) - 1]
+        provider.enabled = True
+        config.providers[key] = provider
+
+        console.print(f"\n[green]✓ Configured {key} with model {provider.default_model}[/green]")
+        return config
 
     else:
         if not provider.api_key:

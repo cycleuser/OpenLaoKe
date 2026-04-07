@@ -30,6 +30,7 @@ class ProviderType(StrEnum):
     PERPLEXITY = "perplexity"
     OPENROUTER = "openrouter"
     GITHUB_COPILOT = "github_copilot"
+    OPENCODE = "opencode"
     CUSTOM = "custom"
 
 
@@ -47,6 +48,8 @@ class ProviderConfig:
 
     def is_configured(self) -> bool:
         if self.is_local:
+            return True
+        if self.provider_type == ProviderType.OPENCODE:
             return True
         return bool(self.api_key and self.api_key != "none")
 
@@ -334,6 +337,27 @@ class MultiProviderConfig:
                         "gpt-4-turbo",
                         "o1-preview",
                         "o1-mini",
+                    ],
+                ),
+                "opencode": ProviderConfig(
+                    provider_type=ProviderType.OPENCODE,
+                    base_url="https://opencode.ai/zen/v1",
+                    default_model="big-pickle",
+                    models=[
+                        "big-pickle",
+                        "mimo-v2-flash-free",
+                        "minimax-m2.1-free",
+                        "mimo-v2-omni-free",
+                        "qwen3.6-plus-free",
+                        "grok-code",
+                        "kimi-k2.5-free",
+                        "glm-5-free",
+                        "gpt-5-nano",
+                        "nemotron-3-super-free",
+                        "minimax-m2.5-free",
+                        "trinity-large-preview-free",
+                        "glm-4.7-free",
+                        "mimo-v2-pro-free",
                     ],
                 ),
             },
