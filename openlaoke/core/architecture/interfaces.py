@@ -6,7 +6,6 @@ piece by piece, ensuring perfect assembly.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
@@ -86,13 +85,13 @@ STANDARD_TEMPLATES: dict[str, CodeTemplate] = {
         template='''def {function_name}({parameters}) -> {return_type}:
     """
     {docstring}
-    
+
     Args:
         {args_doc}
-    
+
     Returns:
         {return_doc}
-    
+
     Raises:
         {raises_doc}
     """
@@ -112,15 +111,15 @@ STANDARD_TEMPLATES: dict[str, CodeTemplate] = {
         template='''class {class_name}:
     """
     {docstring}
-    
+
     Attributes:
         {attrs_doc}
     """
-    
+
     def __init__(self, {init_params}):
         """Initialize {class_name}."""
         {init_implementation}
-    
+
     {methods}''',
         required_imports=[
             "from __future__ import annotations",
@@ -139,13 +138,13 @@ STANDARD_TEMPLATES: dict[str, CodeTemplate] = {
 async def {function_name}({parameters}) -> {return_type}:
     """
     {docstring}
-    
+
     Args:
         {args_doc}
-    
+
     Returns:
         {return_doc}
-    
+
     Raises:
         HTTPException: {error_doc}
     """
@@ -170,7 +169,7 @@ async def {function_name}({parameters}) -> {return_type}:
     {docstring}
     """
     {fields}
-    
+
     {validators}''',
         required_imports=["from pydantic import BaseModel, Field, validator"],
         validation_rules=[
@@ -186,10 +185,10 @@ async def {function_name}({parameters}) -> {return_type}:
     """Test {test_description}."""
     # Arrange
     {arrange_code}
-    
+
     # Act
     {act_code}
-    
+
     # Assert
     {assert_code}''',
         required_imports=["import pytest"],

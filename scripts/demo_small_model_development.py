@@ -7,15 +7,12 @@ The project is broken down into atomic tasks that the small model
 can reliably implement, then assembled into a working module.
 """
 
-from pathlib import Path
 import tempfile
-import json
+from pathlib import Path
 
 from openlaoke.core.architecture import (
-    ComponentSpec,
-    ComponentType,
-    create_orchestrator_for_model,
     create_decomposer_for_model,
+    create_orchestrator_for_model,
 )
 from openlaoke.core.model_assessment.types import ModelTier
 from openlaoke.core.state import create_app_state
@@ -91,10 +88,10 @@ def demonstrate_small_model_development():
         # 模型配置
         model = "gemma3:1b"
         print(f"🤖 使用模型: {model}")
-        print(f"  层级: Tier 5 (Limited)")
-        print(f"  最大代码行数: 15行/任务")
-        print(f"  最大参数数量: 3个/函数")
-        print(f"  最大重试次数: 8次")
+        print("  层级: Tier 5 (Limited)")
+        print("  最大代码行数: 15行/任务")
+        print("  最大参数数量: 3个/函数")
+        print("  最大重试次数: 8次")
         print()
 
         # 创建分解器
@@ -193,7 +190,7 @@ def demonstrate_small_model_development():
 
         # 保存工作流状态
         orchestrator.save_workflow_state(workflow.workflow_id)
-        print(f"💾 工作流状态已保存")
+        print("💾 工作流状态已保存")
         print()
 
     print("=" * 80)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -298,12 +299,10 @@ class APIClient:
                     elif delta.get("type") == "input_json_delta":
                         partial_json = delta.get("partial_json", "")
                         if tool_uses:
-                            try:
+                            with suppress(json.JSONDecodeError):
                                 tool_uses[-1].input = json.loads(
                                     json.dumps(tool_uses[-1].input)[:-1] + partial_json + "}"
                                 )
-                            except json.JSONDecodeError:
-                                pass
 
                 elif event_type == "message_delta":
                     usage_data = event.get("usage", {})

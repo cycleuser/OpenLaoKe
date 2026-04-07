@@ -7,15 +7,14 @@ instead of just filling templates with placeholders.
 from __future__ import annotations
 
 import ast
-import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.core.architecture.decomposer import AtomicTask, TaskGraph
 from openlaoke.core.code_validator import CodeValidator
-from openlaoke.core.intent_pipeline import IntentBasedPipeline
 from openlaoke.core.enhanced_knowledge_base import EnhancedKnowledgeBase
+from openlaoke.core.intent_pipeline import IntentBasedPipeline
 
 if TYPE_CHECKING:
     from openlaoke.core.state import AppState
@@ -235,12 +234,10 @@ Generate a complete, working implementation now."""
 
         code_lines = []
         in_code_block = False
-        code_block_start = -1
 
-        for i, line in enumerate(lines):
+        for _, line in enumerate(lines):
             if line.strip().startswith("```python"):
                 in_code_block = True
-                code_block_start = i
                 continue
             elif line.strip() == "```" and in_code_block:
                 in_code_block = False
@@ -401,7 +398,7 @@ Generate a complete, working implementation now."""
                 lines = code.split("\n")
                 for i, line in enumerate(lines):
                     if line.strip().startswith("def ") and " -> " not in line:
-                        indent = len(line) - len(line.lstrip())
+                        len(line) - len(line.lstrip())
                         if "(" in line and ")" in line:
                             fixed_line = line.rstrip() + " -> Any:\n"
                             lines[i] = fixed_line

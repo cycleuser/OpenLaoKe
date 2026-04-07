@@ -36,13 +36,13 @@ from openlaoke.commands.base import (
     VimCommand,
 )
 from openlaoke.commands.hyperauto_command import HyperAutoCommand
-from openlaoke.commands.skill_commands import SkillCommand, UseSkillCommand
-from openlaoke.commands.skill_shortcuts import register_skill_shortcuts
 from openlaoke.commands.scaffold_commands import (
-    ScaffoldCommand,
     KnowledgeDownloadCommand,
     QuickStartCommand,
+    ScaffoldCommand,
 )
+from openlaoke.commands.skill_commands import SkillCommand, UseSkillCommand
+from openlaoke.commands.skill_shortcuts import register_skill_shortcuts
 
 _commands: dict[str, SlashCommand] = {}
 

@@ -14,8 +14,6 @@ Memory Strategy:
 
 from __future__ import annotations
 
-import asyncio
-import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -204,7 +202,7 @@ class HybridModelManager:
 
         status = ModelPoolStatus()
 
-        for tier, config in self.models.items():
+        for _, config in self.models.items():
             config.is_loaded = any(m["name"] == config.name for m in loaded_models)
 
             if config.device == DeviceType.CPU:

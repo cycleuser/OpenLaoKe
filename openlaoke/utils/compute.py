@@ -10,10 +10,10 @@ This module provides comprehensive compute cost estimation for:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class GPUType(str, Enum):
+class GPUType(StrEnum):
     """Supported GPU models."""
 
     # NVIDIA Data Center
@@ -52,7 +52,7 @@ class GPUConfig:
     price_per_hour: float | None = None  # Cloud price per hour (USD)
 
 
-class ComputeProvider(str, Enum):
+class ComputeProvider(StrEnum):
     """Cloud compute providers."""
 
     AWS = "aws"
@@ -376,7 +376,6 @@ class ComputeCalculator:
         # Estimate tokens per second based on model size and GPU
         # Simplified model: throughput scales roughly with TFLOPs / model_size
         effective_tflops = self.get_effective_tflops(precision)
-        memory_bandwidth = gpu.memory_bandwidth_gbps
 
         # Very rough throughput estimate
         if config.model_size_b <= 7:

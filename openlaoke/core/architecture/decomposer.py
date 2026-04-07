@@ -6,10 +6,7 @@ that even gemma3:1b can implement reliably.
 
 from __future__ import annotations
 
-import ast
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from openlaoke.core.architecture.interfaces import (
@@ -17,7 +14,6 @@ from openlaoke.core.architecture.interfaces import (
     CodeTemplate,
     ComponentSpec,
     ComponentType,
-    TaskSize,
     estimate_task_complexity,
     get_template_for_component,
     should_decompose_for_model,

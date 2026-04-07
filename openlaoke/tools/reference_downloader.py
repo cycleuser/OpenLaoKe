@@ -115,9 +115,8 @@ class ReferenceDownloader(Tool):
         """Resolve DOI to PDF URL."""
         doi = source if source.startswith("10.") else None
 
-        if not doi:
-            if "/" in source and not source.startswith("http"):
-                doi = source
+        if not doi and "/" in source and not source.startswith("http"):
+            doi = source
 
         if not doi:
             return None, ""

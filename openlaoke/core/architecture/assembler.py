@@ -7,17 +7,15 @@ from __future__ import annotations
 
 import ast
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openlaoke.core.architecture.decomposer import AtomicTask, TaskGraph
 from openlaoke.core.architecture.interfaces import (
     CodeTemplate,
-    ComponentSpec,
     ComponentType,
 )
-from openlaoke.core.architecture.decomposer import AtomicTask, TaskGraph
 
 
 @dataclass
@@ -192,13 +190,11 @@ class CodeAssembler:
                 if "(" in code and ":" not in code.split("(")[1].split(")")[0]:
                     warnings.append("Consider adding parameter type hints")
 
-            if "docstring" in rule.lower():
-                if '"""' not in code and "'''" not in code:
-                    errors.append("Missing docstring")
+            if "docstring" in rule.lower() and '"""' not in code and "'''" not in code:
+                errors.append("Missing docstring")
 
-            if "test" in rule.lower():
-                if not task.test_required:
-                    warnings.append("Consider adding tests")
+            if "test" in rule.lower() and not task.test_required:
+                warnings.append("Consider adding tests")
 
         return ValidationResult(
             is_valid=len(errors) == 0,

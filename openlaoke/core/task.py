@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openlaoke.types.core_types import (
     TaskId,
@@ -26,15 +28,13 @@ class TaskHandle:
 
     task_id: str
     task: asyncio.Task | None = None
-    cleanup: callable | None = None
+    cleanup: Callable[..., Any] | None = None
 
     async def kill(self) -> None:
         if self.task and not self.task.done():
             self.task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self.task
-            except asyncio.CancelledError:
-                pass
         if self.cleanup:
             self.cleanup()
 
@@ -97,7 +97,7 @@ class TaskManager:
 
             output_chunks: list[bytes] = []
             with open(state.output_file, "a", encoding="utf-8", errors="replace") as f:
-                while True:
+                while proc.stdout is not None:
                     chunk = await proc.stdout.read(4096)
                     if not chunk:
                         break

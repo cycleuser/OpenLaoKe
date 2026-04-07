@@ -13,7 +13,6 @@ from __future__ import annotations
 import platform
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
 
 class OS(StrEnum):
@@ -259,17 +258,12 @@ class POSIXCommands:
     def detect_os(cls) -> OS:
         """Detect current operating system."""
         system = platform.system().lower()
-
-        if system == "linux":
-            return OS.LINUX
-        elif system == "darwin":
-            return OS.MACOS
-        elif system == "windows":
-            return OS.WINDOWS
-        elif system == "freebsd":
-            return OS.FREEBSD
-        else:
-            return OS.UNKNOWN
+        return {
+            "linux": OS.LINUX,
+            "darwin": OS.MACOS,
+            "windows": OS.WINDOWS,
+            "freebsd": OS.FREEBSD,
+        }.get(system, OS.UNKNOWN)
 
     @classmethod
     def list_available_commands(cls) -> list[str]:

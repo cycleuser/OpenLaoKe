@@ -10,18 +10,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Set
+    pass
 
 
 @dataclass
 class ExecutionBoundary:
     """Defines safe execution boundaries."""
 
-    allowed_paths: Set[Path]
-    denied_paths: Set[Path]
+    allowed_paths: set[Path]
+    denied_paths: set[Path]
 
     @classmethod
-    def from_cwd(cls, cwd: str | Path) -> "ExecutionBoundary":
+    def from_cwd(cls, cwd: str | Path) -> ExecutionBoundary:
         """Create boundary from current working directory."""
         cwd_path = Path(cwd).resolve()
 

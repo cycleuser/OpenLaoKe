@@ -19,7 +19,6 @@ Strategies:
 
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -79,7 +78,7 @@ class ModelPreloader:
             try:
                 success = await self._load_model(model, keep_alive)
                 results[model] = success
-            except Exception as e:
+            except Exception:
                 results[model] = False
 
         return results

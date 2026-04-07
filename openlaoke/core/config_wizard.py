@@ -183,48 +183,14 @@ def _get_env_var_name(provider_type: ProviderType) -> str:
 
 
 def _get_provider_status(provider: ProviderConfig) -> str:
+    """Get human-readable status for a provider's API key configuration."""
     if provider.is_local:
         return "[green]✓ local[/green]"
     if provider.api_key:
         return "[green]✓ stored[/green]"
-    env_key = ""
-    if provider.provider_type == ProviderType.ANTHROPIC:
-        env_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    elif provider.provider_type == ProviderType.OPENAI:
-        env_key = os.environ.get("OPENAI_API_KEY", "")
-    elif provider.provider_type == ProviderType.MINIMAX:
-        env_key = os.environ.get("MINIMAX_API_KEY", "")
-    elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
-        env_key = os.environ.get("ALIYUN_API_KEY", "")
-    elif provider.provider_type == ProviderType.AZURE_OPENAI:
-        env_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
-    elif provider.provider_type == ProviderType.GOOGLE:
-        env_key = os.environ.get("GOOGLE_API_KEY", "")
-    elif provider.provider_type == ProviderType.GOOGLE_VERTEX:
-        env_key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-    elif provider.provider_type == ProviderType.AWS_BEDROCK:
-        env_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
-    elif provider.provider_type == ProviderType.XAI:
-        env_key = os.environ.get("XAI_API_KEY", "")
-    elif provider.provider_type == ProviderType.MISTRAL:
-        env_key = os.environ.get("MISTRAL_API_KEY", "")
-    elif provider.provider_type == ProviderType.GROQ:
-        env_key = os.environ.get("GROQ_API_KEY", "")
-    elif provider.provider_type == ProviderType.CEREBRAS:
-        env_key = os.environ.get("CEREBRAS_API_KEY", "")
-    elif provider.provider_type == ProviderType.COHERE:
-        env_key = os.environ.get("COHERE_API_KEY", "")
-    elif provider.provider_type == ProviderType.DEEPINFRA:
-        env_key = os.environ.get("DEEPINFRA_API_KEY", "")
-    elif provider.provider_type == ProviderType.TOGETHERAI:
-        env_key = os.environ.get("TOGETHERAI_API_KEY", "")
-    elif provider.provider_type == ProviderType.PERPLEXITY:
-        env_key = os.environ.get("PERPLEXITY_API_KEY", "")
-    elif provider.provider_type == ProviderType.OPENROUTER:
-        env_key = os.environ.get("OPENROUTER_API_KEY", "")
-    elif provider.provider_type == ProviderType.GITHUB_COPILOT:
-        env_key = os.environ.get("GITHUB_TOKEN", "")
-    if env_key:
+
+    env_var_name = _get_env_var_name(provider.provider_type)
+    if env_var_name and os.environ.get(env_var_name):
         return "[green]✓ env var[/green]"
     return "[yellow]needs setup[/yellow]"
 
@@ -667,7 +633,7 @@ def _detect_ollama_models(base_url: str) -> list[str]:
                         generation_models.append(model)
 
                 return generation_models if generation_models else all_models
-    except Exception as e:
+    except Exception:
         pass
     return []
 

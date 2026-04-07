@@ -13,8 +13,8 @@ from typing import Any
 
 from openlaoke.core.architecture.decomposer import AtomicTask, TaskGraph
 from openlaoke.core.code_validator import CodeValidator
-from openlaoke.core.intent_pipeline import IntentBasedPipeline
 from openlaoke.core.enhanced_knowledge_base import EnhancedKnowledgeBase
+from openlaoke.core.intent_pipeline import IntentBasedPipeline
 
 
 @dataclass
@@ -222,14 +222,12 @@ class AtomicCodeGenerator:
         lines = code.split("\n")
 
         injected_lines = []
-        in_function = False
         function_indent = 0
 
         for i, line in enumerate(lines):
             injected_lines.append(line)
 
             if "def " in line and line.strip().endswith(":"):
-                in_function = True
                 function_indent = len(line) - len(line.lstrip())
 
                 next_idx = i + 1
@@ -291,7 +289,6 @@ class AtomicCodeGenerator:
             "method": "get",
             "response_model": "dict",
             "error_doc": "Error description",
-            "fields": "",
         }
 
         if task.component_spec.api_spec:

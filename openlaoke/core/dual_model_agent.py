@@ -14,19 +14,18 @@ Workflow:
 
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from openlaoke.core.intent_pipeline import IntentBasedPipeline, create_pipeline_for_model
-from openlaoke.core.model_assessment.types import ModelTier
 from openlaoke.core.enhanced_knowledge_base import EnhancedKnowledgeBase
+from openlaoke.core.intent_pipeline import create_pipeline_for_model
+from openlaoke.core.model_assessment.types import ModelTier
 
 if TYPE_CHECKING:
-    from openlaoke.core.state import AppState
     from openlaoke.core.multi_provider_api import MultiProviderClient
+    from openlaoke.core.state import AppState
 
 
 @dataclass
@@ -327,15 +326,16 @@ class DualModelAgent:
             return False, [f"Syntax error: {str(e)}"]
 
         lines = code.strip().split("\n")
-        non_empty_lines = [l for l in lines if l.strip() and not l.strip().startswith("#")]
+        non_empty_lines = [
+            line for line in lines if line.strip() and not line.strip().startswith("#")
+        ]
 
         max_lines = max(task.estimated_lines * 2, 20)
         if len(non_empty_lines) > max_lines:
             return False, [f"Code too long: {len(non_empty_lines)} lines > {max_lines}"]
 
-        if "def " in code:
-            if "return" not in code and "yield" not in code:
-                return False, ["Function missing return statement"]
+        if "def " in code and "return" not in code and "yield" not in code:
+            return False, ["Function missing return statement"]
 
         prompt = f"""Quick check this Python code:
 

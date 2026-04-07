@@ -10,9 +10,8 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
-from openlaoke.core.doc_downloader import DocumentChunk, DocumentationDownloader
+from openlaoke.core.doc_downloader import DocumentationDownloader, DocumentChunk
 
 
 @dataclass
@@ -48,7 +47,7 @@ class Calculator:
     def __init__(self, name: str) -> None:
         self.name = name
         self.result = 0.0
-    
+
     def add(self, x: float, y: float) -> float:
         self.result = x + y
         return self.result
@@ -105,7 +104,7 @@ class Calculator {
         this.name = name;
         this.result = 0;
     }
-    
+
     add(x, y) {
         this.result = x + y;
         return this.result;
@@ -251,7 +250,7 @@ func divide(a, b float64) (float64, error) {
 
         if index_file.exists():
             try:
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index_data = json.load(f)
 
                 for chunk_data in index_data.get("chunks", []):

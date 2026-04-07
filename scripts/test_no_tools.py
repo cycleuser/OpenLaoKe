@@ -1,16 +1,18 @@
 """Test if current model supports tools."""
-from openlaoke.types.providers import MultiProviderConfig
-from openlaoke.core.multi_provider_api import MultiProviderClient
 import asyncio
+
+from openlaoke.core.multi_provider_api import MultiProviderClient
+from openlaoke.types.providers import MultiProviderConfig
+
 
 async def test_model():
     config = MultiProviderConfig.defaults()
     client = MultiProviderClient(config)
-    
+
     # Test gemma3:1b
     model = "gemma3:1b"
     print(f"Testing {model}...")
-    
+
     try:
         # Try a simple request without tools
         response, _, _ = await client.send_message(

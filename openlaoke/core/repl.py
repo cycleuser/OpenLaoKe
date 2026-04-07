@@ -100,9 +100,11 @@ class REPL:
 
             skill = load_skill(potential_name)
             if skill:
-                if hasattr(self.app_state, "active_skills"):
-                    if potential_name not in self.app_state.active_skills:
-                        self.app_state.active_skills.append(potential_name)
+                if (
+                    hasattr(self.app_state, "active_skills")
+                    and potential_name not in self.app_state.active_skills
+                ):
+                    self.app_state.active_skills.append(potential_name)
 
                 self.console.print(f"[green]✓ Skill activated: {skill.name}[/green]")
                 if skill.description:
@@ -153,28 +155,17 @@ class REPL:
     async def _handle_chat(self, user_input: str) -> None:
         """Process a chat message through the AI model."""
         from openlaoke.core.intent_parser import IntentParser, IntentType
-        from openlaoke.core.translation import TranslationPipeline, Language
-
-        translation = TranslationPipeline()
-        english_input, original_lang = translation.prepare_for_processing(user_input)
-
-        if original_lang != Language.ENGLISH:
-            self.console.print(f"[dim]Original: {user_input[:50]}...[/dim]")
-            self.console.print(f"[dim]Translated: {english_input[:50]}...[/dim]")
-            combined_input = f"[Original ({original_lang.value}): {user_input}]\n\n[English translation: {english_input}]"
-        else:
-            combined_input = user_input
 
         if self.app_state.local_mode:
             parser = IntentParser()
-            intent = parser.parse(english_input)
+            intent = parser.parse(user_input)
 
-            if original_lang == Language.ENGLISH and intent.intent_type in [
+            if intent.intent_type in [
                 IntentType.WRITE_PROGRAM,
                 IntentType.WRITE_FUNCTION,
                 IntentType.WRITE_CLASS,
             ]:
-                await self._handle_command("atomic", combined_input)
+                await self._handle_command("atomic", user_input)
                 return
 
         self.app_state.is_running = True
@@ -188,7 +179,7 @@ class REPL:
         else:
             self._current_task_id = None
 
-        user_msg = UserMessage(role=MessageRole.USER, content=combined_input)
+        user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
 
         max_retry_attempts = 3
@@ -316,7 +307,7 @@ class REPL:
                         for tu in msg.tool_uses
                     ]
                 messages.append(assistant_msg)
-            elif msg.role == MessageRole.TOOL:
+            elif msg.role == MessageRole.SYSTEM and hasattr(msg, "tool_use_id") and msg.tool_use_id:
                 messages.append(
                     {
                         "role": "tool",

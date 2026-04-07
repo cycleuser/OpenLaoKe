@@ -130,19 +130,19 @@ class Middleware(ABC):
         """Get the middleware name."""
         return self.__class__.__name__
 
+    @abstractmethod
     def setup(self, context: MiddlewareContext) -> None:
         """Called before the middleware chain starts.
 
         Override this to perform initialization.
         """
-        pass
 
+    @abstractmethod
     def teardown(self, context: MiddlewareContext) -> None:
         """Called after the middleware chain completes.
 
         Override this to perform cleanup.
         """
-        pass
 
     @abstractmethod
     def __call__(

@@ -8,9 +8,7 @@ test and verify until the task is perfectly completed.
 from __future__ import annotations
 
 import asyncio
-import json
 import re
-import subprocess
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -173,7 +171,6 @@ class HyperAutoVerifier:
             Final verification result
         """
         self._iteration_count = 0
-        last_result: VerificationResult | None = None
 
         while self._iteration_count < self.config.max_iterations:
             self._iteration_count += 1
@@ -206,10 +203,10 @@ class HyperAutoVerifier:
                     continue
 
             if not self.config.retry_on_failure:
-                print(f"\n✗ Verification failed, retry disabled")
+                print("\n✗ Verification failed, retry disabled")
                 return result
 
-            print(f"\n→ Issues found, continuing to next iteration...")
+            print("\n→ Issues found, continuing to next iteration...")
 
         print(f"\n⚠ Max iterations ({self.config.max_iterations}) reached")
         return (
@@ -328,7 +325,7 @@ class HyperAutoVerifier:
                 error=stderr.decode() if stderr else "",
                 duration=time.time() - start,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return TestResult(
                 category=TestCategory.SYNTAX,
                 name=f"syntax:{filepath}",
@@ -692,7 +689,7 @@ class HyperAutoVerifier:
                 error="pytest not found, skipping",
                 duration=time.time() - start,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return TestResult(
                 category=TestCategory.UNIT_TEST,
                 name="pytest",
