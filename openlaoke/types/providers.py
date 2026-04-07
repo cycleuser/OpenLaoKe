@@ -31,6 +31,7 @@ class ProviderType(StrEnum):
     OPENROUTER = "openrouter"
     GITHUB_COPILOT = "github_copilot"
     OPENCODE = "opencode"
+    EXTENDED_WEB = "extended_web"
     CUSTOM = "custom"
 
 
@@ -51,6 +52,8 @@ class ProviderConfig:
             return True
         if self.provider_type == ProviderType.OPENCODE:
             return True
+        if self.provider_type == ProviderType.EXTENDED_WEB:
+            return bool(self.api_key)
         return bool(self.api_key and self.api_key != "none")
 
     def get_default_model(self) -> str:
@@ -359,6 +362,24 @@ class MultiProviderConfig:
                         "glm-4.7-free",
                         "mimo-v2-pro-free",
                     ],
+                ),
+                "extended_web": ProviderConfig(
+                    provider_type=ProviderType.EXTENDED_WEB,
+                    base_url="browser://auth",
+                    default_model="deepseek-chat",
+                    models=[
+                        "deepseek-chat",
+                        "deepseek-coder",
+                        "claude-web",
+                        "chatgpt-web",
+                        "qwen-web",
+                        "kimi-web",
+                        "gemini-web",
+                        "grok-web",
+                        "doubao-web",
+                        "glm-web",
+                    ],
+                    is_local=False,
                 ),
             },
             active_provider="ollama",

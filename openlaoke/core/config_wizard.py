@@ -41,28 +41,29 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
 
         providers = [
             ("1", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
-            ("2", "Anthropic", "anthropic", "cloud"),
-            ("3", "OpenAI (GPT-4)", "openai", "cloud"),
-            ("4", "MiniMax", "minimax", "cloud"),
-            ("5", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("6", "Azure OpenAI", "azure_openai", "cloud"),
-            ("7", "Google AI (Gemini)", "google", "cloud"),
-            ("8", "Google Vertex AI", "google_vertex", "cloud"),
-            ("9", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("10", "xAI Grok", "xai", "cloud"),
-            ("11", "Mistral AI", "mistral", "cloud"),
-            ("12", "Groq", "groq", "cloud"),
-            ("13", "Cerebras", "cerebras", "cloud"),
-            ("14", "Cohere", "cohere", "cloud"),
-            ("15", "DeepInfra", "deepinfra", "cloud"),
-            ("16", "Together AI", "togetherai", "cloud"),
-            ("17", "Perplexity", "perplexity", "cloud"),
-            ("18", "OpenRouter", "openrouter", "cloud"),
-            ("19", "GitHub Copilot", "github_copilot", "cloud"),
-            ("20", "Ollama (Local)", "ollama", "local"),
-            ("21", "LM Studio (Local)", "lm_studio", "local"),
-            ("22", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
-            ("23", "Skip (configure later)", "", ""),
+            ("2", "🌐 Extended Web (FREE)", "extended_web", "free"),
+            ("3", "Anthropic", "anthropic", "cloud"),
+            ("4", "OpenAI (GPT-4)", "openai", "cloud"),
+            ("5", "MiniMax", "minimax", "cloud"),
+            ("6", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
+            ("7", "Azure OpenAI", "azure_openai", "cloud"),
+            ("8", "Google AI (Gemini)", "google", "cloud"),
+            ("9", "Google Vertex AI", "google_vertex", "cloud"),
+            ("10", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("11", "xAI Grok", "xai", "cloud"),
+            ("12", "Mistral AI", "mistral", "cloud"),
+            ("13", "Groq", "groq", "cloud"),
+            ("14", "Cerebras", "cerebras", "cloud"),
+            ("15", "Cohere", "cohere", "cloud"),
+            ("16", "DeepInfra", "deepinfra", "cloud"),
+            ("17", "Together AI", "togetherai", "cloud"),
+            ("18", "Perplexity", "perplexity", "cloud"),
+            ("19", "OpenRouter", "openrouter", "cloud"),
+            ("20", "GitHub Copilot", "github_copilot", "cloud"),
+            ("21", "Ollama (Local)", "ollama", "local"),
+            ("22", "LM Studio (Local)", "lm_studio", "local"),
+            ("23", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
+            ("24", "Skip (configure later)", "", ""),
         ]
 
         for opt, name, key, _ptype in providers:
@@ -80,17 +81,17 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
 
         choice = Prompt.ask(
             "Select provider",
-            choices=[str(i) for i in range(1, 24)],
+            choices=[str(i) for i in range(1, 25)],
             default="1",
         )
 
         provider_map = {
             "1": "opencode",
-            "2": "anthropic",
-            "3": "openai",
-            "4": "minimax",
-            "5": "aliyun_coding_plan",
-            "6": "azure_openai",
+            "2": "extended_web",
+            "3": "anthropic",
+            "4": "openai",
+            "5": "minimax",
+            "6": "aliyun_coding_plan",
             "7": "google",
             "8": "google_vertex",
             "9": "aws_bedrock",
@@ -109,7 +110,7 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             "22": "openai_compatible",
         }
 
-        if choice == "23":
+        if choice == "24":
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
@@ -191,6 +192,17 @@ def _get_provider_status(provider: ProviderConfig) -> str:
         return "[green]✓ local[/green]"
     if provider.provider_type == ProviderType.OPENCODE:
         return "[green]✓ FREE (no key needed)[/green]"
+    if provider.provider_type == ProviderType.EXTENDED_WEB:
+        # Check for saved authentications
+        from openlaoke.core.extended_web import BrowserAuthManager
+
+        auth_manager = BrowserAuthManager()
+        saved_auths = auth_manager.list_saved_auths()
+
+        if saved_auths:
+            return f"[green]✓ {len(saved_auths)} authenticated[/green]"
+        else:
+            return "[yellow]needs browser auth[/yellow]"
     if provider.api_key:
         return "[green]✓ stored[/green]"
 
@@ -552,6 +564,100 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         config.providers[key] = provider
 
         console.print(f"\n[green]✓ Configured {key} with model {provider.default_model}[/green]")
+        return config
+
+    elif provider.provider_type == ProviderType.EXTENDED_WEB:
+        console.print("[bold cyan]🌐 Extended Web Configuration[/bold cyan]")
+        console.print()
+        console.print("[dim]Extended Web uses browser-based authentication.[/dim]")
+        console.print("[dim]You'll authenticate via your browser (Chrome/Edge/Firefox).[/dim]")
+        console.print()
+
+        # Check for existing authentication
+        from openlaoke.core.extended_web import BrowserAuthManager
+
+        auth_manager = BrowserAuthManager()
+        saved_auths = auth_manager.list_saved_auths()
+
+        if saved_auths:
+            console.print(f"[green]✓ Found {len(saved_auths)} authenticated service(s):[/green]")
+            for auth in saved_auths:
+                console.print(f"  • {auth}")
+            console.print()
+
+            # Let user select which authenticated service to use
+            console.print("[bold]Select which service to configure as default:[/bold]")
+            for i, auth in enumerate(saved_auths, 1):
+                console.print(f"  [{i}] {auth}")
+
+            choices = [str(i) for i in range(1, len(saved_auths) + 1)]
+            selection = Prompt.ask(
+                "Select service",
+                choices=choices,
+                default="1",
+            )
+            selected_service = saved_auths[int(selection) - 1]
+            provider.default_model = selected_service
+        else:
+            console.print("[yellow]⚠ No authenticated services found.[/yellow]")
+            console.print()
+            console.print("You can authenticate after setup by running:")
+            console.print("  [cyan]python3 quick_auth.py deepseek-chat[/cyan]")
+            console.print("  [cyan]python3 quick_auth_firefox.py deepseek-chat[/cyan]")
+            console.print()
+
+            # Show ALL available models
+            console.print("[bold]Available web services:[/bold]")
+            for i, model in enumerate(provider.models, 1):
+                console.print(f"  [{i}] {model}")
+
+            console.print()
+            selection = Prompt.ask(
+                "Select default model",
+                choices=[str(i) for i in range(1, len(provider.models) + 1)],
+                default="1",
+            )
+            provider.default_model = provider.models[int(selection) - 1]
+
+            console.print()
+            console.print("[dim]Note: You'll need to authenticate before using this service.[/dim]")
+
+        provider.enabled = True
+        config.providers[key] = provider
+
+        console.print(f"\n[green]✓ Configured {key} with model {provider.default_model}[/green]")
+        console.print()
+
+        if not saved_auths:
+            console.print("[bold]Next step: Authenticate your browser[/bold]")
+            console.print()
+            if Confirm.ask("Authenticate now?", default=True):
+                console.print()
+                console.print("[dim]Choose authentication method:[/dim]")
+                console.print("  [1] Chrome/Edge (recommended)")
+                console.print("  [2] Firefox")
+
+                browser_choice = Prompt.ask(
+                    "Select browser",
+                    choices=["1", "2"],
+                    default="1",
+                )
+
+                if browser_choice == "1":
+                    console.print(
+                        f"\n[dim]Running: python3 quick_auth.py {provider.default_model}[/dim]"
+                    )
+                    import subprocess
+
+                    subprocess.run(["python3", "quick_auth.py", provider.default_model])
+                else:
+                    console.print(
+                        f"\n[dim]Running: python3 quick_auth_firefox.py {provider.default_model}[/dim]"
+                    )
+                    import subprocess
+
+                    subprocess.run(["python3", "quick_auth_firefox.py", provider.default_model])
+
         return config
 
     else:
