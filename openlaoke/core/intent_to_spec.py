@@ -49,23 +49,20 @@ class IntentToSpecConverter:
 
         specs = []
 
-        if intent.intent_type == IntentType.WRITE_PROGRAM:
-            specs = self._convert_program_intent(intent)
-        elif intent.intent_type == IntentType.WRITE_FUNCTION:
-            specs = self._convert_function_intent(intent)
-        elif intent.intent_type == IntentType.WRITE_CLASS:
-            specs = self._convert_class_intent(intent)
-        elif intent.intent_type in [
-            IntentType.DEBUG_CODE,
-            IntentType.REFACTOR_CODE,
-            IntentType.TEST_CODE,
-        ]:
-            specs = self._convert_modification_intent(intent)
-        elif intent.intent_type in [
-            IntentType.ANALYZE_CODE,
-            IntentType.DOCUMENT_CODE,
-        ]:
-            specs = self._convert_analysis_intent(intent)
+        intent_handlers = {
+            IntentType.WRITE_PROGRAM: self._convert_program_intent,
+            IntentType.WRITE_FUNCTION: self._convert_function_intent,
+            IntentType.WRITE_CLASS: self._convert_class_intent,
+            IntentType.DEBUG_CODE: self._convert_modification_intent,
+            IntentType.REFACTOR_CODE: self._convert_modification_intent,
+            IntentType.TEST_CODE: self._convert_modification_intent,
+            IntentType.ANALYZE_CODE: self._convert_analysis_intent,
+            IntentType.DOCUMENT_CODE: self._convert_analysis_intent,
+        }
+
+        handler = intent_handlers.get(intent.intent_type)
+        if handler:
+            specs = handler(intent)
 
         errors = []
         warnings = []
@@ -501,7 +498,10 @@ class IntentToSpecConverter:
         return "any"
 
     def _determine_component_type(self, intent: ProgrammingIntent) -> ComponentType:
-        if intent.complexity == TaskComplexity.COMPLEX or intent.complexity == TaskComplexity.MODERATE:
+        if (
+            intent.complexity == TaskComplexity.COMPLEX
+            or intent.complexity == TaskComplexity.MODERATE
+        ):
             return ComponentType.CLASS
         else:
             return ComponentType.FUNCTION

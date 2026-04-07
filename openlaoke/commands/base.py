@@ -1283,6 +1283,18 @@ class HistoryCommand(SlashCommand):
                 return CommandResult(message=f"History cleared for {abs_path}")
             return CommandResult(success=False, message=f"Failed to clear history for {abs_path}")
 
+        # Show history for specific file
+        from openlaoke.utils.file_history import get_file_history
+
+        file_history = get_file_history(abs_path)
+        if not file_history:
+            return CommandResult(message=f"No history found for {abs_path}")
+
+        lines = [f"History for {abs_path}:", ""]
+        for i, snapshot in enumerate(file_history.snapshots):
+            lines.append(f"  Version {i + 1}: {snapshot.timestamp}")
+        return CommandResult(message="\n".join(lines))
+
 
 class AtomicCommand(SlashCommand):
     name = "atomic"
@@ -1468,11 +1480,11 @@ class DualModelCommand(SlashCommand):
             lines = []
             lines.append("[bold green]✓ Dual-model execution completed[/bold green]")
             lines.append("")
-            lines.append(f"[bold]Model Preloading:[/bold]")
+            lines.append("[bold]Model Preloading:[/bold]")
             lines.append(f"  Preloaded: {'✓ Yes' if result.stats.models_preloaded else '✗ No'}")
             lines.append(f"  Preload time: {result.stats.preload_time:.2f}s")
             lines.append("")
-            lines.append(f"[bold]Statistics:[/bold]")
+            lines.append("[bold]Statistics:[/bold]")
             lines.append(
                 f"  Planner calls: {result.stats.planner_calls} ({result.stats.planner_tokens} tokens)"
             )
@@ -1539,8 +1551,6 @@ class PreloadModelsCommand(SlashCommand):
 
         if result["success"]:
             status = await manager.get_status()
-
-            lines = ["[bold green]✓ Models loaded successfully[/bold green]\n"]
 
             if console:
                 table = Table(title="Model Pool Status", show_header=True)

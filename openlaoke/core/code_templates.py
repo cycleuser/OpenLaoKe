@@ -77,19 +77,19 @@ logger = logging.getLogger(__name__)
 def main(input: str, output: str, verbose: bool) -> None:
     """Process input file and generate output."""
     setup_logging(verbose)
-    
+
     input_path = Path(input)
     if not input_path.exists():
         console.print(f"[red]Error: Input file not found: {input}[/red]")
         raise SystemExit(1)
-    
+
     console.print(f"[green]Processing: {input_path}[/green]")
-    
+
     result = process_file(input_path)
-    
+
     output_path = Path(output)
     output_path.write_text(result)
-    
+
     console.print(f"[green]Output saved to: {output_path}[/green]")
 
 
@@ -106,9 +106,9 @@ def process_file(input_path: Path) -> str:
     """Process input file and return result."""
     content = input_path.read_text()
     logger.info(f"Read {len(content)} characters from {input_path}")
-    
+
     result = content.upper()
-    
+
     return result
 
 
@@ -133,23 +133,23 @@ class Config:
     output_dir: Path = Path("output")
     max_workers: int = 4
     timeout: int = 30
-    
+
     @classmethod
     def from_file(cls, config_path: Path) -> Config:
         """Load configuration from JSON file."""
         if not config_path.exists():
             return cls()
-        
+
         with open(config_path) as f:
             data = json.load(f)
-        
+
         return cls(
             input_dir=Path(data.get("input_dir", ".")),
             output_dir=Path(data.get("output_dir", "output")),
             max_workers=data.get("max_workers", 4),
             timeout=data.get("timeout", 30),
         )
-    
+
     def to_file(self, config_path: Path) -> None:
         """Save configuration to JSON file."""
         data = {
@@ -158,7 +158,7 @@ class Config:
             "max_workers": self.max_workers,
             "timeout": self.timeout,
         }
-        
+
         with open(config_path, "w") as f:
             json.dump(data, f, indent=2)
 ''',
@@ -175,11 +175,11 @@ from typing import Any
 def calculate_file_hash(file_path: Path) -> str:
     """Calculate MD5 hash of a file."""
     md5_hash = hashlib.md5()
-    
+
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
             md5_hash.update(chunk)
-    
+
     return md5_hash.hexdigest()
 
 
@@ -377,7 +377,7 @@ class ItemUpdate(BaseModel):
 class Item(ItemBase):
     """Complete item model."""
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -394,20 +394,20 @@ from models import Item, ItemCreate, ItemUpdate
 
 class Database:
     """In-memory database."""
-    
+
     def __init__(self) -> None:
         self._items: dict[int, Item] = {}
         self._next_id = 1
-    
+
     def get_items(self, skip: int = 0, limit: int = 100) -> list[Item]:
         """Get all items with pagination."""
         items = list(self._items.values())
         return items[skip:skip + limit]
-    
+
     def get_item(self, item_id: int) -> Item | None:
         """Get item by ID."""
         return self._items.get(item_id)
-    
+
     def create_item(self, item: ItemCreate) -> Item:
         """Create a new item."""
         now = datetime.now()
@@ -423,15 +423,15 @@ class Database:
         self._items[self._next_id] = new_item
         self._next_id += 1
         return new_item
-    
+
     def update_item(self, item_id: int, item: ItemUpdate) -> Item | None:
         """Update an item."""
         if item_id not in self._items:
             return None
-        
+
         existing = self._items[item_id]
         update_data = item.model_dump(exclude_unset=True)
-        
+
         updated_item = Item(
             id=existing.id,
             name=update_data.get("name", existing.name),
@@ -441,17 +441,17 @@ class Database:
             created_at=existing.created_at,
             updated_at=datetime.now(),
         )
-        
+
         self._items[item_id] = updated_item
         return updated_item
-    
+
     def delete_item(self, item_id: int) -> bool:
         """Delete an item."""
         if item_id not in self._items:
             return False
         del self._items[item_id]
         return True
-    
+
     def close(self) -> None:
         """Close database connection."""
         self._items.clear()
@@ -518,7 +518,7 @@ class DataConfig(BaseModel):
     output_file: Path
     chunk_size: int = 10000
     max_workers: int = 4
-    
+
     @validator("input_file")
     def input_must_exist(cls, v: Path) -> Path:
         if not v.exists():
@@ -528,15 +528,15 @@ class DataConfig(BaseModel):
 
 class DataProcessor:
     """Process large datasets in parallel."""
-    
+
     def __init__(self, config: DataConfig) -> None:
         self.config = config
         self.stats: dict[str, Any] = {}
-    
+
     def process(self) -> pd.DataFrame:
         """Process data in chunks."""
         logger.info(f"Processing {self.config.input_file}")
-        
+
         chunks = []
         for chunk in pd.read_csv(
             self.config.input_file,
@@ -544,39 +544,39 @@ class DataProcessor:
         ):
             processed = self._process_chunk(chunk)
             chunks.append(processed)
-        
+
         result = pd.concat(chunks, ignore_index=True)
-        
+
         result.to_csv(self.config.output_file, index=False)
         logger.info(f"Saved to {self.config.output_file}")
-        
+
         return result
-    
+
     def _process_chunk(self, chunk: pd.DataFrame) -> pd.DataFrame:
         """Process a single chunk."""
         chunk = chunk.dropna()
-        
+
         numeric_cols = chunk.select_dtypes(include=[np.number]).columns
         chunk[numeric_cols] = chunk[numeric_cols].fillna(0)
-        
+
         return chunk
-    
+
     def process_parallel(self) -> pd.DataFrame:
         """Process data in parallel using multiprocessing."""
         logger.info(f"Parallel processing with {self.config.max_workers} workers")
-        
+
         chunks = list(pd.read_csv(
             self.config.input_file,
             chunksize=self.config.chunk_size
         ))
-        
+
         results = []
         with ProcessPoolExecutor(max_workers=self.config.max_workers) as executor:
             futures = {
                 executor.submit(self._process_chunk, chunk): i
                 for i, chunk in enumerate(chunks)
             }
-            
+
             for future in as_completed(futures):
                 chunk_id = futures[future]
                 try:
@@ -585,12 +585,12 @@ class DataProcessor:
                     logger.info(f"Processed chunk {chunk_id}")
                 except Exception as e:
                     logger.error(f"Error in chunk {chunk_id}: {e}")
-        
+
         final = pd.concat(results, ignore_index=True)
         final.to_csv(self.config.output_file, index=False)
-        
+
         return final
-    
+
     def get_statistics(self, df: pd.DataFrame) -> dict[str, Any]:
         """Calculate data statistics."""
         return {
@@ -605,22 +605,22 @@ class DataProcessor:
 def main() -> None:
     """Main entry point."""
     import sys
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    
+
     config = DataConfig(
         input_file=Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data.csv"),
         output_file=Path("output.csv"),
         chunk_size=10000,
         max_workers=4,
     )
-    
+
     processor = DataProcessor(config)
     result = processor.process_parallel()
-    
+
     stats = processor.get_statistics(result)
     print(f"Processed {stats['rows']} rows, {stats['columns']} columns")
     print(f"Memory: {stats['memory_mb']:.2f} MB")
@@ -642,30 +642,30 @@ from pydantic import BaseModel, validator
 
 class DataValidator(BaseModel):
     """Validate data rows."""
-    
+
     id: int
     name: str
     value: float
     category: str
-    
+
     @validator("id")
     def id_must_be_positive(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("ID must be positive")
         return v
-    
+
     @validator("name")
     def name_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Name cannot be empty")
         return v.strip()
-    
+
     @validator("value")
     def value_in_range(cls, v: float) -> float:
         if not 0 <= v <= 1000:
             raise ValueError("Value must be between 0 and 1000")
         return v
-    
+
     @validator("category")
     def category_valid(cls, v: str) -> str:
         valid = ["A", "B", "C", "D"]
@@ -678,14 +678,14 @@ def validate_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     """Validate a DataFrame."""
     errors = []
     valid_rows = []
-    
+
     for idx, row in df.iterrows():
         try:
             validated = DataValidator(**row.to_dict())
             valid_rows.append(validated.dict())
         except Exception as e:
             errors.append(f"Row {idx}: {e}")
-    
+
     return pd.DataFrame(valid_rows), errors
 ''',
         },

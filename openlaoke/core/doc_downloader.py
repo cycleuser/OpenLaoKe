@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 
-from openlaoke.core.doc_sources import DOC_SOURCES, get_sources_for_task, LANGUAGE_ALIASES
+from openlaoke.core.doc_sources import DOC_SOURCES, LANGUAGE_ALIASES
 
 
 @dataclass
@@ -64,7 +64,7 @@ class DocumentationDownloader:
 
             if cache_file.exists() and not force:
                 print(f"[{source_name}] Loading from cache: {url}")
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, encoding="utf-8") as f:
                     cached_data = json.load(f)
                 content = cached_data["content"]
                 title = cached_data.get("title", f"{source_name} - Part {url_idx + 1}")

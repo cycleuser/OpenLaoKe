@@ -12,7 +12,6 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 
 @dataclass
@@ -78,8 +77,6 @@ class CodeValidator:
 
             # Fix missing closing parentheses
             open_parens = line.count("(") - line.count(")")
-            open_brackets = line.count("[") - line.count("]")
-            open_braces = line.count("{") - line.count("}")
 
             if open_parens > 0 and i + 1 < len(lines):
                 # Look ahead for the rest
@@ -89,11 +86,10 @@ class CodeValidator:
                     pass
 
             # Fix else statement
-            if "else:" in line and "else" in line:
+            if "else:" in line and "else" in line and not line.strip().startswith("else:"):
                 # Ensure else has proper indentation
-                if not line.strip().startswith("else:"):
-                    indent = len(line) - len(line.lstrip())
-                    fixed_line = " " * indent + "else:\n"
+                indent = len(line) - len(line.lstrip())
+                fixed_line = " " * indent + "else:\n"
 
             # Fix common patterns
             if "return x = " in line:

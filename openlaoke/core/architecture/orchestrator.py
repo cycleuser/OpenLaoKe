@@ -23,8 +23,6 @@ from openlaoke.core.architecture.decomposer import (
     create_decomposer_for_model,
 )
 from openlaoke.core.architecture.interfaces import (
-    ComponentSpec,
-    ComponentType,
     TaskSize,
     estimate_task_complexity,
 )
@@ -166,7 +164,7 @@ class IncrementalOrchestrator:
     def _get_ready_steps(self, workflow: IncrementalWorkflow) -> list[WorkflowStep]:
         ready = []
 
-        for step_id, step in workflow.steps.items():
+        for _, step in workflow.steps.items():
             if step.status in ["completed", "failed"]:
                 continue
 

@@ -38,7 +38,6 @@ class ToolExecutor:
 
             if not tool:
                 return ToolResultBlock(
-                    type="tool_result",
                     tool_use_id="unknown",
                     content=f"Error: Tool '{tool_name}' not found",
                     is_error=True,
@@ -57,7 +56,6 @@ class ToolExecutor:
 
         except Exception as e:
             return ToolResultBlock(
-                type="tool_result",
                 tool_use_id="error",
                 content=f"Exception executing tool: {e}",
                 is_error=True,

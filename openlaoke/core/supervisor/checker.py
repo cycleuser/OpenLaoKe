@@ -62,34 +62,31 @@ class TaskCompletionChecker:
         requirement: TaskRequirements,
         artifacts: dict[str, Any],
     ) -> RequirementCheckResult:
+        """Dispatch check to appropriate handler based on check type."""
         check_type = requirement.check_type
 
-        if check_type == "file_exists":
-            return self._check_file_exists(requirement, artifacts)
-        elif check_type == "word_count":
-            return self._check_word_count(requirement, artifacts)
-        elif check_type == "structure":
-            return self._check_structure(requirement, artifacts)
-        elif check_type == "contains":
-            return self._check_contains(requirement, artifacts)
-        elif check_type == "has_numbers":
-            return self._check_has_numbers(requirement, artifacts)
-        elif check_type == "files_created":
-            return self._check_files_created(requirement, artifacts)
-        elif check_type == "anti_ai_check":
-            return self._check_anti_ai(requirement, artifacts)
-        elif check_type == "references_exist":
-            return self._check_references_exist(requirement, artifacts)
-        elif check_type == "citations_quality":
-            return self._check_citations_quality(requirement, artifacts)
-        elif check_type == "general":
-            return self._check_general(requirement, artifacts)
-        else:
-            return RequirementCheckResult(
-                requirement=requirement,
-                satisfied=False,
-                message=f"Unknown check type: {check_type}",
-            )
+        check_handlers = {
+            "file_exists": self._check_file_exists,
+            "word_count": self._check_word_count,
+            "structure": self._check_structure,
+            "contains": self._check_contains,
+            "has_numbers": self._check_has_numbers,
+            "files_created": self._check_files_created,
+            "anti_ai_check": self._check_anti_ai,
+            "references_exist": self._check_references_exist,
+            "citations_quality": self._check_citations_quality,
+            "general": self._check_general,
+        }
+
+        handler = check_handlers.get(check_type)
+        if handler:
+            return handler(requirement, artifacts)
+
+        return RequirementCheckResult(
+            requirement=requirement,
+            satisfied=False,
+            message=f"Unknown check type: {check_type}",
+        )
 
     def _check_file_exists(
         self,
@@ -349,23 +346,42 @@ class TaskCompletionChecker:
                             issues.append(f"Syntax error in {file_path}: {e}")
                             suggestions.append(f"Fix syntax error: {e}")
 
-                        function_count = len(re.findall(r"^\s*def\s+\w+", code_content, re.MULTILINE))
+                        function_count = len(
+                            re.findall(r"^\s*def\s+\w+", code_content, re.MULTILINE)
+                        )
                         pass_count = len(re.findall(r"^\s*pass\s*$", code_content, re.MULTILINE))
 
-                        if pass_count > 0 and function_count > 0:
-                            if pass_count >= function_count * 0.5:
-                                issues.append(f"Too many 'pass' statements ({pass_count}) - implementation incomplete")
-                                suggestions.append("Replace 'pass' statements with actual implementation")
+                        if (
+                            pass_count > 0
+                            and function_count > 0
+                            and pass_count >= function_count * 0.5
+                        ):
+                            issues.append(
+                                f"Too many 'pass' statements ({pass_count}) - implementation incomplete"
+                            )
+                            suggestions.append(
+                                "Replace 'pass' statements with actual implementation"
+                            )
 
-                        has_import = bool(re.search(r"^import\s+|^from\s+\w+\s+import", code_content, re.MULTILINE))
+                        bool(
+                            re.search(
+                                r"^import\s+|^from\s+\w+\s+import", code_content, re.MULTILINE
+                            )
+                        )
                         has_loop = bool(re.search(r"\bfor\s+\w+\s+in\s+|\bwhile\s+", code_content))
                         has_condition = bool(re.search(r"\bif\s+", code_content))
                         has_return = bool(re.search(r"\breturn\s+", code_content))
 
-                        if function_count > 0:
-                            if not has_loop and not has_condition and not has_return:
-                                issues.append("Functions lack computational logic (no loops/conditions/returns)")
-                                suggestions.append("Add actual computational logic to functions")
+                        if (
+                            function_count > 0
+                            and not has_loop
+                            and not has_condition
+                            and not has_return
+                        ):
+                            issues.append(
+                                "Functions lack computational logic (no loops/conditions/returns)"
+                            )
+                            suggestions.append("Add actual computational logic to functions")
 
                             if requirement.name == "no_placeholder_pass" and pass_count > 0:
                                 issues.append(f"Found {pass_count} placeholder 'pass' statements")

@@ -6,6 +6,7 @@ import json
 import os
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -81,37 +82,46 @@ class AppState:
             self.working_directory = self.cwd
 
     def get_cwd(self) -> str:
+        """Get current working directory."""
         return self.cwd
 
     def set_cwd(self, path: str) -> None:
+        """Set current working directory and sync working_directory."""
         self.cwd = os.path.abspath(path)
         self.working_directory = self.cwd
 
     def get_env_vars(self) -> dict[str, str]:
+        """Get merged environment variables (system + session overrides)."""
         env = os.environ.copy()
         env.update(self.env_vars)
         return env
 
     def add_message(self, message: Message) -> None:
+        """Add message to history with timestamp, notify listeners, and persist."""
         message.timestamp = time.time()
         self.messages.append(message)
         self._notify()
         self._persist()
 
     def get_messages(self) -> list[Message]:
+        """Get a copy of all messages."""
         return list(self.messages)
 
     def get_last_message(self) -> Message | None:
+        """Get most recent message or None if history is empty."""
         return self.messages[-1] if self.messages else None
 
     def get_message_count(self) -> int:
+        """Get total number of messages in history."""
         return len(self.messages)
 
     def add_task(self, task: TaskState) -> None:
+        """Register a new task and notify listeners."""
         self.tasks[task.id] = task
         self._notify()
 
     def update_task(self, task: TaskState) -> None:
+        """Update task state and persist changes."""
         self.tasks[task.id] = task
         self._notify()
         self._persist()
@@ -155,10 +165,8 @@ class AppState:
 
     def _notify(self) -> None:
         for listener in self._listeners:
-            try:
+            with suppress(Exception):
                 listener(self)
-            except Exception:
-                pass
 
     def set_persist_path(self, path: str) -> None:
         self._persist_path = path

@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
 
 class Language(StrEnum):
@@ -75,7 +74,7 @@ class LanguageDetector:
         if not text or not text.strip():
             return Language.ENGLISH
 
-        text_lower = text.lower()
+        text.lower()
 
         if re.search(r"[\u4e00-\u9fff]", text):
             return Language.CHINESE
@@ -159,19 +158,17 @@ class UniversalTranslator:
             "配置": "config",
             "初始化": "initialize",
             "加载": "load",
-            "卸载": "unload",
+            "卸载": "uninstall",
             "启动": "start",
             "停止": "stop",
             "重启": "restart",
             "安装": "install",
-            "卸载": "uninstall",
             "更新": "update",
             "版本": "version",
             "日志": "log",
             "异常": "exception",
             "警告": "warning",
             "信息": "info",
-            "调试": "debug",
         },
         Language.JAPANESE: {
             "書": "write",
@@ -181,7 +178,6 @@ class UniversalTranslator:
             "アプリ": "application",
             "関数": "function",
             "クラス": "class",
-            "デバッグ": "debug",
             "テスト": "test",
         },
         Language.KOREAN: {

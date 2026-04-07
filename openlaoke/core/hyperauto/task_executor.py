@@ -113,24 +113,28 @@ IMPORTANT: Your goal is to complete THIS specific sub-task fully, not partially.
                 }
 
             for tool_call in tool_calls:
+                tool_name: str = ""
+                tool_input_dict: dict[str, Any] = {}
+                input_data: Any = {}
                 if isinstance(tool_call, dict):
-                    tool_name = tool_call.get("name") or tool_call.get("function", {}).get(
-                        "name", ""
-                    )
-                    tool_input = tool_call.get("input") or tool_call.get("function", {}).get(
-                        "arguments", {}
-                    )
+                    func_data = tool_call.get("function", {})
+                    if isinstance(func_data, dict):
+                        name_val = tool_call.get("name")
+                        tool_name = str(name_val) if name_val else str(func_data.get("name", ""))
+                        input_data = tool_call.get("input") or func_data.get("arguments", {})
                 else:
-                    tool_name = getattr(tool_call, "name", "")
-                    tool_input = getattr(tool_call, "input", getattr(tool_call, "arguments", {}))
+                    tool_name = str(getattr(tool_call, "name", ""))
+                    input_data = getattr(tool_call, "input", getattr(tool_call, "arguments", {}))
 
-                if isinstance(tool_input, str):
+                if isinstance(input_data, str):
                     try:
-                        tool_input = json.loads(tool_input)
+                        tool_input_dict = json.loads(input_data)
                     except json.JSONDecodeError:
-                        tool_input = {}
+                        tool_input_dict = {}
+                elif isinstance(input_data, dict):
+                    tool_input_dict = input_data
 
-                result = await executor.execute_tool(tool_name, tool_input)
+                result = await executor.execute_tool(tool_name, tool_input_dict)
 
                 result_text = (
                     result.content
@@ -141,7 +145,7 @@ IMPORTANT: Your goal is to complete THIS specific sub-task fully, not partially.
                 all_results.append(
                     {
                         "tool": tool_name,
-                        "input": tool_input,
+                        "input": tool_input_dict,
                         "result": result_text[:1000],
                         "is_error": result.is_error,
                     }
@@ -150,17 +154,19 @@ IMPORTANT: Your goal is to complete THIS specific sub-task fully, not partially.
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
-                            {
-                                "id": f"call_{iteration}_{tool_name}",
-                                "type": "function",
-                                "function": {
-                                    "name": tool_name,
-                                    "arguments": json.dumps(tool_input),
-                                },
-                            }
-                        ],
+                        "content": "",
+                        "tool_calls": json.dumps(
+                            [
+                                {
+                                    "id": f"call_{iteration}_{tool_name}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_name,
+                                        "arguments": json.dumps(tool_input_dict),
+                                    },
+                                }
+                            ]
+                        ),
                     }
                 )
 

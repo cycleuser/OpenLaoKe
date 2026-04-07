@@ -53,7 +53,7 @@ class IntentBasedPipeline:
         intent = self.parser.parse(user_request)
 
         if intent.intent_type == IntentType.UNKNOWN:
-            questions = self.parser.suggest_clarifications(intent)
+            self.parser.suggest_clarifications(intent)
             return ProcessingPipelineResult(
                 success=False,
                 intent=intent,
@@ -140,7 +140,9 @@ class IntentBasedPipeline:
 
         return plan
 
-    def generate_task_prompt(self, task: AtomicTask, context: dict[str, Any] = {}) -> str:
+    def generate_task_prompt(self, task: AtomicTask, context: dict[str, Any] | None = None) -> str:
+        if context is None:
+            context = {}
         prompt_parts = [
             f"Task: {task.description}",
             f"Estimated complexity: {task.estimated_lines} lines",
@@ -208,18 +210,18 @@ class IntentBasedPipeline:
         if len(lines) > max_allowed_lines:
             errors.append(f"Code too long: {len(lines)} lines > {max_allowed_lines} allowed")
 
-        non_empty_lines = [l for l in lines if l.strip() and not l.strip().startswith("#")]
+        non_empty_lines = [
+            line for line in lines if line.strip() and not line.strip().startswith("#")
+        ]
         if len(non_empty_lines) > 25:
             errors.append(f"Too many non-empty lines: {len(non_empty_lines)} > 25")
 
         for rule in task.validation_rules:
-            if "type hints" in rule.lower():
-                if "def " in code and " -> " not in code:
-                    pass
+            if "type hints" in rule.lower() and "def " in code and " -> " not in code:
+                pass
 
-            if "docstring" in rule.lower():
-                if '"""' not in code and "'''" not in code:
-                    pass
+            if "docstring" in rule.lower() and '"""' not in code and "'''" not in code:
+                pass
 
         return len(errors) == 0, errors
 

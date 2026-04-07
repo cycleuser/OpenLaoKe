@@ -65,11 +65,11 @@ class ReadTool(Tool):
             return ToolResultBlock(tool_use_id=ctx.tool_use_id, content=content)
 
         try:
-            with open(abs_path, "rb") as f:
-                raw = f.read()
+            with open(abs_path, "rb") as file_handle:
+                raw = file_handle.read()
 
-            detected = chardet.detect(raw)
-            encoding = detected.get("encoding", "utf-8") or "utf-8"
+            detected = chardet.detect(raw) or {}
+            encoding = detected.get("encoding") or "utf-8"
 
             try:
                 text = raw.decode(encoding)

@@ -19,6 +19,7 @@ from openlaoke.core.hyperauto.types import (
     SubTaskStatus,
     WorkflowContext,
 )
+from openlaoke.core.hyperauto.verifier import VerificationResult
 from openlaoke.core.skill_system import Skill, SkillRegistry, get_skill_registry
 
 if TYPE_CHECKING:
@@ -206,7 +207,7 @@ class HyperAutoAgent:
         self,
         files_created: list[str] | None = None,
         files_modified: list[str] | None = None,
-    ) -> "VerificationResult":
+    ) -> VerificationResult:
         """Verify that the task is perfectly completed.
 
         This runs the autonomous verification loop that tests
@@ -251,7 +252,7 @@ class HyperAutoAgent:
             return False
 
         for task in failed_tasks:
-            task.status = "pending"
+            task.status = SubTaskStatus.PENDING
             task.error = None
             task.result = None
 

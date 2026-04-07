@@ -231,11 +231,10 @@ class AutocompleteManager:
 
         # 检查是否有空格（表示命令/技能名结束）
         text_between = text[trigger_pos:cursor_pos]
-        if " " in text_between:
+        if " " in text_between and self.state.mode == "/" and len(text_between.strip().split()) > 1:
             # 对于 / 命令，如果有空格表示命令结束，关闭补全
-            if self.state.mode == "/" and len(text_between.strip().split()) > 1:
-                self.state.reset()
-                return
+            self.state.reset()
+            return
 
         # 更新搜索文本
         search_text = text[trigger_pos + 1 : cursor_pos]
@@ -386,10 +385,9 @@ def setup_readline_completion():
                 manager.start_completion("/", len(text), text)
 
         # 返回补全项
-        if manager.state.visible and manager.state.options:
-            if state < len(manager.state.options):
-                opt = manager.state.options[state]
-                return opt.display
+        if manager.state.visible and manager.state.options and state < len(manager.state.options):
+            opt = manager.state.options[state]
+            return opt.display
 
         return None
 
