@@ -44,7 +44,7 @@ WEB_PROVIDERS: dict[WebProviderType, WebProviderConfig] = {
         login_url="https://chat.deepseek.com/login",
         api_endpoint="https://chat.deepseek.com/api/v1/chat/completions",
         cookie_domains=["chat.deepseek.com", "deepseek.com"],
-        required_cookies=["d_id", "ds_session_id"],
+        required_cookies=["ds_session_id"],
         bearer_token=False,
         custom_headers={
             "Referer": "https://chat.deepseek.com/",
@@ -58,7 +58,7 @@ WEB_PROVIDERS: dict[WebProviderType, WebProviderConfig] = {
         login_url="https://chat.deepseek.com/login",
         api_endpoint="https://chat.deepseek.com/api/v1/chat/completions",
         cookie_domains=["chat.deepseek.com", "deepseek.com"],
-        required_cookies=["d_id", "ds_session_id"],
+        required_cookies=["ds_session_id"],
         bearer_token=False,
         custom_headers={
             "Referer": "https://chat.deepseek.com/",
@@ -96,15 +96,15 @@ WEB_PROVIDERS: dict[WebProviderType, WebProviderConfig] = {
     "qwen-web": WebProviderConfig(
         provider_type="qwen-web",
         name="Qwen Web (通义千问)",
-        base_url="https://www.qianwen.com",
-        login_url="https://www.qianwen.com",
-        api_endpoint="https://www.qianwen.com/api/chat",
-        cookie_domains=["qianwen.com", "aliyun.com"],
-        required_cookies=["_tb_token_", "cookie2"],
+        base_url="https://chat.qwen.ai",
+        login_url="https://chat.qwen.ai",
+        api_endpoint="https://chat.qwen.ai/api/v2/chat/completions",
+        cookie_domains=["qianwen.com", "qwen.ai", "tongyi.aliyun.com"],
+        required_cookies=["qwen_session"],
         bearer_token=False,
         custom_headers={
-            "Referer": "https://www.qianwen.com/",
-            "Origin": "https://www.qianwen.com",
+            "Referer": "https://chat.qwen.ai/",
+            "Origin": "https://chat.qwen.ai",
         },
     ),
     "kimi-web": WebProviderConfig(

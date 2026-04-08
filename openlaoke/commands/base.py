@@ -231,7 +231,16 @@ class ModelCommand(SlashCommand):
             provider_name = ctx.app_state.multi_provider_config.active_provider
             provider = ctx.app_state.multi_provider_config.providers.get(provider_name)
             if provider:
-                models = provider.models
+                # For Ollama, fetch models dynamically
+                if provider_name == "ollama":
+                    models = self._get_ollama_models(provider.base_url)
+                    if models:
+                        provider.models = models
+                    else:
+                        models = provider.models
+                else:
+                    models = provider.models
+
                 lines = [
                     f"[bold]Current provider:[/bold] {provider_name}",
                     f"[bold]Current model:[/bold] {current_model}",
@@ -246,8 +255,8 @@ class ModelCommand(SlashCommand):
                         "",
                         "[dim]Usage:[/dim]",
                         "  /model <name>        - Switch to specific model",
-                        "  /model <1-8>         - Select by index number",
-                        "  /model #<1-8>        - Select by index (with # prefix)",
+                        f"  /model <1-{len(models)}>         - Select by index number",
+                        f"  /model #<1-{len(models)}>        - Select by index (with # prefix)",
                         "  /model <provider>/<model> - Switch provider and model",
                         "  /model -l            - List all models from all providers",
                         "  /model -p            - List all providers",
@@ -256,6 +265,41 @@ class ModelCommand(SlashCommand):
                 return CommandResult(message="\n".join(lines))
 
         return CommandResult(message=f"Current model: {current_model}")
+
+    def _get_ollama_models(self, base_url: str) -> list[str]:
+        """Fetch available models from Ollama."""
+        try:
+            import httpx
+
+            url = base_url.replace("/v1", "/api/tags")
+            with httpx.Client(timeout=3.0) as client:
+                response = client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    all_models = [m["name"] for m in data.get("models", [])]
+
+                    # Filter out embedding models
+                    embedding_keywords = [
+                        "embed",
+                        "embedding",
+                        "rerank",
+                        "reranker",
+                        "minilm",
+                        "arctic-embed",
+                        "bge-",
+                        "nomic-embed",
+                        "paraphrase",
+                        "granite-embedding",
+                    ]
+
+                    return [
+                        m
+                        for m in all_models
+                        if not any(kw in m.lower() for kw in embedding_keywords)
+                    ] or all_models
+        except Exception:
+            pass
+        return []
 
     def _list_all_models(self, ctx: CommandContext) -> CommandResult:
         """List models from all configured providers."""
@@ -271,13 +315,23 @@ class ModelCommand(SlashCommand):
             if not provider.enabled:
                 continue
 
+            # For Ollama, fetch models dynamically
+            if provider_name == "ollama":
+                models = self._get_ollama_models(provider.base_url)
+                if models:
+                    provider.models = models
+                else:
+                    models = provider.models
+            else:
+                models = provider.models
+
             is_current = provider_name == current_provider
             header = f"[bold cyan]{provider_name}[/bold cyan]"
             if is_current:
                 header += " [green](active)[/green]"
             lines.append(header)
 
-            for model in provider.models:
+            for model in models:
                 marker = ""
                 if is_current and model == current_model:
                     marker = " [cyan](current)[/cyan]"
@@ -332,6 +386,13 @@ class ProviderCommand(SlashCommand):
         if not ctx.app_state.multi_provider_config:
             return CommandResult(message="No provider configured. Run --config first.")
 
+        # Get list of enabled providers
+        enabled_providers = [
+            (name, p)
+            for name, p in ctx.app_state.multi_provider_config.providers.items()
+            if p.enabled
+        ]
+
         # Show current provider if no args
         if not args:
             current_provider = ctx.app_state.multi_provider_config.active_provider
@@ -343,46 +404,63 @@ class ProviderCommand(SlashCommand):
                 "[bold]Available providers:[/bold]",
             ]
 
-            for provider_name, provider in ctx.app_state.multi_provider_config.providers.items():
-                if not provider.enabled:
-                    continue
-
+            for i, (provider_name, provider) in enumerate(enabled_providers, 1):
                 status = ""
                 if provider_name == current_provider:
                     status = " [green](active)[/green]"
                 elif provider.is_configured():
                     status = " [yellow](ready)[/yellow]"
 
-                lines.append(f"  {provider_name}{status}")
+                model_info = provider.default_model or (
+                    provider.models[0] if provider.models else ""
+                )
+                model_str = f" [dim]({model_info})[/dim]" if model_info else ""
+
+                lines.append(f"  [{i}] {provider_name}{status}{model_str}")
 
             lines.extend(
                 [
                     "",
-                    "[dim]Usage: /provider <name> - Switch to a different provider[/dim]",
+                    "[dim]Usage:[/dim]",
+                    "  /provider <name>   - Switch to a provider by name",
+                    "  /provider <1-n>    - Switch by index number",
+                    "  /provider #<1-n>   - Switch by index (with # prefix)",
                 ]
             )
             return CommandResult(message="\n".join(lines))
 
-        # Switch to specified provider
-        provider_name = args.lower()
+        # Check if input is a number (select by index)
+        if args.isdigit() or (args.startswith("#") and args[1:].isdigit()):
+            index_str = args[1:] if args.startswith("#") else args
+            try:
+                index = int(index_str)
+            except ValueError:
+                return CommandResult(success=False, message=f"Invalid index: {args}")
 
-        if provider_name not in ctx.app_state.multi_provider_config.providers:
-            available = [
-                name
-                for name, p in ctx.app_state.multi_provider_config.providers.items()
-                if p.enabled
-            ]
-            return CommandResult(
-                success=False,
-                message=f"Provider '{provider_name}' not found. Available: {', '.join(available)}",
-            )
+            if index < 1 or index > len(enabled_providers):
+                return CommandResult(
+                    success=False,
+                    message=f"Invalid index {index}. Available: 1-{len(enabled_providers)}",
+                )
 
-        provider = ctx.app_state.multi_provider_config.providers[provider_name]
-        if not provider.enabled:
-            return CommandResult(
-                success=False,
-                message=f"Provider '{provider_name}' is disabled. Run --config to enable.",
-            )
+            provider_name, provider = enabled_providers[index - 1]
+        else:
+            # Switch to specified provider by name
+            provider_name = args.lower()
+
+            if provider_name not in ctx.app_state.multi_provider_config.providers:
+                available = [name for name, _ in enabled_providers]
+                return CommandResult(
+                    success=False,
+                    message=f"Provider '{provider_name}' not found. Available: {', '.join(available)}",
+                )
+
+            provider = ctx.app_state.multi_provider_config.providers[provider_name]
+            if not provider.enabled:
+                return CommandResult(
+                    success=False,
+                    message=f"Provider '{provider_name}' is disabled. Run --config to enable.",
+                )
 
         if not provider.is_configured() and not provider.is_local:
             return CommandResult(
@@ -394,7 +472,7 @@ class ProviderCommand(SlashCommand):
         ctx.app_state.multi_provider_config.active_provider = provider_name
 
         # Set default model for this provider
-        default_model = provider.default_model or provider.models[0] if provider.models else ""
+        default_model = provider.default_model or (provider.models[0] if provider.models else "")
         if default_model:
             ctx.app_state.session_config.model = default_model
             ctx.app_state.multi_provider_config.active_model = default_model

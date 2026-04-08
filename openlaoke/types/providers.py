@@ -31,7 +31,6 @@ class ProviderType(StrEnum):
     OPENROUTER = "openrouter"
     GITHUB_COPILOT = "github_copilot"
     OPENCODE = "opencode"
-    EXTENDED_WEB = "extended_web"
     CUSTOM = "custom"
 
 
@@ -52,8 +51,6 @@ class ProviderConfig:
             return True
         if self.provider_type == ProviderType.OPENCODE:
             return True
-        if self.provider_type == ProviderType.EXTENDED_WEB:
-            return bool(self.api_key)
         return bool(self.api_key and self.api_key != "none")
 
     def get_default_model(self) -> str:
@@ -94,25 +91,60 @@ class MultiProviderConfig:
     def list_available_providers(self) -> list[str]:
         return [name for name, p in self.providers.items() if p.is_configured()]
 
+    @staticmethod
+    def _detect_ollama_models(base_url: str = "http://localhost:11434") -> list[str]:
+        """Try to detect available Ollama models from local installation."""
+        try:
+            import httpx
+
+            url = f"{base_url}/api/tags"
+
+            with httpx.Client(timeout=3.0) as client:
+                response = client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    all_models = [m["name"] for m in data.get("models", [])]
+
+                    # Filter out embedding models
+                    embedding_keywords = [
+                        "embed",
+                        "embedding",
+                        "rerank",
+                        "reranker",
+                        "minilm",
+                        "arctic-embed",
+                        "bge-",
+                        "nomic-embed",
+                        "paraphrase",
+                        "granite-embedding",
+                    ]
+
+                    generation_models = []
+                    for model in all_models:
+                        model_lower = model.lower()
+                        is_embedding = any(kw in model_lower for kw in embedding_keywords)
+
+                        if not is_embedding:
+                            generation_models.append(model)
+
+                    return generation_models if generation_models else all_models
+        except Exception:
+            pass
+        return []
+
     @classmethod
     def defaults(cls) -> MultiProviderConfig:
+        # Try to detect Ollama models dynamically
+        ollama_models = cls._detect_ollama_models()
+        ollama_default = ollama_models[0] if ollama_models else "gemma4:e2b"
+
         return cls(
             providers={
                 "ollama": ProviderConfig(
                     provider_type=ProviderType.OLLAMA,
                     base_url="http://localhost:11434/v1",
-                    default_model="gemma4:e2b",
-                    models=[
-                        "gemma4:e2b",
-                        "gemma4:e4b",
-                        "gemma3:1b",
-                        "qwen3.5:0.8B",
-                        "llama3.2",
-                        "llama3.1",
-                        "codellama",
-                        "deepseek-coder-v2",
-                        "qwen2.5-coder",
-                    ],
+                    default_model=ollama_default,
+                    models=ollama_models if ollama_models else ["gemma4:e2b"],
                     is_local=True,
                 ),
                 "lm_studio": ProviderConfig(
@@ -362,24 +394,6 @@ class MultiProviderConfig:
                         "glm-4.7-free",
                         "mimo-v2-pro-free",
                     ],
-                ),
-                "extended_web": ProviderConfig(
-                    provider_type=ProviderType.EXTENDED_WEB,
-                    base_url="https://chat.deepseek.com",
-                    default_model="deepseek-chat",
-                    models=[
-                        "deepseek-chat",
-                        "deepseek-coder",
-                        "claude-web",
-                        "chatgpt-web",
-                        "qwen-web",
-                        "kimi-web",
-                        "gemini-web",
-                        "grok-web",
-                        "doubao-web",
-                        "glm-web",
-                    ],
-                    is_local=False,
                 ),
             },
             active_provider="ollama",
