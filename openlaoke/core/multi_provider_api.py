@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -153,6 +154,9 @@ class MultiProviderClient:
             env_key = os.environ.get("GITHUB_TOKEN", "")
         elif provider.provider_type == ProviderType.OPENCODE:
             env_key = os.environ.get("OPENCODE_API_KEY", "public")
+        elif provider.provider_type == ProviderType.EXTENDED_WEB:
+            # Extended Web doesn't use API keys, uses browser cookies
+            env_key = "browser_auth"
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_key = os.environ.get("OPENAI_API_KEY", "none")
 
@@ -200,6 +204,9 @@ class MultiProviderClient:
             env_url = os.environ.get("GITHUB_COPILOT_BASE_URL", "https://api.githubcopilot.com")
         elif provider.provider_type == ProviderType.OPENCODE:
             env_url = os.environ.get("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1")
+        elif provider.provider_type == ProviderType.EXTENDED_WEB:
+            # Extended Web uses provider-specific URLs from WEB_PROVIDERS config
+            env_url = "https://chat.deepseek.com"
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
             env_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
@@ -593,6 +600,115 @@ class MultiProviderClient:
             body = self._build_cohere_body(
                 model, system_prompt, converted_messages, tools, max_tokens, temperature
             )
+        elif provider.provider_type == ProviderType.EXTENDED_WEB:
+            # Extended Web uses browser authentication with full client implementation
+            from openlaoke.core.extended_web import BrowserAuthManager
+            from openlaoke.core.extended_web.clients import (
+                DeepSeekWebClient,
+                QwenWebClient,
+                KimiWebClient,
+                GLMWebClient,
+            )
+
+            auth_manager = BrowserAuthManager()
+            client_model = model or provider.get_default_model()
+            auth_data = auth_manager.load_auth(client_model)
+
+            if not auth_data:
+                raise ValueError(
+                    f"No authentication found for {client_model}. "
+                    f"Run: python3 quick_auth.py {client_model}"
+                )
+
+            cookie = auth_data.get("cookie", "")
+            user_agent = auth_data.get("user_agent", "")
+            bearer_token = auth_data.get("bearer_token", "")
+
+            # Select client based on model
+            client_model = model or provider.get_default_model()
+            if "deepseek" in client_model:
+                client = DeepSeekWebClient(
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    bearer_token=bearer_token,
+                )
+            elif "qwen" in client_model:
+                client = QwenWebClient(
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    bearer_token=bearer_token,
+                )
+            elif "kimi" in client_model:
+                client = KimiWebClient(
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    bearer_token=bearer_token,
+                )
+            elif "glm" in client_model:
+                client = GLMWebClient(
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    bearer_token=bearer_token,
+                )
+            else:
+                # Default to DeepSeek for unknown providers
+                client = DeepSeekWebClient(
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    bearer_token=bearer_token,
+                )
+
+            try:
+                await client.init()
+                response_data = await client.chat_completions(
+                    messages=[{"role": "system", "content": system_prompt}, *converted_messages],
+                    model=client_model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=False,
+                )
+
+                # Parse response
+                content = response_data.get("content", "")
+                usage_data = response_data.get("usage", {})
+
+                usage = TokenUsage(
+                    input_tokens=usage_data.get("prompt_tokens", 0)
+                    or usage_data.get("input_tokens", 0),
+                    output_tokens=usage_data.get("completion_tokens", 0)
+                    or usage_data.get("output_tokens", 0),
+                    cache_read_tokens=0,
+                    cache_creation_tokens=0,
+                    total_tokens=usage_data.get("total_tokens", 0),
+                )
+
+                # Extended Web is free
+                cost = CostInfo(
+                    input_cost=0.0,
+                    output_cost=0.0,
+                    cache_read_cost=0.0,
+                    cache_creation_cost=0.0,
+                    total=0.0,
+                )
+
+                assistant_msg = AssistantMessage(
+                    role="assistant",
+                    content=content,
+                    api="extended_web",
+                    provider=provider.provider_type,
+                    model=client_model,
+                    usage=usage,
+                    cost=cost,
+                    stop_reason=response_data.get("finish_reason", "stop"),
+                    timestamp=int(time.time()),
+                )
+
+                return assistant_msg, usage, cost
+
+            except Exception as e:
+                raise RuntimeError(f"Extended Web API error ({client_model}): {e}")
+            finally:
+                await client.close()
         else:
             endpoint = f"{base_url}/chat/completions"
             body = self._build_openai_body(
