@@ -96,15 +96,15 @@ WEB_PROVIDERS: dict[WebProviderType, WebProviderConfig] = {
     "qwen-web": WebProviderConfig(
         provider_type="qwen-web",
         name="Qwen Web (通义千问)",
-        base_url="https://tongyi.aliyun.com",
-        login_url="https://tongyi.aliyun.com/login",
-        api_endpoint="https://tongyi.aliyun.com/api/chat",
-        cookie_domains=["aliyun.com", "taobao.com"],
+        base_url="https://www.qianwen.com",
+        login_url="https://www.qianwen.com",
+        api_endpoint="https://www.qianwen.com/api/chat",
+        cookie_domains=["qianwen.com", "aliyun.com"],
         required_cookies=["_tb_token_", "cookie2"],
         bearer_token=False,
         custom_headers={
-            "Referer": "https://tongyi.aliyun.com/",
-            "Origin": "https://tongyi.aliyun.com",
+            "Referer": "https://www.qianwen.com/",
+            "Origin": "https://www.qianwen.com",
         },
     ),
     "kimi-web": WebProviderConfig(

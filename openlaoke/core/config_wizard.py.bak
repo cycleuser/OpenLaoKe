@@ -40,27 +40,27 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         table.add_column("Status", style="dim")
 
         providers = [
-            ("1", "🟠 Ollama (Local)", "ollama", "local"),
-            ("2", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
-            ("3", "🌐 Extended Web (FREE)", "extended_web", "free"),
-            ("4", "Anthropic", "anthropic", "cloud"),
-            ("5", "OpenAI (GPT-4)", "openai", "cloud"),
-            ("6", "MiniMax", "minimax", "cloud"),
-            ("7", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("8", "Azure OpenAI", "azure_openai", "cloud"),
-            ("9", "Google AI (Gemini)", "google", "cloud"),
-            ("10", "Google Vertex AI", "google_vertex", "cloud"),
-            ("11", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("12", "xAI Grok", "xai", "cloud"),
-            ("13", "Mistral AI", "mistral", "cloud"),
-            ("14", "Groq", "groq", "cloud"),
-            ("15", "Cerebras", "cerebras", "cloud"),
-            ("16", "Cohere", "cohere", "cloud"),
-            ("17", "DeepInfra", "deepinfra", "cloud"),
-            ("18", "Together AI", "togetherai", "cloud"),
-            ("19", "Perplexity", "perplexity", "cloud"),
-            ("20", "OpenRouter", "openrouter", "cloud"),
-            ("21", "GitHub Copilot", "github_copilot", "cloud"),
+            ("1", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
+            ("2", "🌐 Extended Web (FREE)", "extended_web", "free"),
+            ("3", "Anthropic", "anthropic", "cloud"),
+            ("4", "OpenAI (GPT-4)", "openai", "cloud"),
+            ("5", "MiniMax", "minimax", "cloud"),
+            ("6", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
+            ("7", "Azure OpenAI", "azure_openai", "cloud"),
+            ("8", "Google AI (Gemini)", "google", "cloud"),
+            ("9", "Google Vertex AI", "google_vertex", "cloud"),
+            ("10", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("11", "xAI Grok", "xai", "cloud"),
+            ("12", "Mistral AI", "mistral", "cloud"),
+            ("13", "Groq", "groq", "cloud"),
+            ("14", "Cerebras", "cerebras", "cloud"),
+            ("15", "Cohere", "cohere", "cloud"),
+            ("16", "DeepInfra", "deepinfra", "cloud"),
+            ("17", "Together AI", "togetherai", "cloud"),
+            ("18", "Perplexity", "perplexity", "cloud"),
+            ("19", "OpenRouter", "openrouter", "cloud"),
+            ("20", "GitHub Copilot", "github_copilot", "cloud"),
+            ("21", "Ollama (Local)", "ollama", "local"),
             ("22", "LM Studio (Local)", "lm_studio", "local"),
             ("23", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
             ("24", "Skip (configure later)", "", ""),
@@ -86,26 +86,26 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         )
 
         provider_map = {
-            "1": "ollama",
-            "2": "opencode",
-            "3": "extended_web",
-            "4": "anthropic",
-            "5": "openai",
-            "6": "minimax",
-            "7": "aliyun_coding_plan",
-            "8": "google",
-            "9": "google_vertex",
-            "10": "aws_bedrock",
-            "11": "xai",
-            "12": "mistral",
-            "13": "groq",
-            "14": "cerebras",
-            "15": "cohere",
-            "16": "deepinfra",
-            "17": "togetherai",
-            "18": "perplexity",
-            "19": "openrouter",
-            "20": "github_copilot",
+            "1": "opencode",
+            "2": "extended_web",
+            "3": "anthropic",
+            "4": "openai",
+            "5": "minimax",
+            "6": "aliyun_coding_plan",
+            "7": "google",
+            "8": "google_vertex",
+            "9": "aws_bedrock",
+            "10": "xai",
+            "11": "mistral",
+            "12": "groq",
+            "13": "cerebras",
+            "14": "cohere",
+            "15": "deepinfra",
+            "16": "togetherai",
+            "17": "perplexity",
+            "18": "openrouter",
+            "19": "github_copilot",
+            "20": "ollama",
             "21": "lm_studio",
             "22": "openai_compatible",
         }
@@ -576,20 +576,6 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         return config
 
     elif provider.provider_type == ProviderType.EXTENDED_WEB:
-        # Use the new async config module
-        import asyncio
-        from .config_wizard_extended_web import configure_extended_web
-
-        # Run async configuration
-        success = asyncio.run(configure_extended_web(config, provider, key))
-
-        if success:
-            console.print(f"\n[green]✓ Extended Web configuration complete![/green]")
-        else:
-            console.print(f"\n[yellow]⚠ Extended Web configuration incomplete[/yellow]")
-
-        return config
-
         console.print("[bold cyan]🌐 Extended Web Configuration[/bold cyan]")
         console.print()
         console.print("[dim]Extended Web uses browser-based authentication.[/dim]")

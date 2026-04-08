@@ -365,7 +365,7 @@ class MultiProviderConfig:
                 ),
                 "extended_web": ProviderConfig(
                     provider_type=ProviderType.EXTENDED_WEB,
-                    base_url="browser://auth",
+                    base_url="https://chat.deepseek.com",
                     default_model="deepseek-chat",
                     models=[
                         "deepseek-chat",
