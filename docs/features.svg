@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/>
+      <stop offset="100%" style="stop-color:#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="coreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="auxGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="800" height="550" fill="url(#bgGradient)"/>
+
+  <!-- 标题 -->
+  <rect x="50" y="20" width="700" height="50" rx="8" fill="url(#headerGradient)" filter="url(#shadow)"/>
+  <text x="400" y="53" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="600">OpenLaoKe 功能模块架构</text>
+
+  <!-- 核心功能模块 -->
+  <g transform="translate(50, 90)">
+    <rect width="350" height="380" rx="12" fill="url(#coreGradient)" filter="url(#shadow)"/>
+    <text x="175" y="35" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600">核心功能</text>
+
+    <!-- 意图解析引擎 -->
+    <g transform="translate(25, 55)">
+      <rect width="300" height="70" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="150" y="25" text-anchor="middle" fill="#1e40af" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">意图解析引擎</text>
+      <text x="150" y="45" text-anchor="middle" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="11">中英文混合输入识别</text>
+      <text x="150" y="60" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">支持代码生成、调试、解释等10+种意图</text>
+    </g>
+
+    <!-- 任务分解系统 -->
+    <g transform="translate(25, 135)">
+      <rect width="300" height="70" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="150" y="25" text-anchor="middle" fill="#1e40af" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">任务分解系统</text>
+      <text x="150" y="45" text-anchor="middle" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="11">递归原子级分解</text>
+      <text x="150" y="60" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">单任务≤15行代码，≤3个参数</text>
+    </g>
+
+    <!-- 双模型协作 -->
+    <g transform="translate(25, 215)">
+      <rect width="300" height="70" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="150" y="25" text-anchor="middle" fill="#1e40af" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">双模型协作</text>
+      <text x="150" y="45" text-anchor="middle" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="11">规划+执行+验证+修复</text>
+      <text x="150" y="60" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">小模型CPU运行，大模型GPU运行</text>
+    </g>
+
+    <!-- 代码组装器 -->
+    <g transform="translate(25, 295)">
+      <rect width="300" height="70" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="150" y="25" text-anchor="middle" fill="#1e40af" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">代码组装器</text>
+      <text x="150" y="45" text-anchor="middle" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="11">依赖注入合并</text>
+      <text x="150" y="60" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">按依赖关系合并代码片段为完整程序</text>
+    </g>
+  </g>
+
+  <!-- 辅助功能模块 -->
+  <g transform="translate(420, 90)">
+    <rect width="330" height="380" rx="12" fill="url(#auxGradient)" filter="url(#shadow)"/>
+    <text x="165" y="35" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600">辅助功能</text>
+
+    <!-- 翻译引擎 -->
+    <g transform="translate(20, 55)">
+      <rect width="290" height="55" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="145" y="22" text-anchor="middle" fill="#065f46" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">翻译引擎</text>
+      <text x="145" y="40" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">支持9种语言：中、英、日、韩、法、德、西、俄、阿</text>
+    </g>
+
+    <!-- 知识库系统 -->
+    <g transform="translate(20, 120)">
+      <rect width="290" height="55" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="145" y="22" text-anchor="middle" fill="#065f46" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">知识库系统</text>
+      <text x="145" y="40" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">280+个编程知识片段，覆盖Python、JavaScript等</text>
+    </g>
+
+    <!-- POSIX命令兼容层 -->
+    <g transform="translate(20, 185)">
+      <rect width="290" height="55" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="145" y="22" text-anchor="middle" fill="#065f46" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">POSIX命令兼容层</text>
+      <text x="145" y="40" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">20+统一命令接口，跨Windows/macOS/Linux</text>
+    </g>
+
+    <!-- 文档下载器 -->
+    <g transform="translate(20, 250)">
+      <rect width="290" height="55" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="145" y="22" text-anchor="middle" fill="#065f46" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">文档下载器</text>
+      <text x="145" y="40" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">集成30+官方文档源，自动下载和缓存</text>
+    </g>
+
+    <!-- 代码模板库 -->
+    <g transform="translate(20, 315)">
+      <rect width="290" height="50" rx="8" fill="white" fill-opacity="0.95" filter="url(#shadow)"/>
+      <text x="145" y="20" text-anchor="middle" fill="#065f46" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">代码模板库</text>
+      <text x="145" y="38" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="10">CLI工具、Web API、数据处理等常用模板</text>
+    </g>
+  </g>
+
+  <!-- 底部连接示意 -->
+  <g transform="translate(50, 490)">
+    <rect width="700" height="45" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="350" y="28" text-anchor="middle" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="13">模块化设计：核心功能处理编程任务，辅助功能提供扩展支持</text>
+  </g>
+
+  <!-- 底部说明 -->
+  <text x="400" y="535" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="10">OpenLaoKe v0.1.0 | 程序设计教学辅助工具</text>
+</svg>

@@ -42,28 +42,27 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         providers = [
             ("1", "🟠 Ollama (Local)", "ollama", "local"),
             ("2", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
-            ("3", "🌐 Extended Web (FREE)", "extended_web", "free"),
-            ("4", "Anthropic", "anthropic", "cloud"),
-            ("5", "OpenAI (GPT-4)", "openai", "cloud"),
-            ("6", "MiniMax", "minimax", "cloud"),
-            ("7", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("8", "Azure OpenAI", "azure_openai", "cloud"),
-            ("9", "Google AI (Gemini)", "google", "cloud"),
-            ("10", "Google Vertex AI", "google_vertex", "cloud"),
-            ("11", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("12", "xAI Grok", "xai", "cloud"),
-            ("13", "Mistral AI", "mistral", "cloud"),
-            ("14", "Groq", "groq", "cloud"),
-            ("15", "Cerebras", "cerebras", "cloud"),
-            ("16", "Cohere", "cohere", "cloud"),
-            ("17", "DeepInfra", "deepinfra", "cloud"),
-            ("18", "Together AI", "togetherai", "cloud"),
-            ("19", "Perplexity", "perplexity", "cloud"),
-            ("20", "OpenRouter", "openrouter", "cloud"),
-            ("21", "GitHub Copilot", "github_copilot", "cloud"),
-            ("22", "LM Studio (Local)", "lm_studio", "local"),
-            ("23", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
-            ("24", "Skip (configure later)", "", ""),
+            ("3", "MiniMax", "minimax", "cloud"),
+            ("4", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
+            ("5", "Anthropic", "anthropic", "cloud"),
+            ("6", "OpenAI (GPT-4)", "openai", "cloud"),
+            ("7", "Azure OpenAI", "azure_openai", "cloud"),
+            ("8", "Google AI (Gemini)", "google", "cloud"),
+            ("9", "Google Vertex AI", "google_vertex", "cloud"),
+            ("10", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("11", "xAI Grok", "xai", "cloud"),
+            ("12", "Mistral AI", "mistral", "cloud"),
+            ("13", "Groq", "groq", "cloud"),
+            ("14", "Cerebras", "cerebras", "cloud"),
+            ("15", "Cohere", "cohere", "cloud"),
+            ("16", "DeepInfra", "deepinfra", "cloud"),
+            ("17", "Together AI", "togetherai", "cloud"),
+            ("18", "Perplexity", "perplexity", "cloud"),
+            ("19", "OpenRouter", "openrouter", "cloud"),
+            ("20", "GitHub Copilot", "github_copilot", "cloud"),
+            ("21", "LM Studio (Local)", "lm_studio", "local"),
+            ("22", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
+            ("23", "Skip (configure later)", "", ""),
         ]
 
         for opt, name, key, _ptype in providers:
@@ -81,18 +80,18 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
 
         choice = Prompt.ask(
             "Select provider",
-            choices=[str(i) for i in range(1, 25)],
+            choices=[str(i) for i in range(1, 24)],
             default="1",
         )
 
         provider_map = {
             "1": "ollama",
             "2": "opencode",
-            "3": "extended_web",
-            "4": "anthropic",
-            "5": "openai",
-            "6": "minimax",
-            "7": "aliyun_coding_plan",
+            "3": "minimax",
+            "4": "aliyun_coding_plan",
+            "5": "anthropic",
+            "6": "openai",
+            "7": "azure_openai",
             "8": "google",
             "9": "google_vertex",
             "10": "aws_bedrock",
@@ -110,7 +109,7 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             "22": "openai_compatible",
         }
 
-        if choice == "24":
+        if choice == "23":
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
@@ -192,17 +191,6 @@ def _get_provider_status(provider: ProviderConfig) -> str:
         return "[green]✓ local[/green]"
     if provider.provider_type == ProviderType.OPENCODE:
         return "[green]✓ FREE (no key needed)[/green]"
-    if provider.provider_type == ProviderType.EXTENDED_WEB:
-        # Check for saved authentications
-        from openlaoke.core.extended_web import BrowserAuthManager
-
-        auth_manager = BrowserAuthManager()
-        saved_auths = auth_manager.list_saved_auths()
-
-        if saved_auths:
-            return f"[green]✓ {len(saved_auths)} authenticated[/green]"
-        else:
-            return "[yellow]needs browser auth[/yellow]"
     if provider.api_key:
         return "[green]✓ stored[/green]"
 
@@ -213,15 +201,7 @@ def _get_provider_status(provider: ProviderConfig) -> str:
 
 
 def _check_provider_ready(config: MultiProviderConfig, key: str) -> bool:
-    """Check if a provider is ready to use.
-
-    For EXTENDED_WEB, always return True since authentication is optional
-    (users can authenticate later).
-    """
-    if key == "extended_web":
-        # Extended Web is always "ready" - authentication can be done later
-        return True
-
+    """Check if a provider is ready to use."""
     provider = config.providers.get(key)
     if not provider:
         return False
@@ -359,7 +339,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         provider.base_url = base_url
 
         if key == "ollama":
-            models = _detect_ollama_models(base_url)
+            models = MultiProviderConfig._detect_ollama_models(base_url.replace("/v1", ""))
             if models:
                 console.print(f"[green]✓ Detected {len(models)} models from Ollama[/green]")
                 provider.models = models
@@ -557,7 +537,7 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
 
     elif provider.provider_type == ProviderType.OPENCODE:
         console.print("[green]✓ No API key required - completely free![/green]")
-        console.print(f"\n[bold]Available free models:[/bold]")
+        console.print("\n[bold]Available free models:[/bold]")
         for i, model in enumerate(provider.models, 1):
             marker = " [cyan](default)[/cyan]" if model == provider.default_model else ""
             console.print(f"  [{i}] {model}{marker}")
@@ -573,216 +553,6 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         config.providers[key] = provider
 
         console.print(f"\n[green]✓ Configured {key} with model {provider.default_model}[/green]")
-        return config
-
-    elif provider.provider_type == ProviderType.EXTENDED_WEB:
-        # Use the new async config module
-        import asyncio
-        from .config_wizard_extended_web import configure_extended_web
-
-        # Run async configuration
-        success = asyncio.run(configure_extended_web(config, provider, key))
-
-        if success:
-            console.print(f"\n[green]✓ Extended Web configuration complete![/green]")
-        else:
-            console.print(f"\n[yellow]⚠ Extended Web configuration incomplete[/yellow]")
-
-        return config
-
-        console.print("[bold cyan]🌐 Extended Web Configuration[/bold cyan]")
-        console.print()
-        console.print("[dim]Extended Web uses browser-based authentication.[/dim]")
-        console.print("[dim]You'll authenticate via your browser (Chrome/Edge/Firefox).[/dim]")
-        console.print()
-
-        # Check for existing authentication
-        from openlaoke.core.extended_web import BrowserAuthManager
-
-        auth_manager = BrowserAuthManager()
-        saved_auths = auth_manager.list_saved_auths()
-
-        if saved_auths:
-            console.print(f"[green]✓ Found {len(saved_auths)} authenticated service(s):[/green]")
-            for auth in saved_auths:
-                console.print(f"  • {auth}")
-            console.print()
-
-            # Show ALL available models, mark authenticated ones
-            console.print("[bold]All available web services:[/bold]")
-            for i, model in enumerate(provider.models, 1):
-                is_authed = " [green]✓ authenticated[/green]" if model in saved_auths else ""
-                console.print(f"  [{i}] {model}{is_authed}")
-
-            console.print()
-            console.print("[bold]Select which service to configure as default:[/bold]")
-            choices = [str(i) for i in range(1, len(provider.models) + 1)]
-            selection = Prompt.ask(
-                "Select service",
-                choices=choices,
-                default="1",
-            )
-            provider.default_model = provider.models[int(selection) - 1]
-
-            # Check if selected model is authenticated
-            is_selected_authed = provider.default_model in saved_auths
-        else:
-            console.print("[yellow]⚠ No authenticated services found.[/yellow]")
-            console.print()
-
-            # Show ALL available models
-            console.print("[bold]Available web services:[/bold]")
-            for i, model in enumerate(provider.models, 1):
-                console.print(f"  [{i}] {model}")
-
-            console.print()
-            selection = Prompt.ask(
-                "Select default model",
-                choices=[str(i) for i in range(1, len(provider.models) + 1)],
-                default="1",
-            )
-            provider.default_model = provider.models[int(selection) - 1]
-
-            console.print()
-            console.print("[dim]Note: You'll need to authenticate before using this service.[/dim]")
-            is_selected_authed = False
-
-        provider.enabled = True
-        config.providers[key] = provider
-
-        console.print(f"\n[green]✓ Configured {key} with model {provider.default_model}[/green]")
-
-        # If not authenticated, MUST authenticate now
-        if not is_selected_authed:
-            console.print()
-            console.print("[bold red]⚠ Authentication Required![/bold red]")
-            console.print(
-                f"[dim]The service {provider.default_model} requires browser authentication.[/dim]"
-            )
-            console.print()
-
-            # Choose authentication method
-            console.print("[bold]Choose authentication method:[/bold]")
-            console.print("  [1] 🌐 Quick (opens browser directly) - Recommended")
-            console.print("  [2] 🔧 Manual cookie extraction (if already logged in)")
-
-            auth_choice = Prompt.ask(
-                "Select method",
-                choices=["1", "2"],
-                default="1",
-            )
-
-            auth_success = False
-
-            if auth_choice == "1":
-                # Quick method - open system browser directly
-                console.print(f"\n[bold]Opening browser for {provider.default_model}...[/bold]")
-                from openlaoke.core.extended_web.simple_browser_auth import authenticate_simple
-                from openlaoke.core.extended_web.types import WEB_PROVIDERS
-
-                web_config = WEB_PROVIDERS.get(provider.default_model)
-                if web_config:
-                    try:
-                        auth_data = authenticate_simple(
-                            provider_type=provider.default_model,
-                            login_url=web_config.login_url,
-                            required_cookies=web_config.required_cookies,
-                        )
-                        # Save auth
-                        auth_manager.save_auth(provider.default_model, auth_data)
-                        console.print(f"\n[green]✓ Authentication setup complete![/green]")
-                        console.print(
-                            f"[dim]  Cookie saved to: {auth_manager._get_auth_file(provider.default_model)}[/dim]"
-                        )
-                        auth_success = True
-                    except Exception as e:
-                        console.print(f"\n[red]✗ Authentication failed: {e}[/red]")
-                else:
-                    console.print(f"[red]Unknown provider: {provider.default_model}[/red]")
-
-            elif auth_choice == "2":
-                # Manual cookie extraction
-                console.print()
-                console.print("[bold cyan]════════════════════════════════════════[/bold cyan]")
-                console.print("[bold cyan]  Manual Cookie Extraction[/bold cyan]")
-                console.print("[bold cyan]════════════════════════════════════════[/bold cyan]")
-                console.print()
-
-                from openlaoke.core.extended_web.types import WEB_PROVIDERS
-
-                web_config = WEB_PROVIDERS.get(provider.default_model)
-
-                if web_config:
-                    console.print(f"[bold]Service:[/bold] {web_config.name}")
-                    console.print(
-                        f"[bold]Login URL:[/bold] [cyan underline]{web_config.login_url}[/cyan underline]"
-                    )
-                    console.print()
-                    console.print("[bold]Steps to extract cookie:[/bold]")
-                    console.print()
-                    console.print(
-                        "  [dim]1. Open the login URL in your browser (Firefox/Chrome)[/dim]"
-                    )
-                    console.print("  [dim]2. Login with your account[/dim]")
-                    console.print("  [dim]3. Press F12 to open Developer Tools[/dim]")
-                    console.print("  [dim]4. Go to 'Storage' or 'Application' tab[/dim]")
-                    console.print("  [dim]5. Expand 'Cookies' → Select the website[/dim]")
-                    console.print("  [dim]6. Find and copy these cookies:[/dim]")
-                    for cookie_name in web_config.required_cookies:
-                        console.print(f"      [cyan]{cookie_name}[/cyan]")
-                    console.print()
-
-                    if Confirm.ask(
-                        "Have you logged in and ready to extract cookies?", default=True
-                    ):
-                        console.print()
-
-                        # Collect cookies
-                        cookie_parts = []
-                        for cookie_name in web_config.required_cookies:
-                            value = console.input(f"  Enter [cyan]{cookie_name}[/cyan] value: ")
-                            if value and len(value) > 5:
-                                cookie_parts.append(f"{cookie_name}={value}")
-                                auth_success = True
-
-                        if cookie_parts:
-                            cookie_string = "; ".join(cookie_parts)
-
-                            # Save auth
-                            auth_data = {
-                                "provider_type": provider.default_model,
-                                "cookie": cookie_string,
-                                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/115.0",
-                                "saved_at": "manual-extraction",
-                                "browser": "manual",
-                            }
-                            auth_manager.save_auth(provider.default_model, auth_data)
-
-                            console.print()
-                            console.print(
-                                f"[green]✓ Cookie saved to: {auth_manager._get_auth_file(provider.default_model)}[/green]"
-                            )
-                            console.print(f"  Cookie length: {len(cookie_string)}")
-                        else:
-                            console.print("[yellow]⚠ No cookies entered[/yellow]")
-                            auth_success = False
-                    else:
-                        console.print("[yellow]⚠ Cookie extraction cancelled[/yellow]")
-                        auth_success = False
-                else:
-                    console.print(f"[red]Unknown provider: {provider.default_model}[/red]")
-
-            if not auth_success:
-                console.print()
-                console.print("[yellow]⚠ Authentication was not completed.[/yellow]")
-                console.print("[dim]You can authenticate later with:[/dim]")
-                console.print(f"  python3 test_qwen_auth.py  # For qwen-web")
-                console.print(f"  python3 extract_firefox_cookie.py  # Auto extract from Firefox")
-
-        # Save the extended_web provider config
-        provider.enabled = True
-        config.providers[key] = provider
-
         return config
 
     else:
@@ -852,46 +622,6 @@ def _select_model_from_list(models: list[str], default: str) -> str:
     )
 
     return models[int(selection) - 1]
-
-
-def _detect_ollama_models(base_url: str) -> list[str]:
-    """Try to detect available Ollama models."""
-    try:
-        import httpx
-
-        url = base_url.replace("/v1", "/api/tags")
-
-        with httpx.Client(timeout=5.0, proxy=None) as client:
-            response = client.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                all_models = [m["name"] for m in data.get("models", [])]
-
-                embedding_keywords = [
-                    "embed",
-                    "embedding",
-                    "rerank",
-                    "reranker",
-                    "minilm",
-                    "arctic-embed",
-                    "bge-",
-                    "nomic-embed",
-                    "paraphrase",
-                    "granite-embedding",
-                ]
-
-                generation_models = []
-                for model in all_models:
-                    model_lower = model.lower()
-                    is_embedding = any(kw in model_lower for kw in embedding_keywords)
-
-                    if not is_embedding:
-                        generation_models.append(model)
-
-                return generation_models if generation_models else all_models
-    except Exception:
-        pass
-    return []
 
 
 def show_current_config(config: AppConfig) -> None:

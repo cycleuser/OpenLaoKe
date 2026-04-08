@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/>
+      <stop offset="100%" style="stop-color:#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+    <linearGradient id="cpuGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <linearGradient id="gpuGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="url(#bgGradient)"/>
+
+  <!-- 标题 -->
+  <rect x="50" y="20" width="700" height="50" rx="8" fill="url(#headerGradient)" filter="url(#shadow)"/>
+  <text x="400" y="53" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="600">OpenLaoKe 系统架构</text>
+
+  <!-- 用户界面层 -->
+  <g transform="translate(50, 90)">
+    <rect width="700" height="60" rx="10" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow)"/>
+    <text x="350" y="35" text-anchor="middle" fill="#1e293b" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">用户界面层</text>
+    <text x="350" y="52" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="12">接收中英文混合编程需求输入</text>
+  </g>
+
+  <!-- 向下箭头 -->
+  <line x1="400" y1="155" x2="400" y2="175" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- 意图解析层 -->
+  <g transform="translate(50, 180)">
+    <rect width="700" height="60" rx="10" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow)"/>
+    <text x="350" y="35" text-anchor="middle" fill="#1e293b" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">意图解析层</text>
+    <text x="350" y="52" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="12">识别代码生成、调试、解释等意图类型</text>
+  </g>
+
+  <!-- 向下箭头 -->
+  <line x1="400" y1="245" x2="400" y2="265" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- 任务分解层 -->
+  <g transform="translate(50, 270)">
+    <rect width="700" height="60" rx="10" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow)"/>
+    <text x="350" y="35" text-anchor="middle" fill="#1e293b" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">任务分解层</text>
+    <text x="350" y="52" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="12">拆分为原子任务（≤15行代码，≤3个参数）</text>
+  </g>
+
+  <!-- 向下箭头 -->
+  <line x1="400" y1="335" x2="400" y2="355" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- 双模型协作引擎 -->
+  <g transform="translate(50, 360)">
+    <rect width="700" height="140" rx="10" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2" filter="url(#shadow)"/>
+    <text x="350" y="25" text-anchor="middle" fill="#334155" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600">双模型协作引擎</text>
+
+    <!-- 规划模型 -->
+    <g transform="translate(80, 45)">
+      <rect width="200" height="75" rx="8" fill="url(#cpuGradient)" filter="url(#shadow)"/>
+      <text x="100" y="25" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">规划模型</text>
+      <text x="100" y="42" text-anchor="middle" fill="#d1fae5" font-family="system-ui, -apple-system, sans-serif" font-size="12">gemma3:1b</text>
+      <text x="100" y="58" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, -apple-system, sans-serif" font-size="11">CPU运行 · 任务规划与验证</text>
+    </g>
+
+    <!-- 执行模型 -->
+    <g transform="translate(420, 45)">
+      <rect width="200" height="75" rx="8" fill="url(#gpuGradient)" filter="url(#shadow)"/>
+      <text x="100" y="25" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">执行模型</text>
+      <text x="100" y="42" text-anchor="middle" fill="#fef3c7" font-family="system-ui, -apple-system, sans-serif" font-size="12">gemma4:e4b</text>
+      <text x="100" y="58" text-anchor="middle" fill="#fde68a" font-family="system-ui, -apple-system, sans-serif" font-size="11">GPU运行 · 代码生成与修复</text>
+    </g>
+
+    <!-- 中间的协作流程 -->
+    <text x="350" y="85" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="11">规划 → 执行 → 验证 → 修复</text>
+    <line x1="280" y1="80" x2="420" y2="80" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <polygon points="420,77 427,80 420,83" fill="#94a3b8"/>
+  </g>
+
+  <!-- 向下箭头 -->
+  <line x1="400" y1="505" x2="400" y2="525" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- 代码组装层 -->
+  <g transform="translate(50, 530)">
+    <rect width="700" height="50" rx="10" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow)"/>
+    <text x="350" y="30" text-anchor="middle" fill="#1e293b" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">代码组装层</text>
+  </g>
+
+  <!-- 辅助功能模块 - 右侧标注 -->
+  <g transform="translate(520, 180)">
+    <rect width="210" height="130" rx="8" fill="#fefce8" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="105" y="22" text-anchor="middle" fill="#92400e" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600">辅助功能</text>
+    <text x="15" y="45" fill="#a16207" font-family="system-ui, -apple-system, sans-serif" font-size="10">• 翻译引擎（9种语言）</text>
+    <text x="15" y="62" fill="#a16207" font-family="system-ui, -apple-system, sans-serif" font-size="10">• 知识库（280+片段）</text>
+    <text x="15" y="79" fill="#a16207" font-family="system-ui, -apple-system, sans-serif" font-size="10">• POSIX命令兼容</text>
+    <text x="15" y="96" fill="#a16207" font-family="system-ui, -apple-system, sans-serif" font-size="10">• 文档下载（30+源）</text>
+    <text x="15" y="113" fill="#a16207" font-family="system-ui, -apple-system, sans-serif" font-size="10">• 代码模板库</text>
+  </g>
+
+  <!-- 底部说明 -->
+  <text x="400" y="585" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="10">双模型协作架构：小模型CPU规划验证 + 大模型GPU代码生成</text>
+</svg>
