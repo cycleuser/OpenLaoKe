@@ -62,6 +62,25 @@ def main() -> None:
         help="Additional CORS origins",
     )
 
+    web_parser = subparsers.add_parser("web", help="Start full-featured web UI (LAN-friendly)")
+    web_parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Server host (default: 0.0.0.0 for LAN access)",
+    )
+    web_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Server port (default: 8080)",
+    )
+    web_parser.add_argument(
+        "--cors",
+        nargs="*",
+        default=None,
+        help="Additional CORS origins",
+    )
+
     parser.add_argument(
         "-m",
         "--model",
@@ -173,6 +192,20 @@ def main() -> None:
         )
         console.print(f"[green]Starting OpenLaoKe server on {args.host}:{args.port}[/green]")
         server.run()
+        return
+
+    if args.command == "web":
+        from openlaoke.server.web_ui import WebUI
+
+        webui = WebUI(
+            host=args.host,
+            port=args.port,
+            cors_origins=args.cors,
+        )
+        console.print(f"[green]Starting OpenLaoKe Web UI on http://{args.host}:{args.port}[/green]")
+        if args.host == "0.0.0.0":
+            console.print(f"[dim]Access from LAN at http://<your-ip>:{args.port}[/dim]")
+        webui.run()
         return
 
     if args.command == "auth":
