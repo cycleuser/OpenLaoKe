@@ -71,6 +71,11 @@ class AppState:
     multi_provider_config: MultiProviderConfig | None = None
     app_config: Any = None
     active_skills: list[str] = field(default_factory=list)
+    insomnia_mode: bool = False
+    insomnia_task_queue: list[dict[str, Any]] = field(default_factory=list)
+    insomnia_max_iterations: int = 1000
+    insomnia_auto_accept: bool = True
+    insomnia_log_path: str | None = None
 
     _listeners: list[Callable[[AppState], None]] = field(default_factory=list, repr=False)
     _persist_path: str | None = None
@@ -193,6 +198,11 @@ class AppState:
                     "cache_read_cost": self.cost_info.cache_read_cost,
                     "cache_creation_cost": self.cost_info.cache_creation_cost,
                 },
+                "insomnia_mode": self.insomnia_mode,
+                "insomnia_task_queue": self.insomnia_task_queue,
+                "insomnia_max_iterations": self.insomnia_max_iterations,
+                "insomnia_auto_accept": self.insomnia_auto_accept,
+                "insomnia_log_path": self.insomnia_log_path,
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

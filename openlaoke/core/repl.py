@@ -44,6 +44,7 @@ class REPL:
         self._prompt_session = None
         self.supervisor = TaskSupervisor(app_state)
         self._current_task_id: str | None = None
+        self._insomnia_engine = None
 
         register_all()
         register_all_tools(self.registry)
@@ -68,12 +69,27 @@ class REPL:
 
         self.api = MultiProviderClient(config, proxy=self._proxy)
 
+        from openlaoke.core.insomnia_engine import InsomniaEngine
+
+        self._insomnia_engine = InsomniaEngine(self.app_state)
+        self.app_state._insomnia_engine = self._insomnia_engine
+
+        if self.app_state.insomnia_mode:
+            self.console.print(
+                "[bold cyan]🌙 Insomnia mode: Resuming background tasks...[/bold cyan]"
+            )
+            await self._insomnia_engine.start()
+            if self.app_state.insomnia_task_queue:
+                asyncio.create_task(self._insomnia_engine._process_queue())
+
         try:
             while self._running:
                 await self._handle_input()
         except (KeyboardInterrupt, EOFError):
             self.console.print("\n[yellow]Goodbye![/yellow]")
         finally:
+            if self._insomnia_engine and self.app_state.insomnia_mode:
+                self._insomnia_engine._save_state()
             if self.api:
                 await self.api.close()
 
@@ -181,6 +197,18 @@ class REPL:
 
         user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
+
+        if self.app_state.insomnia_mode:
+            self.app_state.auto_accept = True
+            if self._insomnia_engine:
+                task_id = await self._insomnia_engine.add_task(user_input)
+                self.console.print(
+                    f"[bold cyan]🌙 Task queued in insomnia mode:[/bold cyan] {task_id}"
+                )
+                if not self._insomnia_engine._current_task:
+                    asyncio.create_task(self._insomnia_engine._process_queue())
+                self.app_state.is_running = False
+                return
 
         max_retry_attempts = 3
         retry_count = 0
@@ -326,7 +354,10 @@ class REPL:
 
             tools = self.registry.get_all_for_prompt()
 
-            self.console.print()
+            if self.app_state.insomnia_mode:
+                self.console.print(f"[dim]🌙 Insomnia iteration {iteration}[/dim]")
+            else:
+                self.console.print()
             spinner = self.console.status("[bold blue]Thinking...[/bold blue]", spinner="dots")
             spinner.start()
 
@@ -411,6 +442,8 @@ class REPL:
                         }
                     )
 
+                self.app_state._persist()
+
             except asyncio.CancelledError:
                 spinner.stop()
                 self.console.print("\n[yellow]Interrupted.[/yellow]")
@@ -484,7 +517,8 @@ class REPL:
             elif answer in ("a", "always"):
                 self.app_state.permission_config.approve_tool(tool_use.name, remember=True)
 
-        self.console.print(f"  [dim]{tool_use.name}[/dim]")
+        tool_prefix = "🌙 " if self.app_state.insomnia_mode else ""
+        self.console.print(f"  [dim]{tool_prefix}{tool_use.name}[/dim]")
 
         ctx = ToolContext(
             app_state=self.app_state,
@@ -556,12 +590,14 @@ class REPL:
             self.console.print(
                 f"[bold]Skills:[/bold] {len(skills)} available (use Tab to complete)"
             )
-            # Show first few skills as examples
             example_skills = sorted(skills)[:5]
             skills_str = ", ".join(f"/{s}" for s in example_skills)
             if len(skills) > 5:
                 skills_str += f", ... ({len(skills) - 5} more)"
             self.console.print(f"[dim]  Examples: {skills_str}[/dim]")
+
+        if self.app_state.insomnia_mode:
+            self.console.print("[bold]Mode:[/bold] [bold cyan]🌙 Insomnia (不眠不休)[/bold cyan]")
 
         self.console.print(
             "\n[dim]Type [bold]/help[/bold] for commands, [bold]Tab[/bold] for skill completion, or just start chatting.[/dim]"

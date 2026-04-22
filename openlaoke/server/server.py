@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from openlaoke.core.config_wizard import get_proxy_url
+from openlaoke.core.insomnia_engine import InsomniaEngine
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.sessions import SessionManager
 from openlaoke.core.state import AppState, create_app_state
@@ -103,6 +104,7 @@ class ActiveSession:
     registry: ToolRegistry
     api: MultiProviderClient
     config: AppConfig
+    insomnia_engine: InsomniaEngine | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -387,6 +389,49 @@ class Server:
                 for tool in tools
             ]
 
+        @app.post("/api/insomnia/enable")
+        async def enable_insomnia(session_id: str | None = None) -> dict[str, Any]:
+            session = await self._get_or_create_session(session_id)
+            if not session.insomnia_engine:
+                session.insomnia_engine = InsomniaEngine(session.app_state)
+                session.app_state._insomnia_engine = session.insomnia_engine
+            await session.insomnia_engine.start()
+            return {"success": True, "message": "Insomnia mode enabled"}
+
+        @app.post("/api/insomnia/disable")
+        async def disable_insomnia(session_id: str | None = None) -> dict[str, Any]:
+            session = await self._get_or_create_session(session_id)
+            if session.insomnia_engine:
+                await session.insomnia_engine.stop()
+            return {"success": True, "message": "Insomnia mode disabled"}
+
+        @app.post("/api/insomnia/add")
+        async def add_insomnia_task(
+            prompt: str, session_id: str | None = None, max_iterations: int | None = None
+        ) -> dict[str, Any]:
+            session = await self._get_or_create_session(session_id)
+            if not session.insomnia_engine:
+                session.insomnia_engine = InsomniaEngine(session.app_state)
+                session.app_state._insomnia_engine = session.insomnia_engine
+            task_id = await session.insomnia_engine.add_task(prompt, max_iterations)
+            return {"success": True, "task_id": task_id}
+
+        @app.get("/api/insomnia/status")
+        async def insomnia_status(session_id: str | None = None) -> dict[str, Any]:
+            session = await self._get_or_create_session(session_id)
+            if not session.insomnia_engine:
+                return {"running": False, "queue_size": 0}
+            return session.insomnia_engine.get_status()
+
+        @app.get("/api/insomnia/log")
+        async def insomnia_log(
+            session_id: str | None = None, limit: int = 50
+        ) -> list[dict[str, Any]]:
+            session = await self._get_or_create_session(session_id)
+            if not session.insomnia_engine:
+                return []
+            return session.insomnia_engine.get_log(limit)
+
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket) -> None:
             await self.manager.connect(websocket)
@@ -481,12 +526,16 @@ class Server:
         proxy_url = get_proxy_url(config)
         api = MultiProviderClient(config.providers, proxy=proxy_url)
 
+        insomnia_engine = InsomniaEngine(app_state)
+        app_state._insomnia_engine = insomnia_engine
+
         new_session_id = app_state.session_id
         session = ActiveSession(
             app_state=app_state,
             registry=registry,
             api=api,
             config=config,
+            insomnia_engine=insomnia_engine,
         )
         self.sessions[new_session_id] = session
         return session
