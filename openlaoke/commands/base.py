@@ -1241,6 +1241,205 @@ class AgentsCommand(SlashCommand):
         return CommandResult(message="\n".join(lines))
 
 
+class InsomniaCommand(SlashCommand):
+    name = "insomnia"
+    description = "不眠不休模式 - Enable persistent background execution"
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        args = ctx.args.strip().lower()
+
+        if not args or args == "status":
+            return self._show_status(ctx)
+        elif args == "on" or args == "enable" or args == "start":
+            return self._enable(ctx)
+        elif args == "off" or args == "disable" or args == "stop":
+            return self._disable(ctx)
+        elif args.startswith("add "):
+            return self._add_task(ctx, args[4:].strip())
+        elif args.startswith("cancel "):
+            return self._cancel_task(ctx, args[7:].strip())
+        elif args == "clear":
+            return self._clear_queue(ctx)
+        elif args == "log":
+            return self._show_log(ctx)
+        elif args.startswith("config "):
+            return self._config(ctx, args[7:].strip())
+        else:
+            return CommandResult(
+                success=False,
+                message="Usage:\n"
+                "  /insomnia on          - Enable insomnia mode\n"
+                "  /insomnia off         - Disable insomnia mode\n"
+                "  /insomnia status      - Show current status\n"
+                "  /insomnia add <task>  - Add task to queue\n"
+                "  /insomnia cancel <id> - Cancel a task\n"
+                "  /insomnia clear       - Clear pending tasks\n"
+                "  /insomnia log         - Show execution log\n"
+                "  /insomnia config <n>  - Set max iterations",
+            )
+
+    def _show_status(self, ctx: CommandContext) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        status = engine.get_status()
+        lines = [
+            "[bold]Insomnia Mode (不眠不休模式)[/bold]",
+            "",
+            f"  Running:        {'[green]Yes[/green]' if status['running'] else '[red]No[/red]'}",
+            f"  Queue size:     {status['queue_size']}",
+            f"  Total iterations: {status['total_iterations']}",
+        ]
+
+        if status["current_task"]:
+            task = status["current_task"]
+            lines.append("")
+            lines.append("  [bold]Current Task:[/bold]")
+            lines.append(f"    ID:          {task['task_id']}")
+            lines.append(f"    Status:      {task['status']}")
+            lines.append(f"    Iterations:  {task['iterations']}/{task['max_iterations']}")
+            if task.get("prompt"):
+                prompt_preview = task["prompt"][:80]
+                lines.append(f"    Prompt:      {prompt_preview}...")
+
+        if status["queue"]:
+            lines.append("")
+            lines.append("  [bold]Pending Tasks:[/bold]")
+            for task in status["queue"][:5]:
+                lines.append(f"    [{task['task_id']}] {task['prompt'][:60]}...")
+            if len(status["queue"]) > 5:
+                lines.append(f"    ... and {len(status['queue']) - 5} more")
+
+        lines.append("")
+        lines.append("[dim]Use /insomnia add <task> to add tasks to the queue.[/dim]")
+
+        return CommandResult(message="\n".join(lines))
+
+    def _enable(self, ctx: CommandContext) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        ctx.app_state.insomnia_mode = True
+        ctx.app_state.insomnia_auto_accept = True
+        ctx.app_state._persist()
+
+        import asyncio
+
+        asyncio.create_task(engine.start())
+
+        return CommandResult(
+            message="[green]✓ Insomnia mode enabled (不眠不休模式已开启)[/green]\n"
+            "AI will continue working even when you disconnect.\n"
+            "Use /insomnia add <task> to queue tasks."
+        )
+
+    def _disable(self, ctx: CommandContext) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        import asyncio
+
+        asyncio.create_task(engine.stop())
+
+        return CommandResult(
+            message="[yellow]Insomnia mode disabled (不眠不休模式已关闭)[/yellow]\n"
+            "Pending tasks are saved and will resume when re-enabled."
+        )
+
+    def _add_task(self, ctx: CommandContext, prompt: str) -> CommandResult:
+        if not prompt:
+            return CommandResult(success=False, message="Usage: /insomnia add <task description>")
+
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        import asyncio
+
+        task_id = asyncio.get_event_loop().run_until_complete(engine.add_task(prompt))
+
+        return CommandResult(
+            message=f"[green]✓ Task added:[/green] {task_id}\n"
+            f"  Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n"
+            "Task will be executed when the queue is processed."
+        )
+
+    def _cancel_task(self, ctx: CommandContext, task_id: str) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        import asyncio
+
+        success = asyncio.get_event_loop().run_until_complete(engine.cancel_task(task_id))
+
+        if success:
+            return CommandResult(message=f"[green]✓ Task cancelled:[/green] {task_id}")
+        return CommandResult(success=False, message=f"Task not found: {task_id}")
+
+    def _clear_queue(self, ctx: CommandContext) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        import asyncio
+
+        count = asyncio.get_event_loop().run_until_complete(engine.clear_queue())
+
+        return CommandResult(message=f"[green]✓ Queue cleared:[/green] {count} tasks removed")
+
+    def _show_log(self, ctx: CommandContext) -> CommandResult:
+        engine = self._get_engine(ctx)
+        if not engine:
+            return CommandResult(message="Insomnia engine not initialized.")
+
+        log = engine.get_log(limit=20)
+        if not log:
+            return CommandResult(message="No log entries yet.")
+
+        lines = ["[bold]Insomnia Log (recent 20 entries):[/bold]", ""]
+        for entry in log:
+            from datetime import datetime
+
+            ts = datetime.fromtimestamp(entry["timestamp"]).strftime("%H:%M:%S")
+            level = entry["level"].upper()
+            task_info = f" [{entry['task_id'][:8]}]" if entry.get("task_id") else ""
+            lines.append(f"  [{ts}] {level}{task_info}: {entry['message']}")
+
+        return CommandResult(message="\n".join(lines))
+
+    def _config(self, ctx: CommandContext, args: str) -> CommandResult:
+        if not args:
+            return CommandResult(
+                message=f"Current config:\n"
+                f"  Max iterations: {ctx.app_state.insomnia_max_iterations}\n"
+                f"  Auto accept:    {ctx.app_state.insomnia_auto_accept}\n"
+                "\n"
+                "Usage: /insomnia config <max_iterations>"
+            )
+
+        try:
+            max_iterations = int(args)
+            if max_iterations < 1:
+                return CommandResult(success=False, message="Max iterations must be positive")
+            ctx.app_state.insomnia_max_iterations = max_iterations
+            ctx.app_state._persist()
+            return CommandResult(message=f"Max iterations set to: {max_iterations}")
+        except ValueError:
+            return CommandResult(success=False, message=f"Invalid number: {args}")
+
+    def _get_engine(self, ctx: CommandContext):
+        """Get or create the insomnia engine."""
+        if not hasattr(ctx.app_state, "_insomnia_engine"):
+            from openlaoke.core.insomnia_engine import InsomniaEngine
+
+            ctx.app_state._insomnia_engine = InsomniaEngine(ctx.app_state)
+        return ctx.app_state._insomnia_engine
+
+
 class UndoCommand(SlashCommand):
     name = "undo"
     description = "Restore file to previous version"
