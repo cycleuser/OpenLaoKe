@@ -42,7 +42,12 @@ openlaoke/
 ├── core/                    # 核心：state, tool, repl, multi_provider_api
 │   ├── supervisor/         # 任务监督（反AI检测、参考文献）
 │   ├── model_assessment/   # 模型评估（5层tier系统）
-│   └── hyperauto/          # HyperAuto自主模式
+│   ├── hyperauto/          # HyperAuto自主模式
+│   ├── local_model_manager.py  # 本地GGUF模型注册表+ModelScope下载
+│   ├── builtin_model_provider.py # llama-cpp-python推理提供者
+│   ├── model_cli.py        # CLI模型管理（download/list/search/remove/info）
+│   ├── prompt_input.py     # 提示输入+Ctrl+P模型选择器
+│   └── system_prompt.py    # 系统提示词（含本地模型精简版）
 ├── tools/                  # 30+工具（bash/read/write/edit/glob/grep/agent/batch等）
 ├── commands/                # 20+斜杠命令（base.py+registry.py）
 ├── types/                  # 类型定义

@@ -187,6 +187,7 @@ class AssistantMessage(BaseMessage):
     content: str = ""
     tool_uses: list[ToolUseBlock] = field(default_factory=list)
     stop_reason: str | None = None
+    thinking: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -195,6 +196,7 @@ class AssistantMessage(BaseMessage):
             "content": self.content,
             "tool_uses": [tu.to_dict() for tu in self.tool_uses],
             "stop_reason": self.stop_reason,
+            "thinking": self.thinking,
         }
 
 

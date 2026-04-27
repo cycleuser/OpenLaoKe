@@ -31,6 +31,7 @@ class ProviderType(StrEnum):
     OPENROUTER = "openrouter"
     GITHUB_COPILOT = "github_copilot"
     OPENCODE = "opencode"
+    LOCAL_BUILTIN = "local_builtin"
     CUSTOM = "custom"
 
 
@@ -48,6 +49,15 @@ class ProviderConfig:
 
     def is_configured(self) -> bool:
         if self.is_local:
+            if self.provider_type == ProviderType.LOCAL_BUILTIN:
+                from openlaoke.core.local_model_manager import LocalModelManager
+
+                manager = LocalModelManager()
+                model_id = self.default_model
+                if model_id.startswith("custom:"):
+                    path = manager.get_model_path(model_id)
+                    return path is not None
+                return manager.is_downloaded(model_id)
             return True
         if self.provider_type == ProviderType.OPENCODE:
             return True
@@ -66,6 +76,16 @@ class MultiProviderConfig:
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     active_provider: str = "ollama"
     active_model: str = ""
+    local_n_ctx: int = 262144
+    local_repetition_penalty: float = 1.1
+    local_temperature: float = 0.3
+
+    @staticmethod
+    def _get_local_builtin_models() -> list[str]:
+        """Get builtin + custom local model IDs."""
+        from openlaoke.utils.config import _get_local_builtin_model_ids
+
+        return _get_local_builtin_model_ids()
 
     def get_active_provider(self) -> ProviderConfig | None:
         return self.providers.get(self.active_provider)
@@ -394,6 +414,13 @@ class MultiProviderConfig:
                         "glm-4.7-free",
                         "mimo-v2-pro-free",
                     ],
+                ),
+                "local_builtin": ProviderConfig(
+                    provider_type=ProviderType.LOCAL_BUILTIN,
+                    base_url="",
+                    default_model="qwen3:0.6b",
+                    models=cls._get_local_builtin_models(),
+                    is_local=True,
                 ),
             },
             active_provider="ollama",

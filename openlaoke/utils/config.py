@@ -16,6 +16,27 @@ CONFIG_DIR = Path.home() / ".openlaoke"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
+def _get_local_builtin_model_ids() -> list[str]:
+    """Get builtin + custom local model IDs from registry."""
+    base_models = [
+        "qwen3:0.6b",
+        "qwen2.5:0.5b",
+        "qwen2.5:1.5b",
+        "qwen2.5:3b",
+    ]
+    try:
+        registry_path = CONFIG_DIR / "models" / "custom_models.json"
+        if registry_path.exists():
+            with open(registry_path) as f:
+                custom_models = json.load(f)
+            for model_id in custom_models:
+                if model_id not in base_models:
+                    base_models.append(model_id)
+    except (json.JSONDecodeError, KeyError, TypeError, OSError):
+        pass
+    return base_models
+
+
 @dataclass
 class AppConfig:
     """User configuration for OpenLaoKe."""
@@ -26,6 +47,7 @@ class AppConfig:
     max_tokens: int = 8192
     temperature: float = 1.0
     thinking_budget: int = 0
+    local_n_ctx: int = 8192
     permission_mode: str = "auto"
     auto_approve_all: bool = True
     auto_accept_tools: list[str] = field(default_factory=list)
@@ -76,6 +98,11 @@ def load_config() -> AppConfig:
                 providers_data = data["providers"]
                 providers.active_provider = providers_data.get("active_provider", "ollama")
                 providers.active_model = providers_data.get("active_model", "")
+                providers.local_n_ctx = providers_data.get("local_n_ctx", 262144)
+                providers.local_repetition_penalty = providers_data.get(
+                    "local_repetition_penalty", 1.1
+                )
+                providers.local_temperature = providers_data.get("local_temperature", 0.3)
                 if "providers" in providers_data:
                     for name, pdata in providers_data.get("providers", {}).items():
                         if name in providers.providers:
@@ -85,8 +112,11 @@ def load_config() -> AppConfig:
                             p.default_model = pdata.get("default_model", p.default_model)
                             p.enabled = pdata.get("enabled", True)
                             # Preserve is_local from defaults
-                            if name in ("ollama", "lm_studio"):
+                            if name in ("ollama", "lm_studio", "local_builtin"):
                                 p.is_local = True
+                            # Refresh local_builtin models from registry
+                            if name == "local_builtin":
+                                p.models = _get_local_builtin_model_ids()
 
             plans = PlanConfig.defaults()
             if "plans" in data:
@@ -115,6 +145,7 @@ def load_config() -> AppConfig:
                 max_tokens=data.get("max_tokens", 8192),
                 temperature=data.get("temperature", 1.0),
                 thinking_budget=data.get("thinking_budget", 0),
+                local_n_ctx=data.get("local_n_ctx", 8192),
                 permission_mode=data.get("permission_mode", "auto"),
                 auto_approve_all=data.get("auto_approve_all", True),
                 theme=data.get("theme", "dark")
@@ -146,6 +177,9 @@ def save_config(config: AppConfig) -> None:
         "providers": {
             "active_provider": config.providers.active_provider,
             "active_model": config.providers.active_model,
+            "local_n_ctx": config.providers.local_n_ctx,
+            "local_repetition_penalty": config.providers.local_repetition_penalty,
+            "local_temperature": config.providers.local_temperature,
             "providers": {
                 name: {
                     "api_key": p.api_key,
@@ -171,6 +205,7 @@ def save_config(config: AppConfig) -> None:
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,
         "thinking_budget": config.thinking_budget,
+        "local_n_ctx": config.local_n_ctx,
         "permission_mode": config.permission_mode,
         "auto_approve_all": config.auto_approve_all,
         "theme": config.theme,

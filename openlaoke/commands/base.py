@@ -116,6 +116,7 @@ class ModelCommand(SlashCommand):
         ctx.app_state.session_config.model = args
         if ctx.app_state.multi_provider_config:
             ctx.app_state.multi_provider_config.active_model = args
+        self._persist_model_change(ctx)
         return CommandResult(message=f"Model set to: {args}")
 
     def _select_by_index(self, ctx: CommandContext, index_str: str) -> CommandResult:
@@ -150,6 +151,7 @@ class ModelCommand(SlashCommand):
         if ctx.app_state.multi_provider_config:
             ctx.app_state.multi_provider_config.active_model = selected_model
 
+        self._persist_model_change(ctx)
         lines = [
             f"[green]✓[/green] Model set to: {selected_model}",
             f"[dim]Provider: {provider_name}[/dim]",
@@ -218,6 +220,7 @@ class ModelCommand(SlashCommand):
         if ctx.app_state.multi_provider_config:
             ctx.app_state.multi_provider_config.active_model = model_name
 
+        self._persist_model_change(ctx)
         return CommandResult(
             message=f"[green]✓[/green] Switched to provider: {provider_name}\nModel: {model_name}"
         )
@@ -231,13 +234,17 @@ class ModelCommand(SlashCommand):
             provider_name = ctx.app_state.multi_provider_config.active_provider
             provider = ctx.app_state.multi_provider_config.providers.get(provider_name)
             if provider:
-                # For Ollama, fetch models dynamically
                 if provider_name == "ollama":
                     models = self._get_ollama_models(provider.base_url)
                     if models:
                         provider.models = models
                     else:
                         models = provider.models
+                elif provider_name == "local_builtin":
+                    from openlaoke.utils.config import _get_local_builtin_model_ids
+
+                    models = _get_local_builtin_model_ids()
+                    provider.models = models
                 else:
                     models = provider.models
 
@@ -260,6 +267,8 @@ class ModelCommand(SlashCommand):
                         "  /model <provider>/<model> - Switch provider and model",
                         "  /model -l            - List all models from all providers",
                         "  /model -p            - List all providers",
+                        "",
+                        "[dim]Tip: Press Ctrl+P to open the model picker[/dim]",
                     ]
                 )
                 return CommandResult(message="\n".join(lines))
@@ -373,6 +382,22 @@ class ModelCommand(SlashCommand):
             ]
         )
         return CommandResult(message="\n".join(lines))
+
+    @staticmethod
+    def _persist_model_change(ctx: CommandContext) -> None:
+        """Persist model change to config file."""
+        try:
+            from openlaoke.utils.config import load_config, save_config
+
+            app_config = load_config()
+            if ctx.app_state.multi_provider_config:
+                app_config.providers.active_provider = (
+                    ctx.app_state.multi_provider_config.active_provider
+                )
+                app_config.providers.active_model = ctx.app_state.multi_provider_config.active_model
+            save_config(app_config)
+        except Exception:
+            pass
 
 
 class ProviderCommand(SlashCommand):
@@ -624,7 +649,208 @@ class SettingsCommand(SlashCommand):
             f"  Permissions: {perm.mode.value}",
             f"  Working dir: {ctx.app_state.get_cwd()}",
         ]
+
+        mp_config = ctx.app_state.multi_provider_config
+        if mp_config and mp_config.active_provider == "local_builtin":
+            lines.extend(
+                [
+                    "",
+                    "Local Model:",
+                    f"  n_ctx:             {mp_config.local_n_ctx}",
+                    f"  temperature:       {mp_config.local_temperature}",
+                    f"  repetition_penalty:{mp_config.local_repetition_penalty}",
+                ]
+            )
+
         return CommandResult(message="\n".join(lines))
+
+
+class LocalConfigCommand(SlashCommand):
+    name = "localconfig"
+    description = "Configure local builtin model parameters"
+    aliases = ["lc"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        args = ctx.args.strip()
+        if not args:
+            mp_config = ctx.app_state.multi_provider_config
+            if not mp_config:
+                return CommandResult(message="No provider config available.")
+            lines = [
+                "Local Model Config:",
+                f"  n_ctx:              {mp_config.local_n_ctx}",
+                f"  temperature:        {mp_config.local_temperature}",
+                f"  repetition_penalty: {mp_config.local_repetition_penalty}",
+                "",
+                "Usage: /localconfig <key> <value>",
+                "  n_ctx              - Context window size (default: 262144)",
+                "  temperature        - Sampling temperature (default: 0.3)",
+                "  repetition_penalty - Repetition penalty (default: 1.1)",
+            ]
+            return CommandResult(message="\n".join(lines))
+
+        parts = args.split(None, 1)
+        if len(parts) != 2:
+            return CommandResult(success=False, message="Usage: /localconfig <key> <value>")
+
+        key, value = parts
+        mp_config = ctx.app_state.multi_provider_config
+        if not mp_config:
+            return CommandResult(message="No provider config available.")
+
+        try:
+            if key == "n_ctx":
+                mp_config.local_n_ctx = int(value)
+            elif key == "temperature":
+                mp_config.local_temperature = float(value)
+            elif key == "repetition_penalty":
+                mp_config.local_repetition_penalty = float(value)
+            else:
+                return CommandResult(
+                    success=False,
+                    message=f"Unknown key: {key}. Valid keys: n_ctx, temperature, repetition_penalty",
+                )
+        except ValueError:
+            return CommandResult(success=False, message=f"Invalid value for {key}: {value}")
+
+        if mp_config.active_provider == "local_builtin" and ctx.app_state.multi_provider_config:
+            ctx.app_state.multi_provider_config._builtin_client = None
+
+        try:
+            from openlaoke.utils.config import load_config, save_config
+
+            app_config = load_config()
+            app_config.providers.local_n_ctx = mp_config.local_n_ctx
+            app_config.providers.local_temperature = mp_config.local_temperature
+            app_config.providers.local_repetition_penalty = mp_config.local_repetition_penalty
+            save_config(app_config)
+        except Exception:
+            pass
+
+        return CommandResult(
+            message=f"[green]✓[/green] Set {key} = {value}\n[dim]Changes apply on next request[/dim]"
+        )
+
+
+class DistillCommand(SlashCommand):
+    name = "distill"
+    description = "Generate distilled templates from online model for local model"
+    aliases = ["ds"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        args = ctx.args.strip()
+
+        if not args:
+            from openlaoke.core.distilled_templates import DistilledTemplateManager
+
+            manager = DistilledTemplateManager()
+            templates = manager.list_templates()
+            lines = ["Distilled Templates:", ""]
+            for t in templates:
+                source = (
+                    "[dim]built-in[/dim]" if t["source"] == "built-in" else "[green]user[/green]"
+                )
+                triggers = ", ".join(t["triggers"][:3])
+                if len(t["triggers"]) > 3:
+                    triggers += f" (+{len(t['triggers']) - 3})"
+                lines.append(f"  {t['id']} ({t['category']}) [{source}]")
+                lines.append(f"    Triggers: {triggers}")
+                lines.append(f"    Examples: {t['example_count']}")
+            lines.extend(
+                [
+                    "",
+                    "Usage:",
+                    "  /distill <category> <triggers>  - Generate template from online model",
+                    "  /distill list                   - List all templates",
+                    "  /distill remove <id>            - Remove user template",
+                    "  /distill test <input>           - Test template matching",
+                ]
+            )
+            return CommandResult(message="\n".join(lines))
+
+        parts = args.split(None, 2)
+        subcmd = parts[0]
+
+        if subcmd == "list":
+            from openlaoke.core.distilled_templates import DistilledTemplateManager
+
+            manager = DistilledTemplateManager()
+            templates = manager.list_templates()
+            lines = [f"Templates ({len(templates)} total):", ""]
+            for t in templates:
+                source = (
+                    "[dim]built-in[/dim]" if t["source"] == "built-in" else "[green]user[/green]"
+                )
+                lines.append(
+                    f"  {t['id']} ({t['category']}) [{source}] - {t['example_count']} examples"
+                )
+            return CommandResult(message="\n".join(lines))
+
+        if subcmd == "remove":
+            if len(parts) < 2:
+                return CommandResult(success=False, message="Usage: /distill remove <template_id>")
+            from openlaoke.core.distilled_templates import DistilledTemplateManager
+
+            manager = DistilledTemplateManager()
+            if manager.remove_template(parts[1]):
+                return CommandResult(message=f"[green]✓[/green] Removed {parts[1]}")
+            return CommandResult(
+                success=False, message=f"Cannot remove: {parts[1]} (built-in or not found)"
+            )
+
+        if subcmd == "test":
+            if len(parts) < 2:
+                return CommandResult(success=False, message="Usage: /distill test <input>")
+            from openlaoke.core.distilled_templates import DistilledTemplateManager
+
+            manager = DistilledTemplateManager()
+            matched = manager.match_templates(parts[1])
+            if not matched:
+                return CommandResult(message=f"No templates match: {parts[1]}")
+            lines = [f"Matched {len(matched)} templates:", ""]
+            for t in matched:
+                lines.append(f"  {t.category}: {', '.join(t.triggers[:3])}")
+                for e in t.examples[:1]:
+                    lines.append(f"    Q: {e.question}")
+                    lines.append(f"    A: {e.answer[:80]}...")
+            return CommandResult(message="\n".join(lines))
+
+        if subcmd == "generate":
+            if len(parts) < 3:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /distill generate <category> <triggers>\nExample: /distill generate code_sort sort,排序,quicksort",
+                )
+            category = parts[1]
+            triggers = [t.strip() for t in parts[2].split(",")]
+
+            from openlaoke.core.distilled_templates import (
+                DISTILLED_TEMPLATES_PATH,
+                DistilledTemplateManager,
+            )
+
+            manager = DistilledTemplateManager()
+            template_id = (
+                f"user_{category}_{len([k for k in manager.templates if k.startswith('user_')])}"
+            )
+
+            lines = [
+                f"[bold]Generating distilled template: {template_id}[/bold]",
+                f"Category: {category}",
+                f"Triggers: {', '.join(triggers)}",
+                "",
+                "[dim]Note: Template generation requires an online provider.[/dim]",
+                "[dim]Switch to an online provider first, then run this command.[/dim]",
+                "",
+                "To manually add examples, edit:",
+                f"  {DISTILLED_TEMPLATES_PATH}",
+            ]
+            return CommandResult(message="\n".join(lines))
+
+        return CommandResult(
+            success=False,
+            message=f"Unknown subcommand: {subcmd}. Use /distill for help.",
+        )
 
 
 class DoctorCommand(SlashCommand):

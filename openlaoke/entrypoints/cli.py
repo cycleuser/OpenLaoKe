@@ -35,6 +35,24 @@ def main() -> None:
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
+    # Model command
+    model_parser = subparsers.add_parser("model", help="Manage built-in GGUF models")
+    model_subparsers = model_parser.add_subparsers(dest="model_command", help="Model commands")
+
+    model_download_parser = model_subparsers.add_parser("download", help="Download a model")
+    model_download_parser.add_argument("model_id", nargs="?", help="Model ID to download")
+
+    _ = model_subparsers.add_parser("list", help="List available models")
+
+    model_remove_parser = model_subparsers.add_parser("remove", help="Remove a model")
+    model_remove_parser.add_argument("model_id", help="Model ID to remove")
+
+    model_info_parser = model_subparsers.add_parser("info", help="Show model information")
+    model_info_parser.add_argument("model_id", help="Model ID")
+
+    model_search_parser = model_subparsers.add_parser("search", help="Search ModelScope for models")
+    model_search_parser.add_argument("query", help="Search query")
+
     # Auth command
     auth_parser = subparsers.add_parser("auth", help="Authentication management")
     auth_parser.add_argument("provider", nargs="?", help="Provider to authenticate")
@@ -182,6 +200,29 @@ def main() -> None:
 
     console = Console(force_terminal=True)
 
+    if args.command == "model":
+        from openlaoke.core.model_cli import (
+            list_models,
+            remove_model,
+            run_download,
+            run_search,
+            show_model_info,
+        )
+
+        if args.model_command == "download":
+            run_download(args.model_id)
+        elif args.model_command == "list":
+            list_models()
+        elif args.model_command == "remove":
+            remove_model(args.model_id)
+        elif args.model_command == "info":
+            show_model_info(args.model_id)
+        elif args.model_command == "search":
+            run_search(args.query)
+        else:
+            model_parser.print_help()
+        return
+
     if args.command == "server":
         from openlaoke.server import Server
 
@@ -210,7 +251,6 @@ def main() -> None:
 
     if args.command == "auth":
         from openlaoke.core.extended_web import BrowserAuthManager
-        from openlaoke.core.extended_web.types import WEB_PROVIDERS
 
         auth_manager = BrowserAuthManager()
 
