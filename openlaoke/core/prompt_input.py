@@ -16,6 +16,7 @@ from openlaoke.core.skill_system import get_skill_registry, list_available_skill
 HISTORY_FILE = Path.home() / ".openlaoke" / "command_history.txt"
 
 PROMPT_CUSTOM_ACTION: str | None = None
+PICKER_TRIGGERED = False
 
 
 def _get_skill_source(path) -> str:
@@ -163,13 +164,16 @@ class OpenLaoKeCompleter(Completer):
 
 
 def _collect_all_models() -> list[dict[str, str]]:
-    """Collect all models from all providers, including local_builtin custom models."""
+    """Collect models from configured providers only (local, free, or stored API key)."""
     from openlaoke.utils.config import load_config
 
     config = load_config()
     entries: list[dict[str, str]] = []
+
     for pname, provider in config.providers.providers.items():
         if not provider.enabled:
+            continue
+        if not provider.is_configured():
             continue
         for model in provider.models:
             entries.append(
@@ -179,101 +183,57 @@ def _collect_all_models() -> list[dict[str, str]]:
                     "display": f"{pname}/{model}",
                 }
             )
+
     if config.providers.active_model:
         active = f"{config.providers.active_provider}/{config.providers.active_model}"
         entries.sort(key=lambda e: (0 if e["display"] == active else 1, e["display"]))
     return entries
 
 
-def _run_model_picker() -> str | None:
-    """Run an interactive model picker dialog. Returns 'provider/model' or None."""
-    from prompt_toolkit.application import Application
-    from prompt_toolkit.buffer import Buffer
-    from prompt_toolkit.containers import HSplit, Window
-    from prompt_toolkit.layout import Layout
-    from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
-    from prompt_toolkit.widgets import Frame
-
+async def run_model_picker_async() -> str | None:
+    """Async model picker that works within the prompt_toolkit event loop."""
     entries = _collect_all_models()
     if not entries:
         return None
 
-    filtered = list(entries)
-    selected_idx = [0]
+    picker_session = PromptSession()
 
-    def get_display_items():
-        lines = []
-        for i, entry in enumerate(filtered):
-            marker = " > " if i == selected_idx[0] else "   "
-            style = "class:selection" if i == selected_idx[0] else ""
-            lines.append((style, f"{marker}{entry['display']}"))
-        return lines
+    while True:
+        try:
+            print("\n" + "=" * 60)
+            print("  Model Picker (type number or name, Enter to select)")
+            print("  Press Ctrl+C to cancel")
+            print("=" * 60)
 
-    search_buffer = Buffer()
+            for i, entry in enumerate(entries, 1):
+                print(f"  [{i:2d}] {entry['display']}")
 
-    def on_text_changed(buf):
-        nonlocal filtered, selected_idx
-        query = buf.text.lower()
-        if not query:
-            filtered = list(entries)
-        else:
-            filtered = [e for e in entries if query in e["display"].lower()]
-        selected_idx[0] = 0
+            print()
 
-    search_buffer.on_text_changed += on_text_changed
+            choice = await picker_session.prompt_async("  Select > ")
+            choice = choice.strip()
 
-    content_control = FormattedTextControl(text=get_display_items)
-    content_window = Window(content=content_control, height=min(len(entries), 15))
+            if not choice:
+                return entries[0]["display"]
 
-    search_control = BufferControl(buffer=search_buffer)
-    search_window = Window(content=search_control, height=1)
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(entries):
+                    return entries[idx]["display"]
+                print("  Invalid number. Try again.")
+                continue
 
-    root_container = Frame(
-        title="Model Picker (Ctrl+P) - Type to filter, Enter to select, Esc to cancel",
-        body=HSplit([search_window, Window(height=1, char="-"), content_window]),
-    )
+            for entry in entries:
+                if choice.lower() in entry["display"].lower():
+                    return entry["display"]
 
-    layout = Layout(container=root_container)
-    layout.focus(search_buffer)
+            print("  No match found. Try again.")
+            continue
 
-    kb = KeyBindings()
-
-    result = [None]
-
-    @kb.add("enter")
-    def _(event):
-        if filtered and 0 <= selected_idx[0] < len(filtered):
-            entry = filtered[selected_idx[0]]
-            result[0] = entry["display"]
-        event.app.exit()
-
-    @kb.add("escape")
-    def _(event):
-        event.app.exit()
-
-    @kb.add("up")
-    def _(event):
-        if selected_idx[0] > 0:
-            selected_idx[0] -= 1
-
-    @kb.add("down")
-    def _(event):
-        if selected_idx[0] < len(filtered) - 1:
-            selected_idx[0] += 1
-
-    @kb.add("c-n")
-    def _(event):
-        if selected_idx[0] < len(filtered) - 1:
-            selected_idx[0] += 1
-
-    @kb.add("c-p")
-    def _(event):
-        if selected_idx[0] > 0:
-            selected_idx[0] -= 1
-
-    app = Application(layout=layout, key_bindings=kb, full_screen=False, erase_when_done=True)
-    app.run()
-    return result[0]
+        except (EOFError, KeyboardInterrupt):
+            return None
+        except Exception:
+            return None
 
 
 def create_prompt_session():
@@ -298,10 +258,8 @@ def create_prompt_session():
 
     @kb.add("c-p")
     def _ctrl_p(event):
-        global PROMPT_CUSTOM_ACTION
-        selection = _run_model_picker()
-        if selection:
-            PROMPT_CUSTOM_ACTION = f"model_switch:{selection}"
+        global PICKER_TRIGGERED
+        PICKER_TRIGGERED = True
         event.app.exit()
 
     session = PromptSession(
@@ -319,10 +277,13 @@ def create_prompt_session():
 
 async def get_user_input(session: PromptSession) -> str | None:
     """Get input from user with autocomplete support."""
-    global PROMPT_CUSTOM_ACTION
+    global PROMPT_CUSTOM_ACTION, PICKER_TRIGGERED
     PROMPT_CUSTOM_ACTION = None
+    PICKER_TRIGGERED = False
     try:
         result = await session.prompt_async("OpenLaoKe: ")
+        if PICKER_TRIGGERED:
+            return "PICKER_TRIGGERED"
         if PROMPT_CUSTOM_ACTION:
             return PROMPT_CUSTOM_ACTION
         return result.strip() if result else None
