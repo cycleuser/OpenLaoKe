@@ -34,44 +34,7 @@ GGUF_SOURCE_ORGS = [
     "second-state",
 ]
 
-DEFAULT_BUILTIN_MODELS = {
-    "qwen3:0.6b": {
-        "name": "Qwen 3 0.6B",
-        "modelscope_id": "Qwen/Qwen3-0.6B-GGUF",
-        "filename": "Qwen3-0.6B-Q8_0.gguf",
-        "size_mb": 610,
-        "description": "Alibaba's Qwen3 0.6B GGUF, excellent Chinese/English support",
-        "min_ram_mb": 1024,
-        "tags": ["qwen", "chinese", "lightweight"],
-    },
-    "qwen2.5:0.5b": {
-        "name": "Qwen 2.5 0.5B",
-        "modelscope_id": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
-        "filename": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "size_mb": 469,
-        "description": "Ultra-small Qwen2.5 0.5B, minimal resource usage",
-        "min_ram_mb": 512,
-        "tags": ["qwen", "chinese", "ultra-light"],
-    },
-    "qwen2.5:1.5b": {
-        "name": "Qwen 2.5 1.5B",
-        "modelscope_id": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
-        "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "size_mb": 1020,
-        "description": "Qwen2.5 1.5B, good balance of speed and quality",
-        "min_ram_mb": 2048,
-        "tags": ["qwen", "chinese", "balanced"],
-    },
-    "qwen2.5:3b": {
-        "name": "Qwen 2.5 3B",
-        "modelscope_id": "Qwen/Qwen2.5-3B-Instruct-GGUF",
-        "filename": "qwen2.5-3b-instruct-q4_k_m.gguf",
-        "size_mb": 1890,
-        "description": "Qwen2.5 3B, better reasoning and coding ability",
-        "min_ram_mb": 4096,
-        "tags": ["qwen", "chinese", "coding"],
-    },
-}
+DEFAULT_BUILTIN_MODELS = {}
 
 
 @dataclass

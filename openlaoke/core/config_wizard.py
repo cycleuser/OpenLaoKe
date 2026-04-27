@@ -39,8 +39,19 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         table.add_column("Provider", style="bold")
         table.add_column("Status", style="dim")
 
+        # Check local providers dynamically
+        ollama_cfg = config.providers.providers.get("ollama")
+        if ollama_cfg is None:
+            ollama_cfg = ProviderConfig(provider_type=ProviderType.OLLAMA, is_local=True)
+        ollama_status = "local" if ollama_cfg.is_configured() else "not found"
+
+        lm_cfg = config.providers.providers.get("lm_studio")
+        if lm_cfg is None:
+            lm_cfg = ProviderConfig(provider_type=ProviderType.LM_STUDIO, is_local=True)
+        lm_status = "local" if lm_cfg.is_configured() else "not found"
+
         providers = [
-            ("1", "🟠 Ollama (Local)", "ollama", "local"),
+            ("1", "🟠 Ollama (Local)", "ollama", ollama_status),
             ("2", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
             ("3", "💻 Built-in GGUF Model (Local)", "local_builtin", "local"),
             ("4", "MiniMax", "minimax", "cloud"),
@@ -61,15 +72,20 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             ("19", "Perplexity", "perplexity", "cloud"),
             ("20", "OpenRouter", "openrouter", "cloud"),
             ("21", "GitHub Copilot", "github_copilot", "cloud"),
-            ("22", "LM Studio (Local)", "lm_studio", "local"),
+            ("22", "LM Studio (Local)", "lm_studio", lm_status),
             ("23", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
             ("24", "Skip (configure later)", "", ""),
         ]
 
-        for opt, name, key, _ptype in providers:
+        for opt, name, key, ptype in providers:
             if key and key in config.providers.providers:
                 provider = config.providers.providers[key]
-                status = _get_provider_status(provider)
+                if key in ("ollama", "lm_studio"):
+                    status = (
+                        "[green]✓ local[/green]" if ptype == "local" else "[dim]not found[/dim]"
+                    )
+                else:
+                    status = _get_provider_status(provider)
                 table.add_row(f"  [{opt}]", name, status)
             elif key == "":
                 table.add_row(f"  [{opt}]", name, "")
@@ -638,15 +654,18 @@ def _configure_builtin_provider(
     """Configure built-in GGUF model provider."""
     from openlaoke.core.local_model_manager import LocalModelManager
 
-    console.print("[bold]Built-in GGUF Models[/bold]")
-    console.print("[dim]Small models that run locally on CPU[/dim]\n")
+    console.print("[bold]Local GGUF Models[/bold]")
+    console.print("[dim]Models downloaded from ModelScope[/dim]\n")
 
     manager = LocalModelManager()
     models = manager.list_models()
-
-    builtin_models = [m for m in models if not m.model_id.startswith("custom:")]
     custom_models = [m for m in models if m.model_id.startswith("custom:")]
-    all_models = builtin_models + custom_models
+
+    if not custom_models:
+        console.print("[yellow]No local models downloaded.[/yellow]")
+        console.print("[dim]Download one first: openlaoke model search <query>[/dim]")
+        console.print("[dim]Then run: openlaoke model download <model_id>[/dim]\n")
+        return config
 
     table = Table(show_header=True, box=None)
     table.add_column("Option", style="cyan")
@@ -655,39 +674,19 @@ def _configure_builtin_provider(
     table.add_column("Status", style="green")
 
     idx = 1
-    for model in builtin_models:
+    all_models = []
+    for model in custom_models:
         status = (
             "[green]✓ downloaded[/green]" if model.downloaded else "[yellow]not downloaded[/yellow]"
         )
         table.add_row(
             f"  [{idx}]",
             f"{model.name}\n[dim]{model.description}[/dim]",
-            f"{model.size_mb} MB",
+            f"{model.size_mb:.0f} MB",
             status,
         )
+        all_models.append(model)
         idx += 1
-
-    if custom_models:
-        console.print(table)
-        console.print("\n[bold]Custom Downloaded Models[/bold]")
-        table = Table(show_header=True, box=None)
-        table.add_column("Option", style="cyan")
-        table.add_column("Model", style="bold")
-        table.add_column("Size", style="dim")
-        table.add_column("Status", style="green")
-        for model in custom_models:
-            status = (
-                "[green]✓ downloaded[/green]"
-                if model.downloaded
-                else "[yellow]not downloaded[/yellow]"
-            )
-            table.add_row(
-                f"  [{idx}]",
-                f"{model.name}\n[dim]{model.description}[/dim]",
-                f"{model.size_mb:.0f} MB",
-                status,
-            )
-            idx += 1
 
     console.print(table)
     console.print()

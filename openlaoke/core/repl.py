@@ -103,6 +103,14 @@ class REPL:
             self._running = False
             return
 
+        from openlaoke.core.prompt_input import PICKER_TRIGGERED, run_model_picker_async
+
+        if PICKER_TRIGGERED:
+            selection = await run_model_picker_async()
+            if selection:
+                self._handle_model_switch(selection)
+            return
+
         user_input = user_input.strip()
         if not user_input:
             return

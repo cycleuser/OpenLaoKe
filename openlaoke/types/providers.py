@@ -6,6 +6,18 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
+def _check_local_server(url: str) -> bool:
+    """Check if a local server is reachable."""
+    try:
+        import httpx
+
+        with httpx.Client(timeout=2.0) as client:
+            response = client.get(url)
+            return response.status_code < 500
+    except Exception:
+        return False
+
+
 class ProviderType(StrEnum):
     """Supported LLM providers."""
 
@@ -58,6 +70,10 @@ class ProviderConfig:
                     path = manager.get_model_path(model_id)
                     return path is not None
                 return manager.is_downloaded(model_id)
+            if self.provider_type == ProviderType.OLLAMA:
+                return _check_local_server(self.base_url or "http://localhost:11434")
+            if self.provider_type == ProviderType.LM_STUDIO:
+                return _check_local_server(self.base_url or "http://localhost:1234")
             return True
         if self.provider_type == ProviderType.OPENCODE:
             return True
