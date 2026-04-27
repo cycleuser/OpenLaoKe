@@ -56,9 +56,13 @@ dev = [
     "build>=1.2",
     "twine>=6.0",
 ]
+local = [
+    "llama-cpp-python>=0.3.0",
+]
 
 [project.scripts]
 openlaoke = "openlaoke.entrypoints.cli:main"
+openlaoke-post-install = "openlaoke.hooks.post_install:post_install"
 
 [project.urls]
 Homepage = "https://github.com/OpenLaoKe/OpenLaoKe"

@@ -1,4 +1,4 @@
-"""Interactive prompt input with real-time autocomplete menu."""
+"""Interactive prompt input with real-time autocomplete menu and Ctrl+P model picker."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ from pathlib import Path
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 
 from openlaoke.commands.registry import get_all_commands, register_all
 from openlaoke.core.skill_system import get_skill_registry, list_available_skills
 
-# History file location
 HISTORY_FILE = Path.home() / ".openlaoke" / "command_history.txt"
+
+PROMPT_CUSTOM_ACTION: str | None = None
 
 
 def _get_skill_source(path) -> str:
@@ -160,8 +162,122 @@ class OpenLaoKeCompleter(Completer):
         return idx == len(query)
 
 
+def _collect_all_models() -> list[dict[str, str]]:
+    """Collect all models from all providers, including local_builtin custom models."""
+    from openlaoke.utils.config import load_config
+
+    config = load_config()
+    entries: list[dict[str, str]] = []
+    for pname, provider in config.providers.providers.items():
+        if not provider.enabled:
+            continue
+        for model in provider.models:
+            entries.append(
+                {
+                    "provider": pname,
+                    "model": model,
+                    "display": f"{pname}/{model}",
+                }
+            )
+    if config.providers.active_model:
+        active = f"{config.providers.active_provider}/{config.providers.active_model}"
+        entries.sort(key=lambda e: (0 if e["display"] == active else 1, e["display"]))
+    return entries
+
+
+def _run_model_picker() -> str | None:
+    """Run an interactive model picker dialog. Returns 'provider/model' or None."""
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.buffer import Buffer
+    from prompt_toolkit.containers import HSplit, Window
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+    from prompt_toolkit.widgets import Frame
+
+    entries = _collect_all_models()
+    if not entries:
+        return None
+
+    filtered = list(entries)
+    selected_idx = [0]
+
+    def get_display_items():
+        lines = []
+        for i, entry in enumerate(filtered):
+            marker = " > " if i == selected_idx[0] else "   "
+            style = "class:selection" if i == selected_idx[0] else ""
+            lines.append((style, f"{marker}{entry['display']}"))
+        return lines
+
+    search_buffer = Buffer()
+
+    def on_text_changed(buf):
+        nonlocal filtered, selected_idx
+        query = buf.text.lower()
+        if not query:
+            filtered = list(entries)
+        else:
+            filtered = [e for e in entries if query in e["display"].lower()]
+        selected_idx[0] = 0
+
+    search_buffer.on_text_changed += on_text_changed
+
+    content_control = FormattedTextControl(text=get_display_items)
+    content_window = Window(content=content_control, height=min(len(entries), 15))
+
+    search_control = BufferControl(buffer=search_buffer)
+    search_window = Window(content=search_control, height=1)
+
+    root_container = Frame(
+        title="Model Picker (Ctrl+P) - Type to filter, Enter to select, Esc to cancel",
+        body=HSplit([search_window, Window(height=1, char="-"), content_window]),
+    )
+
+    layout = Layout(container=root_container)
+    layout.focus(search_buffer)
+
+    kb = KeyBindings()
+
+    result = [None]
+
+    @kb.add("enter")
+    def _(event):
+        if filtered and 0 <= selected_idx[0] < len(filtered):
+            entry = filtered[selected_idx[0]]
+            result[0] = entry["display"]
+        event.app.exit()
+
+    @kb.add("escape")
+    def _(event):
+        event.app.exit()
+
+    @kb.add("up")
+    def _(event):
+        if selected_idx[0] > 0:
+            selected_idx[0] -= 1
+
+    @kb.add("down")
+    def _(event):
+        if selected_idx[0] < len(filtered) - 1:
+            selected_idx[0] += 1
+
+    @kb.add("c-n")
+    def _(event):
+        if selected_idx[0] < len(filtered) - 1:
+            selected_idx[0] += 1
+
+    @kb.add("c-p")
+    def _(event):
+        if selected_idx[0] > 0:
+            selected_idx[0] -= 1
+
+    app = Application(layout=layout, key_bindings=kb, full_screen=False, erase_when_done=True)
+    app.run()
+    return result[0]
+
+
 def create_prompt_session():
-    """Create a PromptSession with autocomplete and history."""
+    """Create a PromptSession with autocomplete, history, and Ctrl+P model picker."""
     # Ensure history directory exists
     HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -176,8 +292,17 @@ def create_prompt_session():
 
     completer = OpenLaoKeCompleter()
 
-    # Create file-based history for persistence
     history = FileHistory(str(HISTORY_FILE))
+
+    kb = KeyBindings()
+
+    @kb.add("c-p")
+    def _ctrl_p(event):
+        global PROMPT_CUSTOM_ACTION
+        selection = _run_model_picker()
+        if selection:
+            PROMPT_CUSTOM_ACTION = f"model_switch:{selection}"
+        event.app.exit()
 
     session = PromptSession(
         completer=completer,
@@ -185,7 +310,8 @@ def create_prompt_session():
         complete_while_typing=True,
         mouse_support=True,
         history=history,
-        enable_history_search=True,  # Enable up/down arrow navigation
+        enable_history_search=True,
+        key_bindings=kb,
     )
 
     return session
@@ -193,9 +319,13 @@ def create_prompt_session():
 
 async def get_user_input(session: PromptSession) -> str | None:
     """Get input from user with autocomplete support."""
+    global PROMPT_CUSTOM_ACTION
+    PROMPT_CUSTOM_ACTION = None
     try:
         result = await session.prompt_async("OpenLaoKe: ")
-        return result.strip()
+        if PROMPT_CUSTOM_ACTION:
+            return PROMPT_CUSTOM_ACTION
+        return result.strip() if result else None
     except KeyboardInterrupt:
         return None
     except EOFError:

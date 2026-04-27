@@ -98,7 +98,6 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         "   - Always cite actual papers with [number] format\n"
         "   - Reference specific code with file:line format\n"
         "   - Include actual measurements and numbers\n"
-        "\n"
         "VERIFICATION: Before finishing ANY task:\n"
         "- Does every paragraph have specific details (numbers, citations, code refs)?\n"
         "- Are there more than 3 bullet points without explanation?\n"
@@ -117,6 +116,33 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         parts.append(f"\n## Additional Instructions\n{suffix}")
 
     return "\n".join(parts)
+
+
+def build_compact_system_prompt(app_state: AppState, user_input: str = "") -> str:
+    """Build a minimal system prompt for small local models with limited context."""
+    import platform
+
+    os_name = f"{platform.system()} {platform.release()}"
+    base = (
+        f"You are OpenLaoKe, an open-source AI coding assistant running on {os_name}. "
+        "You help users with programming tasks: writing code, debugging, explaining concepts. "
+        "Be concise and direct. Always answer in the user's language. "
+        f"Working directory: {app_state.get_cwd()}. "
+        "If asked who you are, say you are OpenLaoKe, an AI coding assistant. "
+        f"If asked about the OS, say {os_name}. "
+        "Do NOT repeat yourself. Do NOT output the same content multiple times. "
+        "Give specific, accurate answers only."
+    )
+
+    if user_input:
+        from openlaoke.core.distilled_templates import DistilledTemplateManager
+
+        manager = DistilledTemplateManager()
+        context = manager.build_context(user_input, max_tokens=200)
+        if context:
+            return f"{base}\n\n{context}"
+
+    return base
 
 
 def _get_git_branch(cwd: str) -> str | None:

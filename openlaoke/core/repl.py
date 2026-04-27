@@ -107,6 +107,10 @@ class REPL:
         if not user_input:
             return
 
+        if user_input.startswith("model_switch:"):
+            self._handle_model_switch(user_input[len("model_switch:") :])
+            return
+
         if user_input.startswith("/"):
             from openlaoke.core.skill_system import load_skill
 
@@ -167,6 +171,38 @@ class REPL:
         if isinstance(result, SkillActivationResult) and result.should_continue_chat:
             self.console.print()
             await self._handle_chat(args)
+
+    def _handle_model_switch(self, selection: str) -> None:
+        """Handle model switch from Ctrl+P picker."""
+        if "/" not in selection:
+            return
+        provider_name, model_name = selection.split("/", 1)
+
+        config = self.app_state.multi_provider_config or self.multi_provider_config
+        if not config:
+            return
+
+        provider = config.providers.get(provider_name)
+        if not provider:
+            self.console.print(f"[red]Provider not found: {provider_name}[/red]")
+            return
+
+        config.active_provider = provider_name
+        config.active_model = model_name
+        self.app_state.session_config.model = model_name
+
+        if self.api:
+            self.api._builtin_client = None
+            self.api.config = config
+
+        from openlaoke.utils.config import load_config, save_config
+
+        app_config = load_config()
+        app_config.providers.active_provider = provider_name
+        app_config.providers.active_model = model_name
+        save_config(app_config)
+
+        self.console.print(f"[green]✓ Switched to: {provider_name}/{model_name}[/green]")
 
     async def _handle_chat(self, user_input: str) -> None:
         """Process a chat message through the AI model."""
@@ -347,10 +383,24 @@ class REPL:
         while iteration < max_iterations and self._running:
             iteration += 1
 
-            system_prompt = build_system_prompt(
-                self.app_state,
-                self.registry.get_all_for_prompt(),
+            is_local_builtin = (
+                self.app_state.multi_provider_config
+                and self.app_state.multi_provider_config.active_provider == "local_builtin"
             )
+            if is_local_builtin:
+                from openlaoke.core.system_prompt import build_compact_system_prompt
+
+                user_input = ""
+                for msg in reversed(messages):
+                    if msg.get("role") == "user":
+                        user_input = msg.get("content", "")
+                        break
+                system_prompt = build_compact_system_prompt(self.app_state, user_input)
+            else:
+                system_prompt = build_system_prompt(
+                    self.app_state,
+                    self.registry.get_all_for_prompt(),
+                )
 
             tools = self.registry.get_all_for_prompt()
 
@@ -379,6 +429,9 @@ class REPL:
 
                 self.app_state.accumulate_tokens(usage)
                 self.app_state.accumulate_cost(cost)
+
+                if response.thinking:
+                    self.console.print(f"[dim italic]💭 {response.thinking}[/dim italic]")
 
                 if response.content:
                     self.console.print(Markdown(response.content))
