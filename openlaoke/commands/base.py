@@ -2450,3 +2450,73 @@ class DualModelConfigCommand(SlashCommand):
                 success=False,
                 message=f"Unknown action: {action}\nAvailable: list, use, check, create",
             )
+
+
+class LessonsCommand(SlashCommand):
+    name = "lessons"
+    description = "Show cross-project lessons learned and bitter lesson tracker"
+    aliases = ["lesson", "bitter-lesson"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.cross_project_lessons import (
+            generate_lessons_report,
+            get_implementation_status,
+        )
+
+        args = ctx.args.strip().lower()
+
+        if args in ("report", ""):
+            report = generate_lessons_report()
+            return CommandResult(message=report)
+
+        elif args == "done":
+            lessons = get_implementation_status("done")
+            lines = [f"Implemented lessons ({len(lessons)}):", ""]
+            for lesson in lessons:
+                lines.append(f"  ✅ [{lesson.priority}] {lesson.source_project}: {lesson.lesson}")
+            return CommandResult(message="\n".join(lines))
+
+        elif args == "pending":
+            lessons = get_implementation_status("pending")
+            lines = [f"Pending lessons ({len(lessons)}):", ""]
+            for lesson in lessons:
+                lines.append(f"  ⏳ [{lesson.priority}] {lesson.source_project}: {lesson.lesson}")
+            return CommandResult(message="\n".join(lines))
+
+        elif args == "stats":
+            from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
+
+            tracker = BitterLessonTracker()
+            stats = tracker.get_strategy_stats()
+            if not stats:
+                return CommandResult(message="No strategy data yet. Keep using the system to gather data.")
+
+            lines = ["=== Strategy Statistics ===", ""]
+            for key, s in stats.items():
+                status = "DISABLED" if s.get("disabled") else "active"
+                lines.append(
+                    f"[{status}] {key}: {s['success_rate']:.0%} success "
+                    f"({s['total_attempts']} attempts, {s['avg_tokens_used']} avg tokens)"
+                )
+                if s.get("recommendation"):
+                    lines.append(f"  -> {s['recommendation']}")
+            return CommandResult(message="\n".join(lines))
+
+        elif args == "summary":
+            from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
+
+            tracker = BitterLessonTracker()
+            return CommandResult(message=tracker.get_bitter_lessons_summary())
+
+        else:
+            return CommandResult(
+                success=False,
+                message=(
+                    "Usage: /lessons [report|done|pending|stats|summary]\n"
+                    "  report  - Full cross-project lessons report\n"
+                    "  done    - Show implemented lessons\n"
+                    "  pending - Show pending lessons\n"
+                    "  stats   - Show strategy statistics from bitter lesson tracker\n"
+                    "  summary - Show bitter lesson tracker summary"
+                ),
+            )

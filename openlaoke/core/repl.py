@@ -46,6 +46,18 @@ class REPL:
         self._current_task_id: str | None = None
         self._insomnia_engine = None
 
+        from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
+        from openlaoke.core.hook_system import HookRegistry
+        from openlaoke.core.small_model_optimizations import (
+            ReadLoopTracker,
+            TerminalOutputCompressor,
+        )
+
+        self._read_loop_tracker = ReadLoopTracker()
+        self._output_compressor = TerminalOutputCompressor()
+        self._lesson_tracker = BitterLessonTracker()
+        self._hook_system = HookRegistry.get()
+
         register_all()
         register_all_tools(self.registry)
 
@@ -272,6 +284,19 @@ class REPL:
                         self.console.print(
                             f"\n[green]✓ Task completed ({result.completion_percentage:.0f}%)[/green]"
                         )
+
+                        from openlaoke.core.small_model_optimizations import (
+                            estimate_model_size_from_name,
+                        )
+
+                        model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+                        self._lesson_tracker.record_outcome(
+                            strategy_name="supervisor_check",
+                            model_size=model_size,
+                            success=True,
+                            tokens_used=self.app_state.token_usage.total_tokens,
+                        )
+                        self._lesson_tracker.save()
                         break
 
                     if result.should_retry:
@@ -306,6 +331,20 @@ class REPL:
                             self.console.print(
                                 f"[dim]Missing: {', '.join(result.missing_requirements[:3])}[/dim]"
                             )
+
+                            from openlaoke.core.small_model_optimizations import (
+                                estimate_model_size_from_name,
+                            )
+
+                            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+                            self._lesson_tracker.record_outcome(
+                                strategy_name="supervisor_check",
+                                model_size=model_size,
+                                success=False,
+                                error_type="max_retries_reached",
+                                tokens_used=self.app_state.token_usage.total_tokens,
+                            )
+                            self._lesson_tracker.save()
                             break
                     else:
                         break
@@ -318,6 +357,19 @@ class REPL:
                 retry_count += 1
 
                 if retry_count >= max_retry_attempts:
+                    from openlaoke.core.small_model_optimizations import (
+                        estimate_model_size_from_name,
+                    )
+
+                    model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+                    self._lesson_tracker.record_outcome(
+                        strategy_name="error_retry",
+                        model_size=model_size,
+                        success=False,
+                        error_type=type(e).__name__,
+                        tokens_used=self.app_state.token_usage.total_tokens,
+                    )
+                    self._lesson_tracker.save()
                     break
 
                 self.console.print("\n[yellow]Retrying after error...[/yellow]")
@@ -391,6 +443,28 @@ class REPL:
         while iteration < max_iterations and self._running:
             iteration += 1
 
+            from openlaoke.core.compact.fast_pruner import fast_prune
+            from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
+
+            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+            max_tokens_map = {
+                "tiny": 4096,
+                "small": 8192,
+                "medium": 16384,
+                "large": 32768,
+            }
+            max_ctx = max_tokens_map.get(model_size, 8192)
+
+            if len(messages) > 10:
+                prune_result = fast_prune(messages, max_tokens=max_ctx)
+                if prune_result.tokens_after < prune_result.tokens_before:
+                    messages = prune_result.messages
+                    if self.app_state.verbose:
+                        self.console.print(
+                            f"[dim]Context pruned: {prune_result.tokens_before} -> {prune_result.tokens_after} tokens "
+                            f"({prune_result.elapsed_ms:.1f}ms, {prune_result.keywords_extracted} keywords)[/dim]"
+                        )
+
             is_local_builtin = (
                 self.app_state.multi_provider_config
                 and self.app_state.multi_provider_config.active_provider == "local_builtin"
@@ -410,7 +484,33 @@ class REPL:
                     self.registry.get_all_for_prompt(),
                 )
 
+            from openlaoke.core.small_model_optimizations import (
+                apply_structured_thinking_prefix,
+                estimate_model_size_from_name,
+                get_small_model_guidance,
+            )
+
+            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+            small_model_guidance = get_small_model_guidance(model_size)
+            if small_model_guidance:
+                system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
+
+            user_input_for_thinking = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    user_input_for_thinking = msg.get("content", "")
+                    break
+            thinking_prefix = apply_structured_thinking_prefix("code")
+            if thinking_prefix and user_input_for_thinking:
+                system_prompt = thinking_prefix + "\n" + system_prompt
+
             tools = self.registry.get_all_for_prompt()
+
+            from openlaoke.core.small_model_optimizations import sanitize_tool_schema
+
+            for tool_def in tools:
+                if "input_schema" in tool_def:
+                    tool_def["input_schema"] = sanitize_tool_schema(tool_def["input_schema"])
 
             if self.app_state.insomnia_mode:
                 self.console.print(f"[dim]🌙 Insomnia iteration {iteration}[/dim]")
@@ -443,6 +543,17 @@ class REPL:
 
                 if response.content:
                     self.console.print(Markdown(response.content))
+
+                if self._hook_system.has_hooks("message_transform"):
+                    from openlaoke.core.hook_system import HookInput, HookOutput
+                    msg_hook_input = HookInput(
+                        messages=[{"role": "assistant", "content": response.content or ""}],
+                        model_name=self.app_state.session_config.model,
+                    )
+                    msg_hook_output = HookOutput()
+                    self._hook_system.execute_hooks("message_transform", msg_hook_input, msg_hook_output)
+                    if msg_hook_output.messages:
+                        response.content = msg_hook_output.messages[0].get("content", response.content)
 
                 assistant_msg: dict[str, Any] = {"role": "assistant"}
                 if response.content:
@@ -537,14 +648,54 @@ class REPL:
                 is_error=True,
             )
 
+        from openlaoke.core.small_model_optimizations import (
+            coerce_tool_args,
+            sanitize_tool_schema,
+        )
+
+        tool_input = tool_use.input
+        tool_schema = tool.get_input_schema()
+        sanitized_schema = sanitize_tool_schema(tool_schema)
+        tool_input = coerce_tool_args(tool_input, sanitized_schema)
+
+        from openlaoke.core.hook_system import HookInput, HookOutput
+
+        hook_input = HookInput(
+            tool_name=tool_use.name,
+            tool_args=dict(tool_input),
+            session_id=self.app_state.session_id,
+            provider_name=self.app_state.multi_provider_config.active_provider if self.app_state.multi_provider_config else "",
+            model_name=self.app_state.session_config.model,
+        )
+        hook_output = HookOutput()
+
+        if self._hook_system.has_hooks("tool_execute_before"):
+            self._hook_system.execute_hooks("tool_execute_before", hook_input, hook_output)
+            if hook_output.skip_execution:
+                from openlaoke.types.core_types import ToolResultBlock
+                return ToolResultBlock(
+                    tool_use_id=tool_use.id,
+                    content=hook_output.tool_result or "Tool execution skipped by hook",
+                    is_error=False,
+                )
+            if hook_output.tool_args is not None:
+                tool_input = hook_output.tool_args
+
+        self._read_loop_tracker.notify_tool_call(tool_use.name)
+
+        if self._read_loop_tracker.should_warn():
+            self.console.print(
+                f"  [yellow]⚠ {self._read_loop_tracker.get_warning_message()}[/yellow]"
+            )
+
         perm_result = tool.check_permissions(
-            tool_use.input,
+            tool_input,
             self.app_state.permission_config,
         )
 
         if perm_result == PermissionResult.DENY:
             self.console.print(
-                f"  [red]Denied:[/red] {tool_use.name} - {tool.get_deny_message(tool_use.input)}"
+                f"  [red]Denied:[/red] {tool_use.name} - {tool.get_deny_message(tool_input)}"
             )
             from openlaoke.types.core_types import ToolResultBlock
 
@@ -586,7 +737,7 @@ class REPL:
             tool_use_id=tool_use.id,
         )
 
-        validation = tool.validate_input(tool_use.input)
+        validation = tool.validate_input(tool_input)
         if not validation.result:
             self.console.print(f"  [red]Validation failed: {validation.message}[/red]")
             from openlaoke.types.core_types import ToolResultBlock
@@ -597,7 +748,33 @@ class REPL:
                 is_error=True,
             )
 
-        result = await tool.call(ctx, **tool_use.input)
+        result = await tool.call(ctx, **tool_input)
+
+        result_content = result.content if isinstance(result.content, str) else str(result.content)
+
+        if tool_use.name == "bash":
+            compressed = self._output_compressor.compress(result_content)
+            if compressed != result_content:
+                from openlaoke.types.core_types import ToolResultBlock
+                result = ToolResultBlock(
+                    tool_use_id=result.tool_use_id,
+                    content=compressed,
+                    is_error=result.is_error,
+                )
+                result_content = compressed
+
+        if self._hook_system.has_hooks("tool_execute_after"):
+            hook_input.tool_result = result_content
+            hook_input.tool_error = result_content if result.is_error else ""
+            hook_output_after = HookOutput()
+            self._hook_system.execute_hooks("tool_execute_after", hook_input, hook_output_after)
+            if hook_output_after.tool_result is not None:
+                from openlaoke.types.core_types import ToolResultBlock
+                result = ToolResultBlock(
+                    tool_use_id=result.tool_use_id,
+                    content=hook_output_after.tool_result,
+                    is_error=result.is_error,
+                )
 
         rendered = tool.render_result(result)
         if rendered and len(rendered) > 200:
