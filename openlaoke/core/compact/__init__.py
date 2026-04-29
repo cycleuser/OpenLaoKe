@@ -8,6 +8,7 @@ from openlaoke.core.compact.compactor import (
     CompactType,
     ContextCompactor,
 )
+from openlaoke.core.compact.fast_pruner import PruneResult, extract_keywords, fast_prune
 from openlaoke.core.compact.strategies import (
     AutoCompactStrategy,
     MicroCompactStrategy,
@@ -31,4 +32,7 @@ __all__ = [
     "MicroCompactStrategy",
     "MessageSummarizer",
     "SummaryConfig",
+    "fast_prune",
+    "extract_keywords",
+    "PruneResult",
 ]
