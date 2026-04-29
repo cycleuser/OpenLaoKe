@@ -34,6 +34,10 @@ OpenLaoKe is a powerful terminal-based AI coding assistant that supports **24+ A
 - **Distilled Prompt Templates** — 79 pre-populated Q&A templates across 31 categories with multi-language triggers (CN/EN/JP/KR/FR/DE/ES/RU)
 - **Reference Download** — Automatic PDF download for academic writing
 - **Skill System** — 39+ YAML-based skills for specialized workflows
+- **Small Model Optimizations** — Tool argument type coercion, JSON schema sanitization, read-loop prevention, terminal output compression, and model-size-adaptive behavior for GGUF models (0.6B-8B)
+- **Fast Context Pruning** — Pure-algorithm context compression (<5ms, no LLM call) with head-tail preservation and keyword extraction
+- **Hook System** — 15 extension points for pre/post tool execution, message transformation, error handling, and more
+- **Self-Reflection Tracker** — Empirical strategy tracking that auto-disables failing approaches and recommends better alternatives based on real outcomes
 
 ## Quick Start
 
@@ -245,6 +249,7 @@ Notebook support (Read/Write), Cron scheduling, Memory storage, Hook configurati
 | `/skill <name>` | Execute a skill |
 | `/memory` | Manage persistent memory |
 | `/agents` | Manage sub-agents |
+| `/lessons` | View cross-project lessons and strategy statistics |
 
 ## Distilled Prompt Templates
 
@@ -306,6 +311,14 @@ openlaoke/
 │   ├── builtin_model_provider.py # llama-cpp-python inference provider
 │   ├── model_cli.py          # CLI model management commands
 │   ├── distilled_templates.py # Distilled prompt templates
+│   ├── small_model_optimizations.py # Small model optimizations (type coercion, schema sanitization, output compression)
+│   ├── hook_system.py        # 15-hook extension system
+│   ├── bitter_lesson_tracker.py # Self-reflection and strategy tracking
+│   ├── cross_project_lessons.py # Cross-project lessons learned database
+│   ├── compact/              # Context compression system
+│   │   ├── fast_pruner.py    # Pure-algorithm context pruning (<5ms)
+│   │   ├── strategies.py     # Compaction strategies
+│   │   └── summarizer.py     # LLM-based summarization
 │   ├── supervisor/           # Task supervision system
 │   ├── model_assessment/     # Model capability assessment
 │   ├── hyperauto/            # HyperAuto mode
