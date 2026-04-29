@@ -298,6 +298,24 @@ Memory Storage:
   [1] 项目使用FastAPI框架，数据库是PostgreSQL (2026-04-04T19:02:00)
 ```
 
+## 经验教训与自我反思
+
+### `/lessons` - 查看经验教训和策略统计
+```bash
+/lessons                          # 完整经验教训报告
+/lessons done                     # 显示已实现的改进
+/lessons pending                  # 显示待实现的改进
+/lessons stats                    # 显示策略统计数据
+/lessons summary                  # 显示自我反思追踪摘要
+```
+
+**工作原理：**
+- 系统自动记录每个策略的成功/失败结果
+- 按模型尺寸计算成功率
+- 自动禁用成功率<30%的策略（10次尝试后）
+- 生成基于数据的推荐
+- 数据持久化在 `~/.openlaoke/lessons/lessons.json`
+
 ## 键盘快捷键
 
 - `Tab` - 自动补全
