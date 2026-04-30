@@ -45,11 +45,14 @@ OpenLaoKe is a powerful terminal-based AI coding assistant that supports **24+ A
 # Install with pip
 pip install openlaoke
 
-# Or install from source
+# Install from source (development)
 pip install -e .
 
 # Or with uv (recommended for development)
 uv pip install -e ".[dev]"
+
+# With local GGUF model support
+pip install -e ".[local]"
 
 # Start OpenLaoKe
 openlaoke
@@ -90,7 +93,7 @@ openlaoke
 |----------|--------|-------|
 | Ollama | Gemma 3/4, Llama 3.1/3.2, CodeLlama | Install Ollama |
 | LM Studio | Any local model | Install LM Studio |
-| **Built-in GGUF** | Qwen models, any ModelScope GGUF | Included by default |
+| **Built-in GGUF** | Qwen models, any ModelScope GGUF | Optional `pip install llama-cpp-python` |
 | OpenAI-Compatible | Any OpenAI-compatible endpoint | Custom URL |
 
 ## Local GGUF Models (Zero API Cost)
@@ -102,7 +105,7 @@ Run AI models completely locally with no API key or network connection. Powered 
 pip install openlaoke
 ```
 
-> `llama-cpp-python` is included as a dependency. On Linux, if compilation fails, install build tools first: `sudo apt install build-essential cmake`, then retry.
+> Local GGUF model support requires `llama-cpp-python`. If not installed, the config wizard will prompt to install it when you select built-in models. On Linux, you may need `sudo apt install build-essential cmake` first.
 
 ### Built-in Models
 | Model | Size | Min RAM | Description |

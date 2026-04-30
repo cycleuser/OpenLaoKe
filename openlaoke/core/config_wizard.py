@@ -652,6 +652,33 @@ def _configure_builtin_provider(
     console: Console,
 ) -> MultiProviderConfig:
     """Configure built-in GGUF model provider."""
+    try:
+        import llama_cpp  # noqa: F401
+
+        del llama_cpp
+    except ImportError:
+        console.print("[bold red]llama-cpp-python is not installed.[/bold red]")
+        console.print("[dim]Local GGUF models require llama-cpp-python.[/dim]")
+        install = Confirm.ask("Install it now? (requires C++ compiler)", default=True)
+        if install:
+            import subprocess
+            import sys
+
+            console.print("[dim]Installing llama-cpp-python...[/dim]")
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", "llama-cpp-python"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                console.print("[green]✓ llama-cpp-python installed![/green]")
+            except subprocess.CalledProcessError:
+                console.print("[red]✗ Installation failed.[/red]")
+                console.print("[dim]Try: pip install llama-cpp-python[/dim]")
+                console.print("[dim]Linux: sudo apt install build-essential cmake && pip install llama-cpp-python[/dim]")
+                console.print("[dim]Or use OpenCode Zen (free, no install needed) as an alternative.[/dim]")
+                return config
+
     from openlaoke.core.local_model_manager import LocalModelManager
 
     console.print("[bold]Local GGUF Models[/bold]")

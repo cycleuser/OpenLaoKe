@@ -124,11 +124,14 @@ python --version
 # 进入项目目录
 cd OpenLaoKe
 
-# 基础安装（含所有功能，包括本地模型支持）
+# 基础安装（含所有功能，本地模型可选）
 pip install -e .
 
 # 开发安装（含测试和lint工具）
 pip install -e ".[dev]"
+
+# 本地 GGUF 模型支持（可选）
+pip install -e ".[local]"
 ```
 
 ### 步骤 4: 验证安装
@@ -148,11 +151,11 @@ openlaoke doctor
 
 ## 本地GGUF模型安装
 
-### 方式一：安装时已包含本地支持
+### 方式一：配置向导自动安装
 
-`pip install openlaoke` 已包含 `llama-cpp-python`，无需额外安装。
+`openlaoke` 首次运行时选择内置 GGUF 模型，会自动提示安装 `llama-cpp-python`。
 
-如果编译失败，可手动安装：
+### 方式二：手动安装 llama-cpp-python
 
 ```bash
 # 基础安装
