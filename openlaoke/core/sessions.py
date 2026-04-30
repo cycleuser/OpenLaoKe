@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
 
 from openlaoke.core.state import AppState, create_app_state
-from openlaoke.types.core_types import MessageRole, TaskStatus, TaskType, UserMessage
+from openlaoke.types.core_types import (
+    AssistantMessage,
+    MessageRole,
+    ProgressMessage,
+    SystemMessage,
+    TaskState,
+    TaskStatus,
+    TaskType,
+    UserMessage,
+    message_from_dict,
+)
+
+logger = logging.getLogger(__name__)
+
+_SESSION_VERSION = 2
 
 
 @dataclass
@@ -22,6 +37,19 @@ class SessionInfo:
     task_count: int
     model: str
     cwd: str
+
+
+def _message_from_dict(
+    msg_data: dict,
+) -> UserMessage | AssistantMessage | SystemMessage | ProgressMessage | None:
+    msg = message_from_dict(msg_data)
+    if msg is not None:
+        return msg
+    return SystemMessage(
+        role=MessageRole.SYSTEM,
+        content=msg_data.get("content", ""),
+        subtype=msg_data.get("subtype", "info"),
+    )
 
 
 class SessionManager:
@@ -63,14 +91,15 @@ class SessionManager:
                     SessionInfo(
                         session_id=data.get("session_id", filename.replace(".json", "")),
                         path=path,
-                        created_at=os.path.getmtime(path),
+                        created_at=data.get("created_at", os.path.getmtime(path)),
                         message_count=len(data.get("messages", [])),
                         task_count=len(data.get("tasks", {})),
-                        model=data.get("model", "unknown"),
+                        model=data.get("session_config", {}).get("model", "unknown"),
                         cwd=data.get("cwd", ""),
                     )
                 )
             except Exception:
+                logger.warning("Failed to load session from %s", path, exc_info=True)
                 continue
         return sorted(sessions, key=lambda s: s.created_at, reverse=True)
 
@@ -95,26 +124,22 @@ class SessionManager:
             with open(path) as f:
                 data = json.load(f)
 
+            session_config = data.get("session_config", {})
+            model = session_config.get("model", data.get("model", "claude-sonnet-4-20250514"))
+
             app_state = create_app_state(
                 cwd=data.get("cwd", os.getcwd()),
+                model=model,
                 persist_path=path,
             )
             app_state.session_id = data.get("session_id", "")
 
             for msg_data in data.get("messages", []):
-                role = msg_data.get("role", "user")
-                content = msg_data.get("content", "")
-                if role == "user":
-                    app_state.messages.append(
-                        UserMessage(
-                            role=MessageRole.USER,
-                            content=content,
-                        )
-                    )
+                msg = _message_from_dict(msg_data)
+                if msg is not None:
+                    app_state.messages.append(msg)
 
             for task_id, task_data in data.get("tasks", {}).items():
-                from openlaoke.types.core_types import TaskState
-
                 app_state.tasks[task_id] = TaskState(
                     id=task_id,
                     type=TaskType(task_data.get("type", "local_bash")),
@@ -125,7 +150,19 @@ class SessionManager:
                     output_file=task_data.get("output_file", ""),
                 )
 
+            token_data = data.get("token_usage", {})
+            if token_data:
+                from openlaoke.types.core_types import TokenUsage
+
+                app_state.token_usage = TokenUsage(
+                    input_tokens=token_data.get("input_tokens", 0),
+                    output_tokens=token_data.get("output_tokens", 0),
+                    cache_read_tokens=token_data.get("cache_read_tokens", 0),
+                    cache_creation_tokens=token_data.get("cache_creation_tokens", 0),
+                )
+
             return app_state
 
         except Exception:
+            logger.warning("Failed to load session from %s", path, exc_info=True)
             return None

@@ -135,13 +135,29 @@ class ToolResultBlock:
 
 @dataclass
 class ToolProgress:
-    """Progress information for a running tool."""
-
     tool_use_id: str
     tool_name: str
     message: str
     percentage: float | None = None
     spinner: str = "dots"
+
+
+class StreamEventType(StrEnum):
+    TEXT = "text"
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_DELTA = "tool_call_delta"
+    USAGE = "usage"
+
+
+@dataclass
+class StreamChunk:
+    event_type: StreamEventType = StreamEventType.TEXT
+    text: str = ""
+    tool_call_id: str = ""
+    tool_call_name: str = ""
+    tool_call_arguments: str = ""
+    usage: TokenUsage | None = None
+    cost: CostInfo | None = None
 
 
 class MessageRole(StrEnum):
@@ -172,12 +188,15 @@ class UserMessage(BaseMessage):
     attachments: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             **super().to_dict(),
             "type": "user",
             "content": self.content,
             "images": self.images,
         }
+        if self.attachments:
+            d["attachments"] = self.attachments
+        return d
 
 
 @dataclass
@@ -226,13 +245,16 @@ class ProgressMessage(BaseMessage):
     percentage: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             **super().to_dict(),
             "type": "progress",
             "content": self.content,
             "tool_use_id": self.tool_use_id,
             "tool_name": self.tool_name,
         }
+        if self.percentage is not None:
+            d["percentage"] = self.percentage
+        return d
 
 
 @dataclass
@@ -338,3 +360,64 @@ class CostInfo:
     @property
     def total_cost(self) -> float:
         return self.input_cost + self.output_cost + self.cache_read_cost + self.cache_creation_cost
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "input_cost": self.input_cost,
+            "output_cost": self.output_cost,
+            "cache_read_cost": self.cache_read_cost,
+            "cache_creation_cost": self.cache_creation_cost,
+            "total_cost": self.total_cost,
+        }
+
+
+def message_from_dict(data: dict[str, Any]) -> Message | None:
+    msg_type = data.get("type", data.get("role", ""))
+    content = data.get("content", "")
+    ts = data.get("timestamp", 0.0)
+
+    if msg_type in ("user", MessageRole.USER):
+        return UserMessage(
+            role=MessageRole.USER,
+            content=content,
+            images=data.get("images", []),
+            attachments=data.get("attachments", []),
+            timestamp=ts,
+        )
+    if msg_type in ("assistant", MessageRole.ASSISTANT):
+        tool_uses = []
+        for tu in data.get("tool_uses", []):
+            if isinstance(tu, dict) and "id" in tu:
+                tool_uses.append(
+                    ToolUseBlock(id=tu["id"], name=tu.get("name", ""), input=tu.get("input", {}))
+                )
+        return AssistantMessage(
+            role=MessageRole.ASSISTANT,
+            content=content,
+            tool_uses=tool_uses,
+            stop_reason=data.get("stop_reason"),
+            thinking=data.get("thinking", ""),
+            timestamp=ts,
+        )
+    if msg_type == "progress":
+        return ProgressMessage(
+            role=MessageRole.SYSTEM,
+            content=content,
+            tool_use_id=data.get("tool_use_id", ""),
+            tool_name=data.get("tool_name", ""),
+            percentage=data.get("percentage"),
+            timestamp=ts,
+        )
+    if msg_type == "attachment":
+        return AttachmentMessage(
+            role=MessageRole.USER,
+            content=data.get("content", ""),
+            file_paths=data.get("file_paths", []),
+            timestamp=ts,
+        )
+    return SystemMessage(
+        role=MessageRole.SYSTEM,
+        content=content,
+        subtype=data.get("subtype", "info"),
+        timestamp=ts,
+    )

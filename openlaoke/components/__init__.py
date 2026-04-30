@@ -1,1 +1,1 @@
-"""UI components for OpenLaoKe."""
+"""UI components for OpenLaoKe (TUI handled by core/repl.py)."""

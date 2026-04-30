@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ from typing import Any
 from rich.color import Color
 from rich.style import Style
 from rich.text import Text
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -374,18 +377,27 @@ def load_custom_themes() -> dict[str, Theme]:
             theme = Theme.from_dict(data)
             custom_themes[theme.name] = theme
         except Exception:
-            pass
+            logger.warning("Failed to load theme from %s", theme_file, exc_info=True)
 
     return custom_themes
 
 
+_CUSTOM_THEMES_CACHE: dict[str, Theme] | None = None
+
+
 def get_theme(name: str) -> Theme:
-    all_themes = {**BUILTIN_THEMES, **load_custom_themes()}
+    global _CUSTOM_THEMES_CACHE
+    if _CUSTOM_THEMES_CACHE is None:
+        _CUSTOM_THEMES_CACHE = load_custom_themes()
+    all_themes = {**BUILTIN_THEMES, **_CUSTOM_THEMES_CACHE}
     return all_themes.get(name, DARK_THEME)
 
 
 def get_all_themes() -> dict[str, Theme]:
-    return {**BUILTIN_THEMES, **load_custom_themes()}
+    global _CUSTOM_THEMES_CACHE
+    if _CUSTOM_THEMES_CACHE is None:
+        _CUSTOM_THEMES_CACHE = load_custom_themes()
+    return {**BUILTIN_THEMES, **_CUSTOM_THEMES_CACHE}
 
 
 def get_theme_names() -> list[str]:
@@ -422,6 +434,8 @@ class ThemeManager:
         return False
 
     def reload_themes(self) -> None:
+        global _CUSTOM_THEMES_CACHE
+        _CUSTOM_THEMES_CACHE = None
         self._load_themes()
 
     def get_available_themes(self) -> list[str]:

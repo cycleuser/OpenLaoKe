@@ -39,7 +39,7 @@ class Tool(ABC):
 
     name: str = "base_tool"
     description: str = ""
-    input_schema: type[BaseModel] | dict[str, Any] = {}
+    input_schema: type[BaseModel] | dict[str, Any] | None = None
     task_type: TaskType = TaskType.LOCAL_BASH
     is_read_only: bool = False
     is_destructive: bool = False
@@ -64,39 +64,50 @@ class Tool(ABC):
         return {}
 
     def validate_input(self, input_data: dict[str, Any]) -> ValidationResult:
-        """Validate tool input before execution."""
+        """Validate tool input before execution with full type checking."""
         if isinstance(self.input_schema, dict):
-            required = self.input_schema.get("required", [])
-            properties = self.input_schema.get("properties", {})
-            for field_name in required:
-                if field_name not in input_data:
-                    return ValidationResult(
-                        result=False,
-                        message=f"Missing required field: {field_name}",
-                        error_code=400,
-                    )
-            for field_name, value in input_data.items():
-                if field_name in properties:
-                    field_type = properties[field_name].get("type")
-                    if field_type == "string" and not isinstance(value, str):
-                        return ValidationResult(
-                            result=False,
-                            message=f"Field '{field_name}' must be a string",
-                            error_code=400,
-                        )
-        elif hasattr(self.input_schema, "model_json_schema"):
+            return self._validate_schema_dict(input_data, self.input_schema)
+        if hasattr(self.input_schema, "model_json_schema"):
             try:
                 schema = self.input_schema.model_json_schema()
-                required = schema.get("required", [])
-                for field_name in required:
-                    if field_name not in input_data or input_data.get(field_name) is None:
-                        return ValidationResult(
-                            result=False,
-                            message=f"Missing required field: {field_name}",
-                            error_code=400,
-                        )
+                return self._validate_schema_dict(input_data, schema)
             except Exception:
                 pass
+        return ValidationResult(result=True)
+
+    @staticmethod
+    def _validate_schema_dict(
+        input_data: dict[str, Any], schema: dict[str, Any]
+    ) -> ValidationResult:
+        required = schema.get("required", [])
+        properties = schema.get("properties", {})
+        type_map = {
+            "string": str,
+            "integer": int,
+            "number": (int, float),
+            "boolean": bool,
+            "array": list,
+            "object": dict,
+        }
+        for field_name in required:
+            if field_name not in input_data or input_data.get(field_name) is None:
+                return ValidationResult(
+                    result=False,
+                    message=f"Missing required field: {field_name}",
+                    error_code=400,
+                )
+        for field_name, value in input_data.items():
+            if field_name not in properties or value is None:
+                continue
+            field_type = properties[field_name].get("type")
+            if field_type and field_type in type_map:
+                expected = type_map[field_type]
+                if not isinstance(value, expected):
+                    return ValidationResult(
+                        result=False,
+                        message=f"Field '{field_name}' must be {field_type}, got {type(value).__name__}",
+                        error_code=400,
+                    )
         return ValidationResult(result=True)
 
     def check_permissions(

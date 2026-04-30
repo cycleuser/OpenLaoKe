@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -15,10 +16,14 @@ from openlaoke.types.core_types import (
     AssistantMessage,
     CostInfo,
     MessageRole,
+    StreamChunk,
+    StreamEventType,
     TokenUsage,
     ToolUseBlock,
 )
 from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -238,9 +243,9 @@ class MultiProviderClient:
         elif provider.provider_type == ProviderType.GITHUB_COPILOT:
             env_key = os.environ.get("GITHUB_TOKEN", "")
         elif provider.provider_type == ProviderType.OPENCODE:
-            env_key = os.environ.get("OPENCODE_API_KEY", "public")
+            env_key = os.environ.get("OPENCODE_API_KEY", "")
         elif provider.provider_type == ProviderType.OPENAI_COMPATIBLE:
-            env_key = os.environ.get("OPENAI_API_KEY", "none")
+            env_key = os.environ.get("OPENAI_API_KEY", "")
 
         return provider.api_key or env_key
 
@@ -704,12 +709,15 @@ class MultiProviderClient:
             except Exception:
                 error_detail = f"\nResponse text: {response.text[:500]}"
 
-            print(f"[DEBUG] API Error: {response.status_code} {response.reason_phrase}")
-            print(f"[DEBUG] Endpoint: {endpoint}")
-            print(f"[DEBUG] Request body keys: {list(body.keys())}")
-            print(f"[DEBUG] Model: {body.get('model', 'N/A')}")
-            print(f"[DEBUG] Messages count: {len(body.get('messages', []))}")
-            print(f"[DEBUG]{error_detail}")
+            logger.warning(
+                "API Error: %s %s | Endpoint: %s | Model: %s | Messages: %d%s",
+                response.status_code,
+                response.reason_phrase,
+                endpoint,
+                body.get("model", "N/A"),
+                len(body.get("messages", [])),
+                error_detail,
+            )
 
         response.raise_for_status()
         data = response.json()
@@ -717,11 +725,11 @@ class MultiProviderClient:
         if provider.provider_type == ProviderType.ANTHROPIC:
             return self._parse_anthropic_response(data)
         elif provider.provider_type in (ProviderType.GOOGLE, ProviderType.GOOGLE_VERTEX):
-            return self._parse_google_response(data)
+            return self._parse_google_response(data, model)
         elif provider.provider_type == ProviderType.AWS_BEDROCK:
             return self._parse_bedrock_response(data, model)
         elif provider.provider_type == ProviderType.COHERE:
-            return self._parse_cohere_response(data)
+            return self._parse_cohere_response(data, model)
         else:
             return self._parse_openai_response(data)
 
@@ -734,7 +742,7 @@ class MultiProviderClient:
         max_tokens: int = 8192,
         temperature: float = 1.0,
         thinking_budget: int = 0,
-    ) -> AsyncIterator[tuple[str, TokenUsage | None, CostInfo | None]]:
+    ) -> AsyncIterator[StreamChunk]:
         provider = self.config.get_active_provider()
         if not provider:
             raise ValueError("No active provider configured")
@@ -743,7 +751,13 @@ class MultiProviderClient:
             async for chunk in self._stream_builtin_message(
                 system_prompt, messages, tools, model, max_tokens, temperature
             ):
-                yield chunk
+                text, usage, cost = chunk
+                yield StreamChunk(
+                    event_type=StreamEventType.TEXT if text else StreamEventType.USAGE,
+                    text=text,
+                    usage=usage,
+                    cost=cost,
+                )
             return
 
         model = model or self.config.get_active_model()
@@ -771,11 +785,12 @@ class MultiProviderClient:
             ]
             body["stream"] = True
 
+        pending_tool_calls: dict[int, dict[str, Any]] = {}
+        final_usage: TokenUsage | None = None
+        final_cost: CostInfo | None = None
+
         async with client.stream("POST", endpoint, headers=headers, json=body) as response:
             response.raise_for_status()
-            content = ""
-            final_usage = None
-            final_cost = None
 
             async for line in response.aiter_lines():
                 if not line:
@@ -791,31 +806,73 @@ class MultiProviderClient:
                         continue
 
                     if provider.provider_type == ProviderType.ANTHROPIC:
-                        text, usage, cost = self._parse_anthropic_stream_event(event)
+                        for chunk in self._parse_anthropic_stream_events(
+                            event, pending_tool_calls, model
+                        ):
+                            yield chunk
                     else:
-                        text, usage, cost = self._parse_openai_stream_event(event)
+                        for chunk in self._parse_openai_stream_events(
+                            event, pending_tool_calls, model
+                        ):
+                            yield chunk
 
-                    if text:
-                        content += text
-                        yield text, None, None
-                    if usage:
-                        final_usage = usage
-                        final_cost = cost
+                    if chunk.event_type == StreamEventType.USAGE:
+                        if chunk.usage:
+                            final_usage = chunk.usage
+                        if chunk.cost:
+                            final_cost = chunk.cost
 
-            yield "", final_usage, final_cost
+        for tc_idx, tc_data in pending_tool_calls.items():
+            args_str = tc_data.get("arguments", "")
+            try:
+                json.loads(args_str)
+            except json.JSONDecodeError:
+                args_str = "{}"
+            yield StreamChunk(
+                event_type=StreamEventType.TOOL_CALL_START,
+                tool_call_id=tc_data.get("id", f"call_{tc_idx}"),
+                tool_call_name=tc_data.get("name", ""),
+                tool_call_arguments=args_str,
+            )
 
-    def _parse_anthropic_stream_event(
-        self, event: dict[str, Any]
-    ) -> tuple[str, TokenUsage | None, CostInfo | None]:
+        if final_usage or final_cost:
+            yield StreamChunk(event_type=StreamEventType.USAGE, usage=final_usage, cost=final_cost)
+        else:
+            yield StreamChunk(event_type=StreamEventType.USAGE)
+
+    def _parse_anthropic_stream_events(
+        self,
+        event: dict[str, Any],
+        pending_tool_calls: dict[int, dict[str, Any]],
+        model: str,
+    ) -> list[StreamChunk]:
         event_type = event.get("type", "")
-        text = ""
-        usage = None
-        cost = None
+        chunks: list[StreamChunk] = []
 
         if event_type == "content_block_delta":
             delta = event.get("delta", {})
             if delta.get("type") == "text_delta":
                 text = delta.get("text", "")
+                if text:
+                    chunks.append(StreamChunk(event_type=StreamEventType.TEXT, text=text))
+            elif delta.get("type") == "input_json_delta":
+                partial = delta.get("partial_json", "")
+                idx = event.get("index", 0)
+                if idx in pending_tool_calls:
+                    pending_tool_calls[idx]["arguments"] = (
+                        pending_tool_calls[idx].get("arguments", "") + partial
+                    )
+
+        elif event_type == "content_block_start":
+            block = event.get("content_block", {})
+            if block.get("type") == "tool_use":
+                idx = event.get("index", 0)
+                pending_tool_calls[idx] = {
+                    "id": block.get("id", f"call_{idx}"),
+                    "name": block.get("name", ""),
+                    "arguments": "",
+                }
+
         elif event_type == "message_delta":
             usage_data = event.get("usage", {})
             if usage_data:
@@ -823,16 +880,24 @@ class MultiProviderClient:
                     input_tokens=usage_data.get("input_tokens", 0),
                     output_tokens=usage_data.get("output_tokens", 0),
                 )
-                cost = CostInfo(
-                    input_cost=usage.input_tokens / 1_000_000 * 3.0,
-                    output_cost=usage.output_tokens / 1_000_000 * 15.0,
+                cost = self._calculate_cost(
+                    {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+                    model,
                 )
+                chunks.append(StreamChunk(event_type=StreamEventType.USAGE, usage=usage, cost=cost))
 
-        return text, usage, cost
+        elif event_type == "message_stop":
+            pending_tool_calls.clear()
 
-    def _parse_openai_stream_event(
-        self, event: dict[str, Any]
-    ) -> tuple[str, TokenUsage | None, CostInfo | None]:
+        return chunks
+
+    def _parse_openai_stream_events(
+        self,
+        event: dict[str, Any],
+        pending_tool_calls: dict[int, dict[str, Any]],
+        model: str,
+    ) -> list[StreamChunk]:
+        chunks: list[StreamChunk] = []
         text = ""
         usage = None
         cost = None
@@ -840,7 +905,33 @@ class MultiProviderClient:
         choices = event.get("choices", [])
         if choices:
             delta = choices[0].get("delta", {})
-            text = delta.get("content", "") or ""
+            content = delta.get("content")
+            if content:
+                text = content
+
+            tool_calls = delta.get("tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    idx = tc.get("index", 0)
+                    if idx not in pending_tool_calls:
+                        pending_tool_calls[idx] = {
+                            "id": tc.get("id", ""),
+                            "name": "",
+                            "arguments": "",
+                        }
+                    if tc.get("id"):
+                        pending_tool_calls[idx]["id"] = tc["id"]
+                    func = tc.get("function", {})
+                    if func.get("name"):
+                        pending_tool_calls[idx]["name"] = func["name"]
+                    if func.get("arguments"):
+                        pending_tool_calls[idx]["arguments"] = (
+                            pending_tool_calls[idx].get("arguments", "") + func["arguments"]
+                        )
+
+            finish_reason = choices[0].get("finish_reason")
+            if finish_reason == "tool_calls" or finish_reason == "stop":
+                pending_tool_calls.clear()
 
         usage_data = event.get("usage", {})
         if usage_data:
@@ -848,12 +939,17 @@ class MultiProviderClient:
                 input_tokens=usage_data.get("prompt_tokens", 0),
                 output_tokens=usage_data.get("completion_tokens", 0),
             )
-            cost = CostInfo(
-                input_cost=usage.input_tokens / 1_000_000 * 2.5,
-                output_cost=usage.output_tokens / 1_000_000 * 10.0,
+            cost = self._calculate_cost(
+                {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+                model,
             )
 
-        return text, usage, cost
+        if text:
+            chunks.append(StreamChunk(event_type=StreamEventType.TEXT, text=text))
+        if usage:
+            chunks.append(StreamChunk(event_type=StreamEventType.USAGE, usage=usage, cost=cost))
+
+        return chunks
 
     def _build_google_body(
         self,
@@ -906,7 +1002,7 @@ class MultiProviderClient:
         return result
 
     def _parse_google_response(
-        self, data: dict[str, Any]
+        self, data: dict[str, Any], model: str = ""
     ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         content = ""
         tool_uses = []
@@ -929,9 +1025,9 @@ class MultiProviderClient:
             input_tokens=usage_data.get("promptTokenCount", 0),
             output_tokens=usage_data.get("candidatesTokenCount", 0),
         )
-        cost = CostInfo(
-            input_cost=usage.input_tokens / 1_000_000 * 0.1,
-            output_cost=usage.output_tokens / 1_000_000 * 0.4,
+        cost = self._calculate_cost(
+            {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+            model or self.config.get_active_model(),
         )
         return (
             AssistantMessage(
@@ -1064,7 +1160,7 @@ class MultiProviderClient:
         return result
 
     def _parse_cohere_response(
-        self, data: dict[str, Any]
+        self, data: dict[str, Any], model: str = ""
     ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         content = ""
         tool_uses = []
@@ -1082,9 +1178,9 @@ class MultiProviderClient:
             input_tokens=usage_data.get("input_tokens", 0),
             output_tokens=usage_data.get("output_tokens", 0),
         )
-        cost = CostInfo(
-            input_cost=usage.input_tokens / 1_000_000 * 3.0,
-            output_cost=usage.output_tokens / 1_000_000 * 15.0,
+        cost = self._calculate_cost(
+            {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+            model or self.config.get_active_model(),
         )
         return (
             AssistantMessage(

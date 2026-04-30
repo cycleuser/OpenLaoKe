@@ -258,7 +258,7 @@ class QueryEngine:
             current_max_tokens = self._recovery_handler.get_escalated_max_tokens()
 
         try:
-            async for text, usage, cost in self.api_client.stream_message(
+            async for chunk in self.api_client.stream_message(
                 system_prompt=self.system_prompt,
                 messages=messages_for_api,
                 tools=tool_schemas,
@@ -267,21 +267,34 @@ class QueryEngine:
                 temperature=self.temperature,
                 thinking_budget=self.thinking_budget,
             ):
-                if text:
+                from openlaoke.types.core_types import StreamEventType
+
+                if chunk.event_type == StreamEventType.TEXT and chunk.text:
                     yield ContentDeltaEvent(
                         message_id=self._stream_processor.state.message_id,
-                        content=text,
+                        content=chunk.text,
                         index=0,
                     )
-                    self._stream_processor.state.current_content += text
+                    self._stream_processor.state.current_content += chunk.text
 
-                if usage:
-                    self._stream_processor.state.usage = usage
-                    self._total_usage.accumulate(usage)
+                if chunk.event_type == StreamEventType.USAGE and chunk.usage:
+                    self._stream_processor.state.usage = chunk.usage
+                    self._total_usage.accumulate(chunk.usage)
 
-                if cost:
-                    self._total_cost.input_cost += cost.input_cost
-                    self._total_cost.output_cost += cost.output_cost
+                if chunk.event_type == StreamEventType.USAGE and chunk.cost:
+                    self._total_cost.input_cost += chunk.cost.input_cost
+                    self._total_cost.output_cost += chunk.cost.output_cost
+
+                if chunk.event_type == StreamEventType.TOOL_CALL_START:
+                    self._stream_processor.state.tool_uses.append(
+                        ToolUseBlock(
+                            id=chunk.tool_call_id,
+                            name=chunk.tool_call_name,
+                            input=json.loads(chunk.tool_call_arguments)
+                            if chunk.tool_call_arguments
+                            else {},
+                        )
+                    )
 
             tool_uses = self._stream_processor.get_tool_uses()
             for i, tu in enumerate(tool_uses):

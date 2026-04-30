@@ -70,7 +70,7 @@ class PermissionConfig:
     always_allow_rules: list[PermissionRule] = field(default_factory=list)
     always_deny_rules: list[PermissionRule] = field(default_factory=list)
     always_ask_rules: list[PermissionRule] = field(default_factory=list)
-    approved_tools: set[str] = field(default_factory=set)
+    approved_tools: list[str] = field(default_factory=list)
     hyperauto_config: HyperAutoConfig = field(default_factory=HyperAutoConfig)
 
     @classmethod
@@ -80,13 +80,16 @@ class PermissionConfig:
                 PermissionRule("Read", PermissionResult.ALLOW, "Read-only file access"),
                 PermissionRule("Glob", PermissionResult.ALLOW, "File pattern matching"),
                 PermissionRule("Grep", PermissionResult.ALLOW, "Content search"),
-                PermissionRule("Bash", PermissionResult.ALLOW, "Shell command execution"),
-                PermissionRule("Write", PermissionResult.ALLOW, "File write operations"),
-                PermissionRule("Edit", PermissionResult.ALLOW, "File edit operations"),
+                PermissionRule("ListDirectory", PermissionResult.ALLOW, "Directory listing"),
+                PermissionRule("ToolSearch", PermissionResult.ALLOW, "Tool discovery"),
             ],
             always_deny_rules=[],
             always_ask_rules=[
+                PermissionRule("Bash", PermissionResult.ASK, "Shell command execution"),
+                PermissionRule("Write", PermissionResult.ASK, "File write operations"),
+                PermissionRule("Edit", PermissionResult.ASK, "File edit operations"),
                 PermissionRule("Agent", PermissionResult.ASK, "Sub-agent spawning"),
+                PermissionRule("WebBrowser", PermissionResult.ASK, "Browser automation"),
             ],
         )
 
@@ -115,8 +118,8 @@ class PermissionConfig:
         return PermissionResult.ASK
 
     def approve_tool(self, tool_name: str, remember: bool = False) -> None:
-        if remember:
-            self.approved_tools.add(tool_name)
+        if remember and tool_name not in self.approved_tools:
+            self.approved_tools.append(tool_name)
 
     def deny_tool(self, tool_name: str) -> None:
-        self.approved_tools.discard(tool_name)
+        self.approved_tools = [t for t in self.approved_tools if t != tool_name]

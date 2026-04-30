@@ -1,4 +1,12 @@
-"""REPL loop - the main interaction loop."""
+"""REPL loop - the main interaction loop.
+
+Improved with:
+- Streaming output (character-by-character rendering inspired by Claude Code)
+- Rich-themed permission prompts (replacing bare input())
+- Real-time token counter during generation
+- Theme-aware colors via ThemeManager
+- Expandable tool result display
+"""
 
 from __future__ import annotations
 
@@ -8,25 +16,32 @@ import os
 from typing import Any
 
 import httpx
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.text import Text
 
 from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
-from openlaoke.core.prompt_input import create_prompt_session, get_user_input
+from openlaoke.core.prompt_input import PromptSessionManager, run_model_picker_async
 from openlaoke.core.state import AppState
 from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.system_prompt import build_system_prompt
-from openlaoke.core.tool import ToolContext, ToolRegistry
+from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
+    AssistantMessage,
     MessageRole,
     PermissionResult,
+    StreamEventType,
+    ToolResultBlock,
+    ToolUseBlock,
     UserMessage,
 )
 from openlaoke.types.providers import MultiProviderConfig
+from openlaoke.utils.theme import ThemeManager
 
 
 class REPL:
@@ -38,13 +53,15 @@ class REPL:
         self.registry = ToolRegistry()
         self.api: MultiProviderClient | None = None
         self._running = False
+        self._active_tasks: set[asyncio.Task] = set()
         self.multi_provider_config: MultiProviderConfig | None = None
         self.app_config: Any = None
         self._proxy: str | None = None
-        self._prompt_session = None
+        self._prompt_manager = PromptSessionManager(multiline=False)
         self.supervisor = TaskSupervisor(app_state)
         self._current_task_id: str | None = None
         self._insomnia_engine = None
+        self._theme = ThemeManager(app_state.theme)
 
         from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
         from openlaoke.core.hook_system import HookRegistry
@@ -61,18 +78,21 @@ class REPL:
         register_all()
         register_all_tools(self.registry)
 
+    def _c(self, name: str) -> str:
+        return self._theme.color(name)
+
+    def _s(self, text: str, style_name: str) -> Text:
+        return self._theme.format_text(text, style_name)
+
     async def run(self) -> None:
-        """Start the REPL loop."""
         self._running = True
-
-        self._prompt_session = create_prompt_session()
-
+        self._prompt_manager.get_session()
         self._print_banner()
         self._print_welcome()
 
         config = self.multi_provider_config or self.app_state.multi_provider_config
         if not config:
-            self.console.print("[bold red]Error: No provider configured.[/bold red]")
+            self.console.print(f"[bold {self._c('error')}]Error: No provider configured.[/]")
             self.console.print("Run 'openlaoke --config' to set up a provider.")
             return
 
@@ -88,42 +108,42 @@ class REPL:
 
         if self.app_state.insomnia_mode:
             self.console.print(
-                "[bold cyan]🌙 Insomnia mode: Resuming background tasks...[/bold cyan]"
+                f"[bold {self._c('primary')}]Insomnia mode: Resuming background tasks...[/]"
             )
             await self._insomnia_engine.start()
             if self.app_state.insomnia_task_queue:
-                asyncio.create_task(self._insomnia_engine._process_queue())
+                task = asyncio.create_task(self._insomnia_engine._process_queue())
+                self._active_tasks.add(task)
+                task.add_done_callback(self._active_tasks.discard)
 
         try:
             while self._running:
                 await self._handle_input()
         except (KeyboardInterrupt, EOFError):
-            self.console.print("\n[yellow]Goodbye![/yellow]")
+            self.console.print(f"\n[{self._c('warning')}]Goodbye![/]")
         finally:
+            for task in self._active_tasks:
+                task.cancel()
             if self._insomnia_engine and self.app_state.insomnia_mode:
                 self._insomnia_engine._save_state()
             if self.api:
                 await self.api.close()
 
     async def _handle_input(self) -> None:
-        """Get input from user and process it."""
         self.console.print()
+        result = await self._prompt_manager.get_user_input()
 
-        user_input = await get_user_input(self._prompt_session)
-
-        if user_input is None:
+        if result.is_exit:
             self._running = False
             return
 
-        from openlaoke.core.prompt_input import PICKER_TRIGGERED, run_model_picker_async
-
-        if PICKER_TRIGGERED:
+        if result.is_picker:
             selection = await run_model_picker_async()
             if selection:
                 self._handle_model_switch(selection)
             return
 
-        user_input = user_input.strip()
+        user_input = result.text
         if not user_input:
             return
 
@@ -146,12 +166,12 @@ class REPL:
                 ):
                     self.app_state.active_skills.append(potential_name)
 
-                self.console.print(f"[green]✓ Skill activated: {skill.name}[/green]")
+                self.console.print(f"[{self._c('success')}]Skill activated: {skill.name}[/]")
                 if skill.description:
                     desc = skill.description[:100]
                     if len(skill.description) > 100:
                         desc += "..."
-                    self.console.print(f"  [dim]{desc}[/dim]")
+                    self.console.print(f"  [{self._c('muted')}]{desc}[/]")
 
                 if skill_args:
                     self.console.print()
@@ -167,14 +187,13 @@ class REPL:
         await self._handle_chat(user_input)
 
     async def _handle_command(self, name: str, args: str) -> None:
-        """Execute a slash command."""
         from openlaoke.commands.base import CommandContext
         from openlaoke.commands.skill_shortcuts import SkillActivationResult
 
         command = get_command(name)
         if not command:
-            self.console.print(f"[red]Unknown command: /{name}[/red]")
-            self.console.print("Type [bold]/help[/bold] for available commands.")
+            self.console.print(f"[{self._c('error')}]Unknown command: /{name}[/]")
+            self.console.print(f"Type [bold {self._c('primary')}]/help[/] for available commands.")
             return
 
         ctx = CommandContext(app_state=self.app_state, args=args)
@@ -193,7 +212,6 @@ class REPL:
             await self._handle_chat(args)
 
     def _handle_model_switch(self, selection: str) -> None:
-        """Handle model switch from Ctrl+P picker."""
         if "/" not in selection:
             return
         provider_name, model_name = selection.split("/", 1)
@@ -204,7 +222,7 @@ class REPL:
 
         provider = config.providers.get(provider_name)
         if not provider:
-            self.console.print(f"[red]Provider not found: {provider_name}[/red]")
+            self.console.print(f"[{self._c('error')}]Provider not found: {provider_name}[/]")
             return
 
         config.active_provider = provider_name
@@ -222,10 +240,9 @@ class REPL:
         app_config.providers.active_model = model_name
         save_config(app_config)
 
-        self.console.print(f"[green]✓ Switched to: {provider_name}/{model_name}[/green]")
+        self.console.print(f"[{self._c('success')}]Switched to: {provider_name}/{model_name}[/]")
 
     async def _handle_chat(self, user_input: str) -> None:
-        """Process a chat message through the AI model."""
         from openlaoke.core.intent_parser import IntentParser, IntentType
 
         if self.app_state.local_mode:
@@ -259,10 +276,12 @@ class REPL:
             if self._insomnia_engine:
                 task_id = await self._insomnia_engine.add_task(user_input)
                 self.console.print(
-                    f"[bold cyan]🌙 Task queued in insomnia mode:[/bold cyan] {task_id}"
+                    f"[bold {self._c('primary')}]Task queued in insomnia mode: {task_id}[/]"
                 )
                 if not self._insomnia_engine._current_task:
-                    asyncio.create_task(self._insomnia_engine._process_queue())
+                    task = asyncio.create_task(self._insomnia_engine._process_queue())
+                    self._active_tasks.add(task)
+                    task.add_done_callback(self._active_tasks.discard)
                 self.app_state.is_running = False
                 return
 
@@ -282,14 +301,16 @@ class REPL:
 
                     if result.is_complete:
                         self.console.print(
-                            f"\n[green]✓ Task completed ({result.completion_percentage:.0f}%)[/green]"
+                            f"\n[{self._c('success')}]Task completed ({result.completion_percentage:.0f}%)[/]"
                         )
 
                         from openlaoke.core.small_model_optimizations import (
                             estimate_model_size_from_name,
                         )
 
-                        model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+                        model_size = estimate_model_size_from_name(
+                            self.app_state.session_config.model
+                        )
                         self._lesson_tracker.record_outcome(
                             strategy_name="supervisor_check",
                             model_size=model_size,
@@ -302,7 +323,7 @@ class REPL:
                     if result.should_retry:
                         retry_count += 1
                         self.console.print(
-                            f"\n[yellow]⚠ Task incomplete ({result.completion_percentage:.0f}%)[/yellow]"
+                            f"\n[{self._c('warning')}]Task incomplete ({result.completion_percentage:.0f}%)[/]"
                         )
 
                         if result.feedback:
@@ -310,7 +331,7 @@ class REPL:
                                 Panel(
                                     result.feedback,
                                     title="Supervisor Feedback",
-                                    border_style="yellow",
+                                    border_style=self._c("warning"),
                                 )
                             )
 
@@ -320,23 +341,27 @@ class REPL:
 
                         if retry_count < max_retry_attempts:
                             self.console.print(
-                                f"\n[cyan]Retrying... (attempt {retry_count}/{max_retry_attempts})[/cyan]"
+                                f"\n[{self._c('primary')}]Retrying... (attempt {retry_count}/{max_retry_attempts})[/]"
                             )
 
                             user_msg = UserMessage(role=MessageRole.USER, content=retry_prompt)
                             self.app_state.add_message(user_msg)
                             continue
                         else:
-                            self.console.print("\n[red]Max retries reached. Task incomplete.[/red]")
                             self.console.print(
-                                f"[dim]Missing: {', '.join(result.missing_requirements[:3])}[/dim]"
+                                f"\n[{self._c('error')}]Max retries reached. Task incomplete.[/]"
+                            )
+                            self.console.print(
+                                f"[{self._c('muted')}]Missing: {', '.join(result.missing_requirements[:3])}[/]"
                             )
 
                             from openlaoke.core.small_model_optimizations import (
                                 estimate_model_size_from_name,
                             )
 
-                            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+                            model_size = estimate_model_size_from_name(
+                                self.app_state.session_config.model
+                            )
                             self._lesson_tracker.record_outcome(
                                 strategy_name="supervisor_check",
                                 model_size=model_size,
@@ -352,7 +377,7 @@ class REPL:
                     break
 
             except Exception as e:
-                self.console.print(f"\n[bold red]Error:[/bold red] {e}")
+                self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
                 self.app_state.set_error(str(e))
                 retry_count += 1
 
@@ -372,17 +397,16 @@ class REPL:
                     self._lesson_tracker.save()
                     break
 
-                self.console.print("\n[yellow]Retrying after error...[/yellow]")
+                self.console.print(f"\n[{self._c('warning')}]Retrying after error...[/]")
         else:
             self.console.print(
-                f"\n[red]Failed to complete task after {max_retry_attempts} attempts[/red]"
+                f"\n[{self._c('error')}]Failed to complete task after {max_retry_attempts} attempts[/]"
             )
 
         self.app_state.is_running = False
 
     def _collect_artifacts(self) -> dict[str, Any]:
-        """Collect artifacts from the conversation for supervision check."""
-        artifacts = {
+        artifacts: dict[str, Any] = {
             "content": "",
             "output_files": [],
         }
@@ -398,16 +422,15 @@ class REPL:
             if os.path.exists(filepath):
                 artifacts["output_files"].append(filepath)
 
-        import glob
+        import glob as glob_mod
 
         for pattern in ["*.svg", "*.png", "*.pdf"]:
-            files = glob.glob(f"{cwd}/{pattern}")
+            files = glob_mod.glob(f"{cwd}/{pattern}")
             artifacts["output_files"].extend(files)
 
         return artifacts
 
     async def _run_api_loop(self) -> None:
-        """Main API interaction loop."""
         max_iterations = 100
         iteration = 0
         failed_tool_calls: dict[str, int] = {}
@@ -417,7 +440,10 @@ class REPL:
             if msg.role == MessageRole.USER:
                 messages.append({"role": "user", "content": msg.content})
             elif msg.role == MessageRole.ASSISTANT:
-                assistant_msg: dict[str, Any] = {"role": "assistant", "content": msg.content}
+                assistant_msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": msg.content,
+                }
                 if hasattr(msg, "tool_uses") and msg.tool_uses:
                     assistant_msg["tool_calls"] = [
                         {
@@ -461,8 +487,9 @@ class REPL:
                     messages = prune_result.messages
                     if self.app_state.verbose:
                         self.console.print(
-                            f"[dim]Context pruned: {prune_result.tokens_before} -> {prune_result.tokens_after} tokens "
-                            f"({prune_result.elapsed_ms:.1f}ms, {prune_result.keywords_extracted} keywords)[/dim]"
+                            f"[{self._c('muted')}]Context pruned: "
+                            f"{prune_result.tokens_before} -> {prune_result.tokens_after} tokens "
+                            f"({prune_result.elapsed_ms:.1f}ms)[/]"
                         )
 
             is_local_builtin = (
@@ -513,135 +540,270 @@ class REPL:
                     tool_def["input_schema"] = sanitize_tool_schema(tool_def["input_schema"])
 
             if self.app_state.insomnia_mode:
-                self.console.print(f"[dim]🌙 Insomnia iteration {iteration}[/dim]")
-            else:
-                self.console.print()
-            spinner = self.console.status("[bold blue]Thinking...[/bold blue]", spinner="dots")
-            spinner.start()
+                self.console.print(f"[{self._c('muted')}]Insomnia iteration {iteration}[/]")
 
             try:
                 if not self.api:
-                    spinner.stop()
                     return
 
                 if iteration == 1 and self.app_state.verbose:
-                    self.console.print(f"[dim]Messages: {messages}[/dim]")
-                response, usage, cost = await self.api.send_message(
-                    system_prompt=system_prompt,
-                    messages=messages,
-                    tools=tools,
-                    model=self.app_state.session_config.model,
-                )
+                    self.console.print(f"[{self._c('muted')}]Messages: {messages}[/]")
 
-                spinner.stop()
+                streaming_supported = not is_local_builtin
+                response = None
+                usage = None
+                cost = None
+                content_text = ""
+                tool_uses: list[ToolUseBlock] = []
 
-                self.app_state.accumulate_tokens(usage)
-                self.app_state.accumulate_cost(cost)
+                if streaming_supported:
+                    streaming_content = Text("")
+                    token_count = 0
+                    status = Text(f"  [{self._c('primary')}]Thinking...[/]")
 
-                if response.thinking:
-                    self.console.print(f"[dim italic]💭 {response.thinking}[/dim italic]")
+                    with Live(
+                        Group(status, streaming_content),
+                        console=self.console,
+                        refresh_per_second=15,
+                        transient=True,
+                    ) as live:
+                        async for chunk in self.api.stream_message(
+                            system_prompt=system_prompt,
+                            messages=messages,
+                            tools=tools,
+                            model=self.app_state.session_config.model,
+                        ):
+                            if chunk.event_type == StreamEventType.TEXT:
+                                content_text += chunk.text
+                                token_count += 1
+                                streaming_content.append(chunk.text)
+                                live.update(
+                                    Group(
+                                        Text(
+                                            f"  [{self._c('primary')}]Generating... {token_count} tokens[/]"
+                                        ),
+                                        streaming_content,
+                                    )
+                                )
+                            elif chunk.event_type == StreamEventType.TOOL_CALL_START:
+                                try:
+                                    args = (
+                                        json.loads(chunk.tool_call_arguments)
+                                        if chunk.tool_call_arguments
+                                        else {}
+                                    )
+                                except json.JSONDecodeError:
+                                    args = {}
+                                tool_uses.append(
+                                    ToolUseBlock(
+                                        id=chunk.tool_call_id,
+                                        name=chunk.tool_call_name,
+                                        input=args,
+                                    )
+                                )
+                            elif chunk.event_type == StreamEventType.USAGE:
+                                if chunk.usage:
+                                    usage = chunk.usage
+                                if chunk.cost:
+                                    cost = chunk.cost
 
-                if response.content:
-                    self.console.print(Markdown(response.content))
+                    if content_text:
+                        self.console.print(Markdown(content_text))
 
-                if self._hook_system.has_hooks("message_transform"):
-                    from openlaoke.core.hook_system import HookInput, HookOutput
-                    msg_hook_input = HookInput(
-                        messages=[{"role": "assistant", "content": response.content or ""}],
-                        model_name=self.app_state.session_config.model,
-                    )
-                    msg_hook_output = HookOutput()
-                    self._hook_system.execute_hooks("message_transform", msg_hook_input, msg_hook_output)
-                    if msg_hook_output.messages:
-                        response.content = msg_hook_output.messages[0].get("content", response.content)
+                    for tu in tool_uses:
+                        self.console.print(f"  [{self._c('secondary')}]{tu.name}[/]")
 
-                assistant_msg: dict[str, Any] = {"role": "assistant"}
-                if response.content:
-                    assistant_msg["content"] = response.content
-                if response.tool_uses:
-                    assistant_msg["tool_calls"] = [
-                        {
-                            "id": tu.id,
-                            "type": "function",
-                            "function": {
-                                "name": tu.name,
-                                "arguments": json.dumps(tu.input),
-                            },
-                        }
-                        for tu in response.tool_uses
-                    ]
-                messages.append(assistant_msg)
+                    if usage and cost:
+                        self.app_state.accumulate_tokens(usage)
+                        self.app_state.accumulate_cost(cost)
 
-                if not response.tool_uses:
-                    break
+                    if content_text or tool_uses or usage:
+                        msg = AssistantMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=content_text,
+                            tool_uses=tool_uses if tool_uses else None,
+                        )
+                        self.app_state.add_message(msg)
+                        assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
+                        if content_text:
+                            assistant_msg_dict["content"] = content_text
+                        if tool_uses:
+                            assistant_msg_dict["tool_calls"] = [
+                                {
+                                    "id": tu.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tu.name,
+                                        "arguments": json.dumps(tu.input),
+                                    },
+                                }
+                                for tu in tool_uses
+                            ]
+                        messages.append(assistant_msg_dict)
 
-                for tool_use in response.tool_uses:
-                    if not self._running:
+                    if not tool_uses:
                         break
 
-                    tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
-                    failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+                    for tool_use in tool_uses:
+                        if not self._running:
+                            break
 
-                    if failed_tool_calls[tool_key] > 3:
-                        self.console.print(
-                            f"\n[red]Tool '{tool_use.name}' called too many times with same parameters. "
-                            f"Please review and fix your approach.[/red]"
+                        tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                        failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+
+                        if failed_tool_calls[tool_key] > 3:
+                            self.console.print(
+                                f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_use.id,
+                                    "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
+                                }
+                            )
+                            continue
+
+                        result = await self._execute_tool(tool_use)
+
+                        result_content = (
+                            result.content
+                            if isinstance(result.content, str)
+                            else str(result.content)
                         )
                         messages.append(
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_use.id,
-                                "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters. "
-                                f"This suggests an error in your approach. Please try a different strategy or provide different parameters. "
-                                f"Your current parameters: {json.dumps(tool_use.input)}",
+                                "content": result_content,
                             }
                         )
-                        continue
 
-                    result = await self._execute_tool(tool_use)
+                    self.app_state._persist()
 
-                    if result.is_error:
+                else:
+                    spinner = self.console.status(
+                        f"[bold {self._c('primary')}]Thinking...[/]",
+                        spinner="dots",
+                    )
+                    spinner.start()
+
+                    try:
+                        response, usage, cost = await self.api.send_message(
+                            system_prompt=system_prompt,
+                            messages=messages,
+                            tools=tools,
+                            model=self.app_state.session_config.model,
+                        )
+                    finally:
+                        spinner.stop()
+
+                    self.app_state.accumulate_tokens(usage)
+                    self.app_state.accumulate_cost(cost)
+
+                    if response.thinking:
+                        self.console.print(
+                            f"[{self._c('muted')} italic]Thinking: {response.thinking}[/]"
+                        )
+
+                    if response.content:
+                        self.console.print(Markdown(response.content))
+
+                    if self._hook_system.has_hooks("message_transform"):
+                        from openlaoke.core.hook_system import HookInput, HookOutput
+
+                        msg_hook_input = HookInput(
+                            messages=[{"role": "assistant", "content": response.content or ""}],
+                            model_name=self.app_state.session_config.model,
+                        )
+                        msg_hook_output = HookOutput()
+                        self._hook_system.execute_hooks(
+                            "message_transform", msg_hook_input, msg_hook_output
+                        )
+                        if msg_hook_output.messages:
+                            response.content = msg_hook_output.messages[0].get(
+                                "content", response.content
+                            )
+
+                    assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
+                    if response.content:
+                        assistant_msg_dict["content"] = response.content
+                    if response.tool_uses:
+                        assistant_msg_dict["tool_calls"] = [
+                            {
+                                "id": tu.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tu.name,
+                                    "arguments": json.dumps(tu.input),
+                                },
+                            }
+                            for tu in response.tool_uses
+                        ]
+                    messages.append(assistant_msg_dict)
+
+                    if not response.tool_uses:
+                        break
+
+                    for tool_use in response.tool_uses:
+                        if not self._running:
+                            break
+
                         tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                        failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
 
-                    result_content = (
-                        result.content if isinstance(result.content, str) else str(result.content)
-                    )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_use.id,
-                            "content": result_content,
-                        }
-                    )
+                        if failed_tool_calls[tool_key] > 3:
+                            self.console.print(
+                                f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_use.id,
+                                    "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
+                                }
+                            )
+                            continue
 
-                self.app_state._persist()
+                        result = await self._execute_tool(tool_use)
+
+                        result_content = (
+                            result.content
+                            if isinstance(result.content, str)
+                            else str(result.content)
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_use.id,
+                                "content": result_content,
+                            }
+                        )
+
+                    self.app_state._persist()
 
             except asyncio.CancelledError:
-                spinner.stop()
-                self.console.print("\n[yellow]Interrupted.[/yellow]")
+                self.console.print(f"\n[{self._c('warning')}]Interrupted.[/]")
                 break
             except httpx.HTTPStatusError as e:
-                spinner.stop()
-                self.console.print(f"\n[bold red]API Error:[/bold red] {e.response.status_code}")
+                self.console.print(
+                    f"\n[bold {self._c('error')}]API Error:[/] {e.response.status_code}"
+                )
                 try:
                     error_data = e.response.json()
                     error_msg = error_data.get("error", {}).get("message", str(e))
-                    self.console.print(f"[red]{error_msg}[/red]")
+                    self.console.print(f"[{self._c('error')}]{error_msg}[/]")
                 except Exception:
-                    self.console.print(f"[red]{e.response.text[:500]}[/red]")
+                    self.console.print(f"[{self._c('error')}]{e.response.text[:500]}[/]")
                 break
             except Exception as e:
-                spinner.stop()
-                self.console.print(f"\n[bold red]Error:[/bold red] {e}")
+                self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
                 break
 
-    async def _execute_tool(self, tool_use) -> Any:
-        """Execute a single tool call with permission checking."""
+    async def _execute_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
         tool = self.registry.get(tool_use.name)
         if not tool:
-            self.console.print(f"  [dim]Unknown tool: {tool_use.name}[/dim]")
-            from openlaoke.types.core_types import ToolResultBlock
-
+            self.console.print(f"  [{self._c('muted')}]Unknown tool: {tool_use.name}[/]")
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Unknown tool: {tool_use.name}",
@@ -664,7 +826,9 @@ class REPL:
             tool_name=tool_use.name,
             tool_args=dict(tool_input),
             session_id=self.app_state.session_id,
-            provider_name=self.app_state.multi_provider_config.active_provider if self.app_state.multi_provider_config else "",
+            provider_name=self.app_state.multi_provider_config.active_provider
+            if self.app_state.multi_provider_config
+            else "",
             model_name=self.app_state.session_config.model,
         )
         hook_output = HookOutput()
@@ -672,7 +836,6 @@ class REPL:
         if self._hook_system.has_hooks("tool_execute_before"):
             self._hook_system.execute_hooks("tool_execute_before", hook_input, hook_output)
             if hook_output.skip_execution:
-                from openlaoke.types.core_types import ToolResultBlock
                 return ToolResultBlock(
                     tool_use_id=tool_use.id,
                     content=hook_output.tool_result or "Tool execution skipped by hook",
@@ -685,7 +848,7 @@ class REPL:
 
         if self._read_loop_tracker.should_warn():
             self.console.print(
-                f"  [yellow]⚠ {self._read_loop_tracker.get_warning_message()}[/yellow]"
+                f"  [{self._c('warning')}]{self._read_loop_tracker.get_warning_message()}[/]"
             )
 
         perm_result = tool.check_permissions(
@@ -694,11 +857,7 @@ class REPL:
         )
 
         if perm_result == PermissionResult.DENY:
-            self.console.print(
-                f"  [red]Denied:[/red] {tool_use.name} - {tool.get_deny_message(tool_input)}"
-            )
-            from openlaoke.types.core_types import ToolResultBlock
-
+            self.console.print(f"  [{self._c('error')}]Denied:[/] {tool_use.name}")
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Permission denied for {tool_use.name}",
@@ -706,31 +865,17 @@ class REPL:
             )
 
         if perm_result == PermissionResult.ASK and not self.app_state.auto_accept:
-            self.console.print(
-                f"  [yellow]Allow {tool_use.name}?[/yellow] "
-                f"[green](y)es[/green] / [red](n)o[/red] / [blue](a)lways[/blue]"
-            )
-            try:
-                answer = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: input("  > ").strip().lower()
-                )
-            except (EOFError, OSError):
-                answer = "n"
-
-            if answer in ("n", "no"):
-                self.console.print(f"  [red]Denied: {tool_use.name}[/red]")
-                from openlaoke.types.core_types import ToolResultBlock
-
+            approved = await self._ask_permission(tool_use.name, tool_input, tool)
+            if not approved:
+                self.console.print(f"  [{self._c('error')}]Denied: {tool_use.name}[/]")
                 return ToolResultBlock(
                     tool_use_id=tool_use.id,
                     content=f"User denied {tool_use.name}",
                     is_error=True,
                 )
-            elif answer in ("a", "always"):
-                self.app_state.permission_config.approve_tool(tool_use.name, remember=True)
 
-        tool_prefix = "🌙 " if self.app_state.insomnia_mode else ""
-        self.console.print(f"  [dim]{tool_prefix}{tool_use.name}[/dim]")
+        tool_icon = "\u2219" if not self.app_state.insomnia_mode else "\u2615"
+        self.console.print(f"  [{self._c('secondary')}]{tool_icon}{tool_use.name}[/]")
 
         ctx = ToolContext(
             app_state=self.app_state,
@@ -739,9 +884,7 @@ class REPL:
 
         validation = tool.validate_input(tool_input)
         if not validation.result:
-            self.console.print(f"  [red]Validation failed: {validation.message}[/red]")
-            from openlaoke.types.core_types import ToolResultBlock
-
+            self.console.print(f"  [{self._c('error')}]Validation: {validation.message}[/]")
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Validation error: {validation.message}",
@@ -752,10 +895,9 @@ class REPL:
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
 
-        if tool_use.name == "bash":
+        if tool_use.name == "Bash":
             compressed = self._output_compressor.compress(result_content)
             if compressed != result_content:
-                from openlaoke.types.core_types import ToolResultBlock
                 result = ToolResultBlock(
                     tool_use_id=result.tool_use_id,
                     content=compressed,
@@ -769,7 +911,6 @@ class REPL:
             hook_output_after = HookOutput()
             self._hook_system.execute_hooks("tool_execute_after", hook_input, hook_output_after)
             if hook_output_after.tool_result is not None:
-                from openlaoke.types.core_types import ToolResultBlock
                 result = ToolResultBlock(
                     tool_use_id=result.tool_use_id,
                     content=hook_output_after.tool_result,
@@ -777,25 +918,74 @@ class REPL:
                 )
 
         rendered = tool.render_result(result)
-        if rendered and len(rendered) > 200:
-            self.console.print(f"  [dim]{rendered[:200]}...[/dim]")
-        elif rendered:
-            self.console.print(f"  [dim]{rendered}[/dim]")
+        if rendered:
+            self._print_tool_result(rendered, tool_use.name, result.is_error)
 
         return result
+
+    async def _ask_permission(self, tool_name: str, tool_input: dict[str, Any], tool: Tool) -> bool:
+        prompt_text = Text()
+        prompt_text.append("  Allow ", style=self._theme.style("warning"))
+        prompt_text.append(f"{tool_name}", style=self._theme.style("assistant_message"))
+        prompt_text.append("?", style=self._theme.style("warning"))
+        self.console.print(prompt_text)
+
+        choices = Text()
+        choices.append("  [", style=self._theme.style("muted"))
+        choices.append("y", style=self._theme.style("success"))
+        choices.append("]es  ", style=self._theme.style("muted"))
+        choices.append("[", style=self._theme.style("muted"))
+        choices.append("n", style=self._theme.style("error"))
+        choices.append("]o  ", style=self._theme.style("muted"))
+        choices.append("[", style=self._theme.style("muted"))
+        choices.append("a", style=self._theme.style("primary"))
+        choices.append("]lways", style=self._theme.style("muted"))
+        self.console.print(choices)
+
+        try:
+            loop = asyncio.get_running_loop()
+            answer = await loop.run_in_executor(None, lambda: input("  > ").strip().lower())
+        except (EOFError, OSError):
+            answer = "n"
+
+        if answer in ("n", "no"):
+            return False
+        if answer in ("a", "always"):
+            self.app_state.permission_config.approve_tool(tool_name, remember=True)
+        return True
+
+    def _print_tool_result(self, rendered: str, tool_name: str, is_error: bool) -> None:
+        if is_error:
+            style = self._c("error")
+            prefix = "!"
+        else:
+            style = self._c("muted")
+            prefix = " "
+
+        max_inline = 300
+        if len(rendered) <= max_inline:
+            self.console.print(f"  [{style}]{prefix} {rendered}[/]")
+        else:
+            self.console.print(f"  [{style}]{prefix} {rendered[:max_inline]}...[/]")
+            self.console.print(f"  [{self._c('muted')}]{prefix}   ({len(rendered)} chars total)[/]")
 
     def _print_banner(self) -> None:
         from openlaoke import __version__
 
+        theme = self._theme.current_theme
+        color = theme.colors.primary
         self.console.print(
             Panel.fit(
-                f"[bold cyan]OpenLaoKe[/bold cyan] v{__version__}\n"
-                "[dim]Open-source AI coding assistant[/dim]",
-                border_style="cyan",
+                f"[bold {color}]OpenLaoKe[/] v{__version__}\n"
+                f"[{theme.colors.muted}]Open-source AI coding assistant[/]",
+                border_style=color,
             )
         )
 
     def _print_welcome(self) -> None:
+        theme = self._theme.current_theme
+        c = theme.colors
+
         provider_name = "unknown"
         if self.multi_provider_config:
             provider_name = self.multi_provider_config.active_provider
@@ -804,39 +994,41 @@ class REPL:
 
         proxy_info = ""
         if self._proxy:
-            proxy_info = f"\n[bold]Proxy:[/bold] {self._proxy}"
+            proxy_info = f"\n[{self._c('primary')} bold]Proxy:[/] {self._proxy}"
 
-        # Get available skills
         from openlaoke.core.skill_system import list_available_skills
 
         skills = list_available_skills()
+        c_prim = self._c("primary")
+        c_succ = self._c("success")
+        c_warn = self._c("warning")
 
-        self.console.print(f"\n[bold]Provider:[/bold] {provider_name}")
-        self.console.print(f"[bold]Model:[/bold] {self.app_state.session_config.model}")
-        self.console.print(f"[bold]Working directory:[/bold] {self.app_state.get_cwd()}")
+        self.console.print(f"\n[{c_prim} bold]Provider:[/] {provider_name}")
+        self.console.print(f"[{c_prim} bold]Model:[/] {self.app_state.session_config.model}")
+        self.console.print(f"[{c_prim} bold]Working directory:[/] {self.app_state.get_cwd()}")
         if self.app_state.local_mode:
-            self.console.print(
-                "[bold]Mode:[/bold] [yellow]Local (atomic decomposition enabled)[/yellow]"
-            )
+            self.console.print(f"[{c_prim} bold]Mode:[/] [{c_warn}]Local (atomic decomposition)[/]")
         else:
-            self.console.print("[bold]Mode:[/bold] [green]Online (direct API calls)[/green]")
+            self.console.print(f"[{c_prim} bold]Mode:[/] [{c_succ}]Online[/]")
+
         self.console.print(
-            f"[bold]Tools:[/bold] {len(self.registry.get_all())} available{proxy_info}"
+            f"[{c_prim} bold]Tools:[/] {len(self.registry.get_all())} available{proxy_info}"
         )
 
         if skills:
             self.console.print(
-                f"[bold]Skills:[/bold] {len(skills)} available (use Tab to complete)"
+                f"[{c_prim} bold]Skills:[/] {len(skills)} available (Tab to complete)"
             )
             example_skills = sorted(skills)[:5]
             skills_str = ", ".join(f"/{s}" for s in example_skills)
             if len(skills) > 5:
                 skills_str += f", ... ({len(skills) - 5} more)"
-            self.console.print(f"[dim]  Examples: {skills_str}[/dim]")
+            self.console.print(f"  [{c.muted}]{skills_str}[/]")
 
         if self.app_state.insomnia_mode:
-            self.console.print("[bold]Mode:[/bold] [bold cyan]🌙 Insomnia (不眠不休)[/bold cyan]")
+            self.console.print(f"[{c_prim} bold]Mode:[/] [bold {c_prim}]Insomnia[/]")
 
         self.console.print(
-            "\n[dim]Type [bold]/help[/bold] for commands, [bold]Tab[/bold] for skill completion, or just start chatting.[/dim]"
+            f"\n[{c.muted}]Type [bold {c_prim}]/help[/] for commands, "
+            f"[bold {c_prim}]Tab[/] for completion, or just start chatting.[/]"
         )

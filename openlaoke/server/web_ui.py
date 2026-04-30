@@ -29,6 +29,7 @@ from openlaoke.types.core_types import (
     AssistantMessage,
     CostInfo,
     MessageRole,
+    StreamEventType,
     TokenUsage,
     UserMessage,
 )
@@ -260,11 +261,18 @@ HTML_PAGE = """<!DOCTYPE html>
             }
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         function formatMarkdown(text) {
-            return text.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-                       .replace(/`([^`]+)`/g, '<code>$1</code>')
-                       .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
-                       .replace(/\\n/g, '<br>');
+            const escaped = escapeHtml(text);
+            return escaped.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+                        .replace(/`([^`]+)`/g, '<code>$1</code>')
+                        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+                        .replace(/\\n/g, '<br>');
         }
 
         function updateStats() {
@@ -751,11 +759,16 @@ class WebUI:
                 {"type": "chat_started", "session_id": session.app_state.session_id},
             )
 
-            async for chunk in self._stream_chat(session, content):
-                await self.manager.send_personal(
-                    websocket,
-                    {"type": "chat_chunk", "content": chunk},
-                )
+            async for sse_chunk in self._stream_chat(session, content):
+                if sse_chunk.startswith("data: "):
+                    try:
+                        chunk_data = json.loads(sse_chunk[6:].strip())
+                        await self.manager.send_personal(
+                            websocket,
+                            chunk_data,
+                        )
+                    except json.JSONDecodeError:
+                        pass
 
             await self.manager.send_personal(
                 websocket,
@@ -869,20 +882,20 @@ class WebUI:
         tools = session.registry.get_all_for_prompt()
 
         try:
-            async for text, usage, cost in session.api.stream_message(
+            async for chunk in session.api.stream_message(
                 system_prompt=system_prompt,
                 messages=messages,
                 tools=tools,
                 max_tokens=session.config.max_tokens,
                 temperature=session.config.temperature,
             ):
-                if text:
-                    yield f"data: {json.dumps({'type': 'text', 'content': text})}\n\n"
+                if chunk.event_type == StreamEventType.TEXT and chunk.text:
+                    yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
 
-                if usage and cost:
-                    session.app_state.accumulate_tokens(usage)
-                    session.app_state.accumulate_cost(cost)
-                    yield f"data: {json.dumps({'type': 'usage', 'usage': {'input_tokens': usage.input_tokens, 'output_tokens': usage.output_tokens}, 'cost': cost.total_cost})}\n\n"
+                if chunk.event_type == StreamEventType.USAGE and chunk.usage and chunk.cost:
+                    session.app_state.accumulate_tokens(chunk.usage)
+                    session.app_state.accumulate_cost(chunk.cost)
+                    yield f"data: {json.dumps({'type': 'usage', 'usage': {'input_tokens': chunk.usage.input_tokens, 'output_tokens': chunk.usage.output_tokens}, 'cost': chunk.cost.total_cost})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

@@ -182,8 +182,18 @@ class AppState:
         try:
             os.makedirs(os.path.dirname(self._persist_path), exist_ok=True)
             data = {
+                "version": 2,
+                "created_at": self.messages[0].timestamp if self.messages else time.time(),
                 "session_id": self.session_id,
                 "cwd": self.cwd,
+                "model": self.session_config.model,
+                "session_config": {
+                    "model": self.session_config.model,
+                    "max_tokens": self.session_config.max_tokens,
+                    "temperature": self.session_config.temperature,
+                    "top_p": self.session_config.top_p,
+                    "thinking_budget": self.session_config.thinking_budget,
+                },
                 "messages": [m.to_dict() for m in self.messages],
                 "tasks": {k: v.to_dict() for k, v in self.tasks.items()},
                 "token_usage": {

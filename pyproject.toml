@@ -7,7 +7,7 @@ name = "openlaoke"
 dynamic = ["version"]
 description = "Open-source terminal AI coding assistant"
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-only"
 requires-python = ">=3.11"
 authors = [
     { name = "OpenLaoKe Contributors" },
