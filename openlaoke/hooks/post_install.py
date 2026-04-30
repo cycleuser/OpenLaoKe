@@ -102,7 +102,6 @@ def _verify_dependencies(logger) -> None:
         "websockets",
         "fastapi",
         "uvicorn",
-        "llama_cpp_python",
     ]
 
     missing = []
@@ -130,10 +129,9 @@ def _check_model_requirements(logger) -> None:
 
         logger.info(f"  ✓ llama-cpp-python available (version: {llama_cpp.__version__})")
     except ImportError:
-        logger.warning("  ✗ llama-cpp-python not installed")
-        logger.warning("    Required for local GGUF model support")
-        logger.warning("    Install with: pip install llama-cpp-python")
-        logger.warning("    On Linux you may need: CMAKE_ARGS='-DLLAMA_CUBLAS=on' pip install llama-cpp-python")
+        logger.info("  ⚪ llama-cpp-python not installed (optional, for local GGUF models)")
+        logger.info("    Install with: pip install llama-cpp-python")
+        logger.info("    Or: pip install openlaoke[local]")
 
     try:
         import torch
