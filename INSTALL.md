@@ -45,18 +45,16 @@
 
 ### 使用 pip（推荐）
 ```bash
-# 克隆仓库
+# 直接从 PyPI 安装
+pip install openlaoke
+
+# 或从源码安装
 git clone https://github.com/cycleuser/OpenLaoKe.git
 cd OpenLaoKe
-
-# 安装
 pip install -e .
 
-# 或安装开发版本
+# 开发版本（含测试工具）
 pip install -e ".[dev]"
-
-# 或安装本地模型支持
-pip install -e ".[local]"
 ```
 
 ### 使用 uv（更快）
@@ -126,14 +124,11 @@ python --version
 # 进入项目目录
 cd OpenLaoKe
 
-# 基础安装（仅云端提供商）
+# 基础安装（含所有功能，包括本地模型支持）
 pip install -e .
 
 # 开发安装（含测试和lint工具）
 pip install -e ".[dev]"
-
-# 本地模型安装（含llama-cpp-python）
-pip install -e ".[local]"
 ```
 
 ### 步骤 4: 验证安装
@@ -153,17 +148,11 @@ openlaoke doctor
 
 ## 本地GGUF模型安装
 
-### 方式一：安装时包含本地支持
+### 方式一：安装时已包含本地支持
 
-```bash
-pip install -e ".[local]"
-```
+`pip install openlaoke` 已包含 `llama-cpp-python`，无需额外安装。
 
-这会自动安装 `llama-cpp-python`，可能需要编译。
-
-### 方式二：手动安装 llama-cpp-python
-
-如果上述方式失败，可以手动安装：
+如果编译失败，可手动安装：
 
 ```bash
 # 基础安装

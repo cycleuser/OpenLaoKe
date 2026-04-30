@@ -118,6 +118,16 @@ class MultiProviderConfig:
         provider = self.get_active_provider()
         return provider is not None and provider.is_configured()
 
+    def has_provider_selected(self) -> bool:
+        provider = self.get_active_provider()
+        if provider is None:
+            return False
+        if provider.is_local:
+            return True
+        if provider.provider_type == ProviderType.OPENCODE:
+            return True
+        return bool(provider.api_key and provider.api_key != "none")
+
     def set_active_provider(self, name: str) -> bool:
         if name in self.providers:
             self.active_provider = name
