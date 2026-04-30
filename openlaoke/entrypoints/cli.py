@@ -22,6 +22,29 @@ from openlaoke.utils.config import load_config, save_config
 
 
 def main() -> None:
+    known_subcommands = {"model", "server", "web", "auth"}
+    prompt_parts: list[str] = []
+    filtered_argv: list[str] = []
+    args_iter = iter(sys.argv[1:])
+    subcommand: str | None = None
+
+    for tok in args_iter:
+        if tok in known_subcommands and subcommand is None:
+            subcommand = tok
+            filtered_argv.append(tok)
+        elif tok.startswith("-"):
+            filtered_argv.append(tok)
+            if tok in ("-m", "--model", "-p", "--permission", "-c", "--cwd",
+                       "--provider", "--api-key", "--base-url", "--proxy",
+                       "--max-tokens", "--thinking-budget", "--cors"):
+                val = next(args_iter, "")
+                if val:
+                    filtered_argv.append(val)
+        elif subcommand is None:
+            prompt_parts.append(tok)
+        else:
+            filtered_argv.append(tok)
+
     parser = argparse.ArgumentParser(
         prog="openlaoke",
         description="OpenLaoKe - Open-source AI coding assistant",
@@ -35,7 +58,6 @@ def main() -> None:
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Model command
     model_parser = subparsers.add_parser("model", help="Manage built-in GGUF models")
     model_subparsers = model_parser.add_subparsers(dest="model_command", help="Model commands")
 
@@ -53,7 +75,6 @@ def main() -> None:
     model_search_parser = model_subparsers.add_parser("search", help="Search ModelScope for models")
     model_search_parser.add_argument("query", help="Search query")
 
-    # Auth command
     auth_parser = subparsers.add_parser("auth", help="Authentication management")
     auth_parser.add_argument("provider", nargs="?", help="Provider to authenticate")
     auth_parser.add_argument("--list", action="store_true", help="List authenticated providers")
@@ -190,13 +211,9 @@ def main() -> None:
         action="store_true",
         help="Enable local mode (for small local models with atomic decomposition, multi-model coordination)",
     )
-    parser.add_argument(
-        "prompt",
-        nargs="*",
-        help="Direct prompt to execute (non-interactive mode)",
-    )
 
-    args = parser.parse_args()
+    args = parser.parse_args(filtered_argv)
+    args.prompt = " ".join(prompt_parts) if prompt_parts else None
 
     console = Console(force_terminal=True)
 
@@ -386,8 +403,7 @@ def main() -> None:
     app_state.app_config = config
 
     if args.prompt:
-        prompt_text = " ".join(args.prompt)
-        asyncio.run(_run_non_interactive(prompt_text, app_state, config))
+        asyncio.run(_run_non_interactive(args.prompt, app_state, config))
     else:
         asyncio.run(_run_interactive(app_state, config))
 
