@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,6 +14,8 @@ from typing import Any
 from openlaoke.types.permissions import HyperAutoConfig
 from openlaoke.types.providers import MultiProviderConfig, PlanConfig
 from openlaoke.utils.theme import Theme, get_theme, get_theme_names
+
+logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path.home() / ".openlaoke"
 CONFIG_PATH = CONFIG_DIR / "config.json"
@@ -44,7 +49,7 @@ class AppConfig:
     thinking_budget: int = 0
     local_n_ctx: int = 8192
     permission_mode: str = "auto"
-    auto_approve_all: bool = True
+    auto_approve_all: bool = False
     auto_accept_tools: list[str] = field(default_factory=list)
     always_deny_tools: list[str] = field(default_factory=list)
     theme: str = "dark"
@@ -142,7 +147,7 @@ def load_config() -> AppConfig:
                 thinking_budget=data.get("thinking_budget", 0),
                 local_n_ctx=data.get("local_n_ctx", 8192),
                 permission_mode=data.get("permission_mode", "auto"),
-                auto_approve_all=data.get("auto_approve_all", True),
+                auto_approve_all=data.get("auto_approve_all", False),
                 theme=data.get("theme", "dark")
                 if data.get("theme", "dark") in get_theme_names()
                 else "dark",
@@ -160,7 +165,9 @@ def load_config() -> AppConfig:
             )
             return config
         except Exception:
-            pass
+            logger.warning(
+                "Failed to load config from %s, using defaults", CONFIG_PATH, exc_info=True
+            )
     return AppConfig()
 
 
@@ -217,8 +224,15 @@ def save_config(config: AppConfig) -> None:
         "first_run": config.first_run,
     }
 
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", dir=CONFIG_DIR, delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(data, tmp, indent=2)
+        tmp_path = tmp.name
+
+    os.replace(tmp_path, CONFIG_PATH)
+    with contextlib.suppress(OSError):
+        os.chmod(CONFIG_PATH, 0o600)
 
 
 def get_config_value(key: str, default: Any = None) -> Any:

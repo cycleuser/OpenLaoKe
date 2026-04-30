@@ -121,6 +121,7 @@ def _coerce_to_string(value: Any) -> Any:
         return value
     if isinstance(value, (dict, list)):
         import json
+
         return json.dumps(value)
     return str(value)
 
@@ -130,6 +131,7 @@ def _coerce_to_array(value: Any, prop_schema: dict[str, Any]) -> Any:
         return value
     if isinstance(value, str):
         import json
+
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
@@ -145,6 +147,7 @@ def _coerce_to_object(value: Any, prop_schema: dict[str, Any]) -> Any:
         return value
     if isinstance(value, str):
         import json
+
         try:
             parsed = json.loads(value)
             if isinstance(parsed, dict):
@@ -202,11 +205,23 @@ class ReadLoopTracker:
 
     consecutive_reads: int = 0
     max_consecutive_reads: int = 8
-    read_tools: set[str] = field(default_factory=lambda: {"read", "glob", "grep", "ls", "list_directory", "tool_search", "websearch", "web_fetch"})
+    read_tools: set[str] = field(
+        default_factory=lambda: {
+            "Read",
+            "Glob",
+            "Grep",
+            "ListDirectory",
+            "ToolSearch",
+            "WebSearch",
+            "WebFetch",
+        }
+    )
     last_tool: str = ""
 
     def notify_tool_call(self, tool_name: str) -> None:
-        if tool_name in self.read_tools:
+        if tool_name in self.read_tools or tool_name.lower() in {
+            t.lower() for t in self.read_tools
+        }:
             self.consecutive_reads += 1
         else:
             self.consecutive_reads = 0
@@ -285,8 +300,12 @@ class TerminalOutputCompressor:
         file_lines: list[str] = []
 
         for line in lines:
-            is_error = any(kw in line.lower() for kw in ["error", "exception", "traceback", "failed", "fatal"])
-            is_error_type = ":" in line and any(kw in line.split(":")[0].strip() for kw in ["Error", "Exception"])
+            is_error = any(
+                kw in line.lower() for kw in ["error", "exception", "traceback", "failed", "fatal"]
+            )
+            is_error_type = ":" in line and any(
+                kw in line.split(":")[0].strip() for kw in ["Error", "Exception"]
+            )
             is_file = line.startswith("  File ")
             is_caret = line.strip().startswith("^")
 

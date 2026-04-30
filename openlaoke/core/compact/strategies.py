@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -54,29 +53,9 @@ class CompactStrategy(ABC):
         return total
 
     def _extract_content(self, message: Message) -> str:
-        from openlaoke.types.core_types import (
-            AssistantMessage,
-            AttachmentMessage,
-            ProgressMessage,
-            SystemMessage,
-            UserMessage,
-        )
+        from openlaoke.core.compact import extract_content
 
-        if isinstance(message, UserMessage):
-            return message.content
-        elif isinstance(message, AssistantMessage):
-            parts = [message.content]
-            for tu in message.tool_uses:
-                parts.append(f"Tool: {tu.name}")
-                parts.append(json.dumps(tu.input))
-            return "\n".join(parts)
-        elif isinstance(message, SystemMessage):
-            return message.content
-        elif isinstance(message, ProgressMessage):
-            return ""
-        elif isinstance(message, AttachmentMessage):
-            return f"{message.content} Files: {', '.join(message.file_paths)}"
-        return ""
+        return extract_content(message)
 
     def get_message_importance(self, message: Message, index: int, total: int) -> float:
         from openlaoke.types.core_types import AssistantMessage, SystemMessage, UserMessage

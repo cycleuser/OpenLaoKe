@@ -26,39 +26,18 @@ class PruneResult:
 
 KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("file_path", re.compile(r'[/\\][\w./\\-]+[\w](?=\s|["\')]|$)')),
-    ("function_def", re.compile(r'(?:def|func|function)\s+(\w+)')),
-    ("class_def", re.compile(r'(?:class|struct|type)\s+(\w+)')),
-    ("error_msg", re.compile(r'(?:Error|Exception|Failed|error|failed):\s*(.+)')),
-    ("import", re.compile(r'(?:import|from)\s+([\w.]+)')),
-    ("tool_call", re.compile(r'Tool:\s*(\w+)')),
+    ("function_def", re.compile(r"(?:def|func|function)\s+(\w+)")),
+    ("class_def", re.compile(r"(?:class|struct|type)\s+(\w+)")),
+    ("error_msg", re.compile(r"(?:Error|Exception|Failed|error|failed):\s*(.+)")),
+    ("import", re.compile(r"(?:import|from)\s+([\w.]+)")),
+    ("tool_call", re.compile(r"Tool:\s*(\w+)")),
 ]
 
 
 def _extract_content(message: Message) -> str:
-    from openlaoke.types.core_types import (
-        AssistantMessage,
-        AttachmentMessage,
-        ProgressMessage,
-        SystemMessage,
-        UserMessage,
-    )
+    from openlaoke.core.compact import extract_content
 
-    if isinstance(message, UserMessage):
-        return message.content
-    elif isinstance(message, AssistantMessage):
-        parts = [message.content]
-        for tu in message.tool_uses:
-            parts.append(f"Tool: {tu.name}")
-            import json
-            parts.append(json.dumps(tu.input))
-        return "\n".join(parts)
-    elif isinstance(message, SystemMessage):
-        return message.content
-    elif isinstance(message, ProgressMessage):
-        return ""
-    elif isinstance(message, AttachmentMessage):
-        return f"{message.content} Files: {', '.join(message.file_paths)}"
-    return ""
+    return extract_content(message)
 
 
 def _estimate_tokens(text: str) -> int:

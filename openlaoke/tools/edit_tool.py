@@ -52,6 +52,14 @@ class EditTool(Tool):
 
         abs_path = self._resolve_path(file_path, ctx.app_state.get_cwd())
 
+        path_error = self._validate_path(abs_path, ctx.app_state.get_cwd())
+        if path_error:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=path_error,
+                is_error=True,
+            )
+
         if not os.path.exists(abs_path):
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
@@ -132,6 +140,14 @@ class EditTool(Tool):
         if os.path.isabs(path):
             return os.path.normpath(path)
         return os.path.normpath(os.path.join(cwd, path))
+
+    def _validate_path(self, resolved: str, cwd: str) -> str | None:
+        real_resolved = os.path.realpath(resolved)
+        real_cwd = os.path.realpath(cwd)
+        home = os.path.realpath(os.path.expanduser("~"))
+        if real_resolved.startswith(real_cwd) or real_resolved.startswith(home):
+            return None
+        return f"Path '{resolved}' is outside workspace and home directory"
 
 
 def register(registry: ToolRegistry) -> None:
