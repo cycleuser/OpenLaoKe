@@ -43,6 +43,7 @@ dependencies = [
     "websockets>=14.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
+    "llama-cpp-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -55,9 +56,6 @@ dev = [
     "pre-commit>=4.0",
     "build>=1.2",
     "twine>=6.0",
-]
-local = [
-    "llama-cpp-python>=0.3.0",
 ]
 
 [project.scripts]

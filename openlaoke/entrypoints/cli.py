@@ -310,11 +310,11 @@ def main() -> None:
         show_current_config(config)
         return
 
-    if args.config or config.first_run or not config.providers.is_configured():
+    if args.config or config.first_run or not config.providers.has_provider_selected():
         config = run_config_wizard(config)
+        config.first_run = False
         save_config(config)
-        if not args.config:
-            console.print("\n[dim]Run 'openlaoke' to start chatting.[/dim]")
+        if args.config:
             return
 
     # Apply command-line overrides
