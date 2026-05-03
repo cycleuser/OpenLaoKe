@@ -310,7 +310,7 @@ class PromptSessionManager:
                 completer=OpenLaoKeCompleter(),
                 style=self._build_style(),
                 complete_while_typing=True,
-                mouse_support=True,
+                mouse_support=False,
                 history=FileHistory(str(HISTORY_FILE)),
                 enable_history_search=True,
                 key_bindings=self._build_keybindings(),

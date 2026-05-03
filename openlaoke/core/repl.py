@@ -16,8 +16,7 @@ import os
 from typing import Any
 
 import httpx
-from rich.console import Console, Group
-from rich.live import Live
+from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
@@ -64,7 +63,10 @@ class REPL:
         self._theme = ThemeManager(app_state.theme)
 
         from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
+        from openlaoke.core.file_state import FileStateStore
+        from openlaoke.core.gitstore import GitStore
         from openlaoke.core.hook_system import HookRegistry
+        from openlaoke.core.memory import get_memory_manager
         from openlaoke.core.small_model_optimizations import (
             ReadLoopTracker,
             TerminalOutputCompressor,
@@ -74,6 +76,10 @@ class REPL:
         self._output_compressor = TerminalOutputCompressor()
         self._lesson_tracker = BitterLessonTracker()
         self._hook_system = HookRegistry.get()
+        self._memory = get_memory_manager()
+        self._memory.load()
+        self._file_state = FileStateStore()
+        self._git_store: GitStore | None = None
 
         register_all()
         register_all_tools(self.registry)
@@ -270,6 +276,11 @@ class REPL:
 
         user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
+
+        self._memory.on_user_message(
+            user_input,
+            self.app_state.session_id,
+        )
 
         if self.app_state.insomnia_mode:
             self.app_state.auto_accept = True
@@ -505,11 +516,18 @@ class REPL:
                         user_input = msg.get("content", "")
                         break
                 system_prompt = build_compact_system_prompt(self.app_state, user_input)
+
+                tool_list = self._build_tool_list_for_small_model()
+                system_prompt = system_prompt.rstrip() + tool_list
             else:
                 system_prompt = build_system_prompt(
                     self.app_state,
                     self.registry.get_all_for_prompt(),
                 )
+
+            memory_prompt = self._memory.inject_into_system_prompt()
+            if memory_prompt:
+                system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
 
             from openlaoke.core.small_model_optimizations import (
                 apply_structured_thinking_prefix,
@@ -557,16 +575,13 @@ class REPL:
                 tool_uses: list[ToolUseBlock] = []
 
                 if streaming_supported:
-                    streaming_content = Text("")
-                    token_count = 0
-                    status = Text(f"  [{self._c('primary')}]Thinking...[/]")
+                    spinner = self.console.status(
+                        f"[bold {self._c('primary')}]Thinking...[/]",
+                        spinner="dots",
+                    )
+                    spinner.start()
 
-                    with Live(
-                        Group(status, streaming_content),
-                        console=self.console,
-                        refresh_per_second=15,
-                        transient=True,
-                    ) as live:
+                    try:
                         async for chunk in self.api.stream_message(
                             system_prompt=system_prompt,
                             messages=messages,
@@ -575,16 +590,6 @@ class REPL:
                         ):
                             if chunk.event_type == StreamEventType.TEXT:
                                 content_text += chunk.text
-                                token_count += 1
-                                streaming_content.append(chunk.text)
-                                live.update(
-                                    Group(
-                                        Text(
-                                            f"  [{self._c('primary')}]Generating... {token_count} tokens[/]"
-                                        ),
-                                        streaming_content,
-                                    )
-                                )
                             elif chunk.event_type == StreamEventType.TOOL_CALL_START:
                                 try:
                                     args = (
@@ -606,6 +611,8 @@ class REPL:
                                     usage = chunk.usage
                                 if chunk.cost:
                                     cost = chunk.cost
+                    finally:
+                        spinner.stop()
 
                     if content_text:
                         self.console.print(Markdown(content_text))
@@ -880,6 +887,8 @@ class REPL:
         ctx = ToolContext(
             app_state=self.app_state,
             tool_use_id=tool_use.id,
+            file_state=self._file_state,
+            git_store=self._get_git_store(),
         )
 
         validation = tool.validate_input(tool_input)
@@ -892,6 +901,13 @@ class REPL:
             )
 
         result = await tool.call(ctx, **tool_input)
+
+        if result.is_error:
+            self._memory.on_tool_error(
+                tool_use.name,
+                str(result.content)[:200],
+                self.app_state.session_id,
+            )
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
 
@@ -968,6 +984,39 @@ class REPL:
         else:
             self.console.print(f"  [{style}]{prefix} {rendered[:max_inline]}...[/]")
             self.console.print(f"  [{self._c('muted')}]{prefix}   ({len(rendered)} chars total)[/]")
+
+    def _get_git_store(self) -> Any | None:
+        if self._git_store is None:
+            from openlaoke.core.gitstore import GitStore
+
+            cwd = self.app_state.get_cwd()
+            if not os.path.exists(os.path.join(cwd, ".git")):
+                return None
+            self._git_store = GitStore(cwd)
+        return self._git_store
+
+    def _build_tool_list_for_small_model(self) -> str:
+        try:
+            all_tools = self.registry.get_all()
+        except Exception:
+            return ""
+
+        if not all_tools:
+            return ""
+
+        lines = [
+            "\n\n## Available Tools",
+            "When you need to use a tool, output EXACTLY this format:",
+            "<tool_call> <function=ToolName> <parameter=param1> value1 <parameter=param2> value2 </tool_call>",
+            "Put each tool call on its own line. Do NOT wrap in code blocks.",
+            "",
+        ]
+        max_tools = min(len(all_tools), 12)
+        for t in all_tools[:max_tools]:
+            name = getattr(t, "name", "?")
+            desc = (getattr(t, "description", "") or "")[:60]
+            lines.append(f"- {name}: {desc}")
+        return "\n".join(lines)
 
     def _print_banner(self) -> None:
         from openlaoke import __version__

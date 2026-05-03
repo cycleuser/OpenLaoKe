@@ -190,7 +190,6 @@ class BuiltinModelProvider:
     def _parse_response_with_thinking(
         self, response: dict[str, Any]
     ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
-        """Parse response, extracting <think> tags for thinking content."""
         content = ""
         tool_uses = []
         thinking = ""
@@ -201,18 +200,25 @@ class BuiltinModelProvider:
             message = choice.get("message", {})
             raw_content = message.get("content", "") or ""
 
-            # Extract <think> content
-            thinking_tag_open = "<" + "think" + "ing>"
-            thinking_tag_close = "</" + "think" + "ing>"
-            thinking_pattern = (
-                re.escape(thinking_tag_open) + r"(.*?)" + re.escape(thinking_tag_close)
+            thinking_content, parsed_content, parsed_tool_uses = self._parse_raw_tool_calls(
+                raw_content
             )
-            thinking_match = re.search(thinking_pattern, raw_content, re.DOTALL)
-            if thinking_match:
-                thinking = thinking_match.group(1).strip()
-                content = re.sub(thinking_pattern, "", raw_content, flags=re.DOTALL).strip()
+            if parsed_tool_uses:
+                tool_uses = parsed_tool_uses
+                content = parsed_content
+                thinking = thinking_content
             else:
-                content = raw_content
+                thinking_tag_open = "<" + "think" + "ing>"
+                thinking_tag_close = "</" + "think" + "ing>"
+                thinking_pattern = (
+                    re.escape(thinking_tag_open) + r"(.*?)" + re.escape(thinking_tag_close)
+                )
+                thinking_match = re.search(thinking_pattern, raw_content, re.DOTALL)
+                if thinking_match:
+                    thinking = thinking_match.group(1).strip()
+                    content = re.sub(thinking_pattern, "", raw_content, flags=re.DOTALL).strip()
+                else:
+                    content = raw_content
 
             for tool_call in message.get("tool_calls", []):
                 func = tool_call.get("function", {})
@@ -275,6 +281,57 @@ class BuiltinModelProvider:
             )
 
         return text, usage, cost
+
+    def _parse_raw_tool_calls(
+        self, raw_content: str,
+    ) -> tuple[str, str, list[ToolUseBlock]]:
+        import uuid
+
+        content = raw_content
+        tool_uses: list[ToolUseBlock] = []
+
+        tool_pattern = re.compile(
+            r"<tool_call>\s*(.*?)\s*</tool_call>",
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        def _extract(match_text: str) -> list[ToolUseBlock]:
+            results: list[ToolUseBlock] = []
+            for block in tool_pattern.findall(match_text):
+                fn_match = re.search(r"<function=(\w+)>", block)
+                if not fn_match:
+                    continue
+                tool_name = fn_match.group(1)
+
+                params: dict[str, Any] = {}
+                param_parts = re.split(r"<parameter=(\w+)>", block)
+                if len(param_parts) <= 1:
+                    continue
+
+                i = 1
+                while i < len(param_parts) - 1:
+                    key = param_parts[i]
+                    val = param_parts[i + 1].strip()
+                    if val:
+                        params[key] = val
+                    i += 2
+
+                if tool_name and params:
+                    results.append(
+                        ToolUseBlock(
+                            id=f"call_{uuid.uuid4().hex[:12]}",
+                            name=tool_name,
+                            input=params,
+                        )
+                    )
+            return results
+
+        tool_uses = _extract(raw_content)
+        if tool_uses:
+            content = tool_pattern.sub("", raw_content).strip()
+            return "", content, tool_uses
+
+        return "", raw_content, []
 
     def unload(self) -> None:
         """Unload the model to free memory."""

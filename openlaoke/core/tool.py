@@ -26,12 +26,12 @@ if TYPE_CHECKING:
 
 @dataclass
 class ToolContext:
-    """Context passed to tool calls."""
-
     app_state: AppState
     tool_use_id: str
     agent_id: str | None = None
     abort_signal: Any = None
+    file_state: Any = None
+    git_store: Any = None
 
 
 class Tool(ABC):
