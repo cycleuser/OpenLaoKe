@@ -112,6 +112,7 @@ class MultiProviderClient:
                 timeout=httpx.Timeout(self._timeout, connect=30.0),
                 limits=limits,
                 proxy=proxy,
+                trust_env=False,
             )
         return self._client
 

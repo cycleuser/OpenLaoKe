@@ -8,6 +8,12 @@ from collections.abc import Callable
 from openlaoke.core.tool import Tool, ToolRegistry
 
 _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
+    "CodeRunner": (
+        "openlaoke.tools.code_runner",
+        "CodeRunnerTool",
+        "Run code in a sandboxed environment with optional tests",
+        "code run python c rust sandbox execute",
+    ),
     "Agent": (
         "openlaoke.tools.agent_tool",
         "AgentTool",
