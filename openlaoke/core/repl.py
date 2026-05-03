@@ -13,11 +13,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from typing import Any
 
 import httpx
 from rich.console import Console
-from rich.markdown import Markdown
+from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
@@ -516,14 +517,15 @@ class REPL:
                         user_input = msg.get("content", "")
                         break
                 system_prompt = build_compact_system_prompt(self.app_state, user_input)
-
-                tool_list = self._build_tool_list_for_small_model()
-                system_prompt = system_prompt.rstrip() + tool_list
             else:
                 system_prompt = build_system_prompt(
                     self.app_state,
                     self.registry.get_all_for_prompt(),
                 )
+
+            tool_list = self._build_tool_list_for_small_model()
+            if tool_list:
+                system_prompt = system_prompt.rstrip() + tool_list
 
             memory_prompt = self._memory.inject_into_system_prompt()
             if memory_prompt:
@@ -551,6 +553,19 @@ class REPL:
 
             tools = self.registry.get_all_for_prompt()
 
+            needs_tool_hint = is_local_builtin or self._is_ollama_provider()
+            if needs_tool_hint:
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i].get("role") == "user":
+                        ti = (
+                            "\n\n[Use tools: output <tool_call> <function=FUNC> <parameter=KEY> value "
+                            "</tool_call> for each action. Do NOT describe, just DO. "
+                            "Available: Write(file_path,content) Read(file_path) Glob(pattern) Bash(command)]"
+                        )
+                        if ti not in messages[i].get("content", ""):
+                            messages[i]["content"] = messages[i].get("content", "") + ti
+                        break
+
             from openlaoke.core.small_model_optimizations import sanitize_tool_schema
 
             for tool_def in tools:
@@ -573,52 +588,124 @@ class REPL:
                 cost = None
                 content_text = ""
                 tool_uses: list[ToolUseBlock] = []
+                plan_retry_count = 0
 
                 if streaming_supported:
-                    spinner = self.console.status(
-                        f"[bold {self._c('primary')}]Thinking...[/]",
-                        spinner="dots",
-                    )
-                    spinner.start()
+                    token_count = 0
+                    stream_error: str | None = None
+                    start_time = time.time()
+                    status_text = Text(f"  [{self._c('primary')}]0 tokens[/]")
 
                     try:
-                        async for chunk in self.api.stream_message(
-                            system_prompt=system_prompt,
-                            messages=messages,
-                            tools=tools,
-                            model=self.app_state.session_config.model,
-                        ):
-                            if chunk.event_type == StreamEventType.TEXT:
-                                content_text += chunk.text
-                            elif chunk.event_type == StreamEventType.TOOL_CALL_START:
-                                try:
-                                    args = (
-                                        json.loads(chunk.tool_call_arguments)
-                                        if chunk.tool_call_arguments
-                                        else {}
+                        with Live(
+                            status_text, console=self.console, refresh_per_second=4
+                        ) as live:
+                            async for chunk in self.api.stream_message(
+                                system_prompt=system_prompt,
+                                messages=messages,
+                                tools=tools,
+                                model=self.app_state.session_config.model,
+                            ):
+                                if chunk.event_type == StreamEventType.TEXT:
+                                    content_text += chunk.text
+                                    token_count += 1
+                                elif chunk.event_type == StreamEventType.TOOL_CALL_START:
+                                    try:
+                                        args = (
+                                            json.loads(chunk.tool_call_arguments)
+                                            if chunk.tool_call_arguments
+                                            else {}
+                                        )
+                                    except json.JSONDecodeError:
+                                        args = {}
+                                    tool_uses.append(
+                                        ToolUseBlock(
+                                            id=chunk.tool_call_id,
+                                            name=chunk.tool_call_name,
+                                            input=args,
+                                        )
                                     )
-                                except json.JSONDecodeError:
-                                    args = {}
-                                tool_uses.append(
-                                    ToolUseBlock(
-                                        id=chunk.tool_call_id,
-                                        name=chunk.tool_call_name,
-                                        input=args,
+                                elif chunk.event_type == StreamEventType.USAGE:
+                                    if chunk.usage:
+                                        usage = chunk.usage
+                                    if chunk.cost:
+                                        cost = chunk.cost
+
+                                elapsed = max(time.time() - start_time, 0.01)
+                                tps = token_count / elapsed
+                                live.update(
+                                    Text(
+                                        f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
                                     )
                                 )
-                            elif chunk.event_type == StreamEventType.USAGE:
-                                if chunk.usage:
-                                    usage = chunk.usage
-                                if chunk.cost:
-                                    cost = chunk.cost
-                    finally:
-                        spinner.stop()
+                    except httpx.HTTPStatusError as e:
+                        stream_error = f"API {e.response.status_code}"
+                    except Exception as e:
+                        stream_error = str(e)[:200]
+
+                    elapsed = max(time.time() - start_time, 0.01)
+                    tps = token_count / elapsed
+                    self.console.print(
+                        f"  [{self._c('muted')}]{token_count} tokens · {tps:.0f} t/s · {elapsed:.1f}s[/]"
+                    )
+
+                    if stream_error:
+                        self.console.print(
+                            f"  [bold {self._c('error')}]Error:[/] {stream_error}"
+                        )
+                        break
+
+                    if token_count == 0 and elapsed > 5:
+                        self.console.print(
+                            f"  [bold {self._c('error')}]Model returned no output[/]"
+                            f" (waited {elapsed:.0f}s). Try a different model or check the provider."
+                        )
+                        break
+
+                    if content_text and not tool_uses and "<tool_call>" in content_text:
+                        parsed_tool_uses = self._parse_inline_tool_calls(content_text)
+                        if parsed_tool_uses:
+                            tool_uses = parsed_tool_uses
+                            content_text = self._strip_tool_calls(content_text)
+
+                    is_plan_only = (
+                        content_text
+                        and not tool_uses
+                        and plan_retry_count < 2
+                        and self._is_plan_response(content_text)
+                    )
+                    if is_plan_only:
+                        self.console.print(
+                            f"[{self._c('muted')}](auto-retry: requesting tool calls...)[/]"
+                        )
+                        plan_retry_count += 1
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Do NOT describe steps. Use tools NOW. "
+                                    "Output <tool_call> format immediately. "
+                                    "Start with Read or Glob to explore the project."
+                                ),
+                            }
+                        )
+                        continue
 
                     if content_text:
-                        self.console.print(Markdown(content_text))
+                        brief = content_text[:200].replace("\n", " ").strip()
+                        if brief:
+                            self.console.print(
+                                f"  [{self._c('muted')}]{brief}...[/]"
+                            )
 
                     for tu in tool_uses:
-                        self.console.print(f"  [{self._c('secondary')}]{tu.name}[/]")
+                        file_path = tu.input.get("file_path", "")
+                        action = (
+                            f"  [{self._c('secondary')}]{tu.name}[/] {file_path}"
+                            if file_path
+                            else f"  [{self._c('secondary')}]{tu.name}[/]"
+                        )
+                        self.console.print(action)
 
                     if usage and cost:
                         self.app_state.accumulate_tokens(usage)
@@ -714,7 +801,11 @@ class REPL:
                         )
 
                     if response.content:
-                        self.console.print(Markdown(response.content))
+                        brief = response.content[:200].replace("\n", " ").strip()
+                        if brief:
+                            self.console.print(
+                                f"  [{self._c('muted')}]{brief}...[/]"
+                            )
 
                     if self._hook_system.has_hooks("message_transform"):
                         from openlaoke.core.hook_system import HookInput, HookOutput
@@ -902,6 +993,9 @@ class REPL:
 
         result = await tool.call(ctx, **tool_input)
 
+        if tool_use.name in ("Write", "Edit", "NotebookWrite"):
+            self._verify_file_written(tool_input, result)
+
         if result.is_error:
             self._memory.on_tool_error(
                 tool_use.name,
@@ -1005,18 +1099,133 @@ class REPL:
             return ""
 
         lines = [
-            "\n\n## Available Tools",
-            "When you need to use a tool, output EXACTLY this format:",
+            "\n\n## Available Tools — USE THEM NOW, do NOT describe what you'll do",
+            "Output tool calls in this EXACT format on their own line:",
             "<tool_call> <function=ToolName> <parameter=param1> value1 <parameter=param2> value2 </tool_call>",
-            "Put each tool call on its own line. Do NOT wrap in code blocks.",
+            "You MUST output real tool calls, not just say you will. Start with Read or Glob to explore.",
             "",
         ]
-        max_tools = min(len(all_tools), 12)
+        max_tools = min(len(all_tools), 8)
         for t in all_tools[:max_tools]:
             name = getattr(t, "name", "?")
-            desc = (getattr(t, "description", "") or "")[:60]
+            desc = (getattr(t, "description", "") or "")[:50]
             lines.append(f"- {name}: {desc}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _parse_inline_tool_calls(content: str) -> list[ToolUseBlock]:
+        import re
+        import uuid
+
+        tool_uses: list[ToolUseBlock] = []
+        pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+
+        for block in pattern.findall(content):
+            tool_name = None
+            params: dict[str, Any] = {}
+
+            fn_match = re.search(r"<function=(\w+)>", block)
+            if fn_match:
+                tool_name = fn_match.group(1)
+                param_parts = re.split(r"<parameter=(\w+)>", block)
+                if len(param_parts) > 1:
+                    i = 1
+                    while i < len(param_parts) - 1:
+                        key = param_parts[i]
+                        val = param_parts[i + 1]
+                        val = re.sub(r"\s*</?\w+>\s*", "", val)
+                        val = val.strip()
+                        if val:
+                            params[key] = val
+                        i += 2
+            else:
+                alt_match = re.match(r"(\w+)\{(.+)\}", block.strip(), re.DOTALL)
+                if alt_match:
+                    tool_name = alt_match.group(1)
+                    body = alt_match.group(2)
+                    kv_pattern = re.compile(
+                        r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)(?=<\|\W+\|)", re.DOTALL
+                    )
+                    for km in kv_pattern.finditer(body):
+                        params[km.group(1)] = km.group(2).strip()
+                    last_kv = re.search(
+                        r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)}\s*$", body, re.DOTALL
+                    )
+                    if last_kv:
+                        key = last_kv.group(1)
+                        val = last_kv.group(2).rstrip("}").strip()
+                        if key not in params and val:
+                            params[key] = val
+
+            if tool_name and params:
+                tool_uses.append(
+                    ToolUseBlock(
+                        id=f"call_{uuid.uuid4().hex[:12]}",
+                        name=tool_name,
+                        input=params,
+                    )
+                )
+        return tool_uses
+
+    @staticmethod
+    def _strip_tool_calls(content: str) -> str:
+        import re
+
+        return re.sub(
+            r"<tool_call>.*?</tool_call>",
+            "",
+            content,
+            flags=re.DOTALL,
+        ).strip()
+
+    def _is_ollama_provider(self) -> bool:
+        cfg = self.app_state.multi_provider_config
+        if not cfg:
+            return False
+        provider = cfg.get_active_provider()
+        if not provider:
+            return False
+        return provider.provider_type in ("ollama", "openai_compatible", "lm_studio")
+
+    @staticmethod
+    def _is_plan_response(content: str) -> bool:
+        plan_keywords = [
+            "实施步骤", "实施计划", "创建项目结构", "代码实现",
+            "第一步", "第二步", "第三步", "步骤", "step",
+            "1.", "2.", "3.", "I will create", "I will write",
+            "Let me first", "First,", "接下来",
+        ]
+        lower = content.lower()
+        return (
+            "<tool_call>" not in lower
+            and any(kw.lower() in lower for kw in plan_keywords)
+        )
+
+    def _verify_file_written(self, tool_input: dict[str, Any], result: ToolResultBlock) -> None:
+        file_path = tool_input.get("file_path", "")
+        if not file_path:
+            return
+        import os
+
+        abs_path = file_path
+        if not os.path.isabs(abs_path):
+            abs_path = os.path.join(self.app_state.get_cwd(), abs_path)
+
+        if os.path.exists(abs_path):
+            size = os.path.getsize(abs_path)
+            lines = 0
+            try:
+                with open(abs_path, encoding="utf-8", errors="replace") as f:
+                    lines = sum(1 for _ in f)
+            except Exception:
+                pass
+            self.console.print(
+                f"  [{self._c('success')}]✓ Verified: {abs_path} ({lines} lines, {size} bytes)[/]"
+            )
+        else:
+            self.console.print(
+                f"  [{self._c('error')}]✗ Missing: {abs_path} was NOT created[/]"
+            )
 
     def _print_banner(self) -> None:
         from openlaoke import __version__

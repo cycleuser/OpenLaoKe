@@ -333,6 +333,8 @@ class PromptSessionManager:
         except KeyboardInterrupt:
             return PromptResult(action=PromptAction.EXIT)
         except EOFError:
+            if self._picker_requested:
+                return PromptResult(action=PromptAction.PICKER)
             return PromptResult(action=PromptAction.EXIT)
 
 

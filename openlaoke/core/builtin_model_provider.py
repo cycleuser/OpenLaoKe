@@ -295,6 +295,15 @@ class BuiltinModelProvider:
             re.DOTALL | re.IGNORECASE,
         )
 
+        def _clean_val(v: str) -> str:
+            v = v.strip()
+            v = re.sub(r"\s*</parameter>\s*", "", v)
+            v = re.sub(r"\s*</function>\s*", "", v)
+            v = re.sub(r"\s*</tool_call>\s*", "", v)
+            v = re.sub(r"\s*</file_path>\s*", "", v)
+            v = re.sub(r"\s*</content>\s*", "", v)
+            return v.strip()
+
         def _extract(match_text: str) -> list[ToolUseBlock]:
             results: list[ToolUseBlock] = []
             for block in tool_pattern.findall(match_text):
@@ -311,7 +320,7 @@ class BuiltinModelProvider:
                 i = 1
                 while i < len(param_parts) - 1:
                     key = param_parts[i]
-                    val = param_parts[i + 1].strip()
+                    val = _clean_val(param_parts[i + 1])
                     if val:
                         params[key] = val
                     i += 2

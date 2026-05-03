@@ -65,50 +65,48 @@ class ReadTool(Tool):
             entries.sort()
             dirs = [e + "/" for e in entries if os.path.isdir(os.path.join(abs_path, e))]
             files = [e for e in entries if not os.path.isdir(os.path.join(abs_path, e))]
-            content = f"Directory listing for {abs_path}:\n"
-            for d in dirs:
-                content += f"  {d}\n"
-            for f in files:
-                content += f"  {f}\n"
-            return ToolResultBlock(tool_use_id=ctx.tool_use_id, content=content)
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Directory listing:\n{', '.join(dirs + files)}",
+                is_error=False,
+            )
 
         try:
-            with open(abs_path, "rb") as file_handle:
-                raw = file_handle.read()
+            file_size = os.path.getsize(abs_path)
+            if file_size > 10 * 1024 * 1024:
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id,
+                    content=f"Error: File too large ({file_size / 1024 / 1024:.1f}MB). Maximum is 10MB.",
+                    is_error=True,
+                )
 
-            detected = chardet.detect(raw) or {}
-            encoding = detected.get("encoding") or "utf-8"
+            with open(abs_path, "rb") as f:
+                raw = f.read()
+
+            detected = chardet.detect(raw)
+            encoding = detected.get("encoding", "utf-8") or "utf-8"
 
             try:
-                text = raw.decode(encoding)
+                content = raw.decode(encoding)
             except (UnicodeDecodeError, LookupError):
-                text = raw.decode("utf-8", errors="replace")
+                content = raw.decode("utf-8", errors="replace")
 
-            lines = text.split("\n")
+            lines = content.splitlines()
 
-            if offset is not None:
-                start = max(0, offset - 1)
-                lines = lines[start:]
+            start = max(0, offset - 1) if offset is not None else 0
+            end = start + limit if limit is not None else len(lines)
 
-            if limit is not None:
-                lines = lines[:limit]
+            selected = lines[start:end]
+            total_lines = len(lines)
 
-            total_lines = len(text.split("\n"))
-            shown_start = offset if offset else 1
-            shown_end = shown_start + len(lines) - 1
-
-            numbered = []
-            for i, line in enumerate(lines):
-                numbered.append(f"{shown_start + i}: {line}")
-
-            content = "\n".join(numbered)
-
-            if total_lines > len(lines):
-                content += f"\n\n... ({total_lines - len(lines)} more lines, use offset={shown_end + 1} to continue)"
+            header = f"File: {abs_path} ({total_lines} lines)\n"
+            if offset or limit:
+                header += f"Showing lines {start + 1}-{min(end, total_lines)} of {total_lines}\n"
+            header += "-" * 40 + "\n"
 
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=content,
+                content=header + "\n".join(selected),
                 is_error=False,
             )
 
@@ -127,18 +125,39 @@ class ReadTool(Tool):
 
     def _resolve_path(self, path: str, cwd: str) -> str:
         if os.path.isabs(path):
-            resolved = os.path.normpath(path)
-        else:
-            resolved = os.path.normpath(os.path.join(cwd, path))
-        return resolved
+            return os.path.normpath(path)
+        return os.path.normpath(os.path.join(cwd, path))
 
     def _validate_path(self, resolved: str, cwd: str) -> str | None:
         real_resolved = os.path.realpath(resolved)
         real_cwd = os.path.realpath(cwd)
         home = os.path.realpath(os.path.expanduser("~"))
-        if real_resolved.startswith(real_cwd) or real_resolved.startswith(home):
-            return None
-        return f"Path '{resolved}' is outside workspace and home directory"
+
+        if not _contains(real_cwd, real_resolved) and not _contains(home, real_resolved):
+            if _is_user_home_path(resolved):
+                return None
+            return f"Path '{resolved}' is outside workspace and home directory"
+        return None
+
+
+def _contains(parent: str, child: str) -> bool:
+    """Check if child path is inside parent (inspired by opencode)."""
+    try:
+        rel = os.path.relpath(child, parent)
+        return not rel.startswith("..")
+    except ValueError:
+        return False
+
+
+def _is_user_home_path(path: str) -> bool:
+    """Check if path is under user home directory, allowing truncated usernames."""
+    home = os.path.realpath(os.path.expanduser("~"))
+    home_parent = os.path.dirname(home)
+    if path.startswith(home_parent + "/"):
+        parts = path[len(home_parent) + 1:].split("/", 1)
+        if parts and os.path.basename(home).startswith(parts[0]):
+            return True
+    return False
 
 
 def register(registry: ToolRegistry) -> None:
