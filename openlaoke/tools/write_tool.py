@@ -96,9 +96,32 @@ class WriteTool(Tool):
         real_resolved = os.path.realpath(resolved)
         real_cwd = os.path.realpath(cwd)
         home = os.path.realpath(os.path.expanduser("~"))
-        if real_resolved.startswith(real_cwd) or real_resolved.startswith(home):
-            return None
-        return f"Path '{resolved}' is outside workspace and home directory"
+
+        if not _contains(real_cwd, real_resolved) and not _contains(home, real_resolved):
+            if _is_user_home_path(resolved):
+                return None
+            return f"Path '{resolved}' is outside workspace and home directory"
+        return None
+
+
+def _contains(parent: str, child: str) -> bool:
+    """Check if child path is inside parent (inspired by opencode)."""
+    try:
+        rel = os.path.relpath(child, parent)
+        return not rel.startswith("..")
+    except ValueError:
+        return False
+
+
+def _is_user_home_path(path: str) -> bool:
+    """Check if path is under user home directory, allowing truncated usernames."""
+    home = os.path.realpath(os.path.expanduser("~"))
+    home_parent = os.path.dirname(home)
+    if path.startswith(home_parent + "/"):
+        parts = path[len(home_parent) + 1:].split("/", 1)
+        if parts and os.path.basename(home).startswith(parts[0]):
+            return True
+    return False
 
 
 def register(registry: ToolRegistry) -> None:

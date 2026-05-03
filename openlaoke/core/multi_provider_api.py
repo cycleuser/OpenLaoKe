@@ -320,6 +320,11 @@ class MultiProviderClient:
             provider.provider_type == ProviderType.GOOGLE_VERTEX
             or provider.provider_type == ProviderType.COHERE
         ):
+            if not api_key or not api_key.strip():
+                raise ValueError(
+                    f"API key required for {provider.provider_type.value}. "
+                    "Set the appropriate environment variable or configure the provider."
+                )
             return {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -329,6 +334,11 @@ class MultiProviderClient:
                 "Content-Type": "application/json",
             }
         else:
+            if not api_key or not api_key.strip():
+                raise ValueError(
+                    f"API key required for {provider.provider_type.value}. "
+                    "Set the appropriate environment variable or configure the provider."
+                )
             return {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -810,18 +820,22 @@ class MultiProviderClient:
                         for chunk in self._parse_anthropic_stream_events(
                             event, pending_tool_calls, model
                         ):
+                            if chunk.event_type == StreamEventType.USAGE:
+                                if chunk.usage:
+                                    final_usage = chunk.usage
+                                if chunk.cost:
+                                    final_cost = chunk.cost
                             yield chunk
                     else:
                         for chunk in self._parse_openai_stream_events(
                             event, pending_tool_calls, model
                         ):
+                            if chunk.event_type == StreamEventType.USAGE:
+                                if chunk.usage:
+                                    final_usage = chunk.usage
+                                if chunk.cost:
+                                    final_cost = chunk.cost
                             yield chunk
-
-                    if chunk.event_type == StreamEventType.USAGE:
-                        if chunk.usage:
-                            final_usage = chunk.usage
-                        if chunk.cost:
-                            final_cost = chunk.cost
 
         for tc_idx, tc_data in pending_tool_calls.items():
             args_str = tc_data.get("arguments", "")
