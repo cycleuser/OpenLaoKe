@@ -158,6 +158,36 @@ _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
         "Search and download academic papers",
         "search download academic papers semantic scholar",
     ),
+    "MemoryStore": (
+        "openlaoke.core.memory.memory_tools",
+        "MemoryStoreTool",
+        "Store a memory for cross-session recall",
+        "memory store persist save context",
+    ),
+    "MemoryRecall": (
+        "openlaoke.core.memory.memory_tools",
+        "MemoryRecallTool",
+        "Recall memories matching a query",
+        "memory recall search retrieve context",
+    ),
+    "MemoryTimeline": (
+        "openlaoke.core.memory.memory_tools",
+        "MemoryTimelineTool",
+        "Query the event timeline for a session",
+        "memory timeline history events",
+    ),
+    "MemoryStats": (
+        "openlaoke.core.memory.memory_tools",
+        "MemoryStatsTool",
+        "Show memory database statistics",
+        "memory stats statistics database",
+    ),
+    "MemorySearch": (
+        "openlaoke.core.memory.memory_tools",
+        "MemorySearchTool",
+        "Search memories by type",
+        "memory search list type",
+    ),
 }
 
 

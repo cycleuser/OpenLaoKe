@@ -82,6 +82,8 @@ class REPL:
         self._file_state = FileStateStore()
         self._git_store: GitStore | None = None
 
+        self._register_memory_hooks()
+
         register_all()
         register_all_tools(self.registry)
 
@@ -90,6 +92,35 @@ class REPL:
 
     def _s(self, text: str, style_name: str) -> Text:
         return self._theme.format_text(text, style_name)
+
+    def _register_memory_hooks(self) -> None:
+        from openlaoke.core.memory.memory_hooks import (
+            session_start_memory_hook,
+            tool_execute_after_memory_hook,
+            user_prompt_memory_hook,
+        )
+
+        self._hook_system.register(
+            "tool_execute_after",
+            "memory_extractor",
+            tool_execute_after_memory_hook,
+            priority=10,
+            plugin_name="memory",
+        )
+        self._hook_system.register(
+            "session_start",
+            "memory_session_start",
+            session_start_memory_hook,
+            priority=10,
+            plugin_name="memory",
+        )
+        self._hook_system.register(
+            "message_transform",
+            "memory_user_prompt",
+            user_prompt_memory_hook,
+            priority=5,
+            plugin_name="memory",
+        )
 
     async def run(self) -> None:
         self._running = True
