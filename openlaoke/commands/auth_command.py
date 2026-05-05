@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
-from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 from rich.table import Table
 
 from openlaoke.core.extended_web import BrowserAuthManager
@@ -369,10 +367,7 @@ def show(provider: str) -> None:
 
     # Mask cookie for security
     cookie = auth_data.get("cookie", "")
-    if len(cookie) > 20:
-        masked_cookie = f"{cookie[:10]}...{cookie[-10:]}"
-    else:
-        masked_cookie = "(short cookie)"
+    masked_cookie = f"{cookie[:10]}...{cookie[-10:]}" if len(cookie) > 20 else "(short cookie)"
 
     console.print(f"  [dim]Provider:[/dim] {provider}")
     console.print(f"  [dim]Name:[/dim] {config.name}")
@@ -446,7 +441,7 @@ def test(provider: str, message: str) -> None:
 
             content = response.get("content", "")
             if content:
-                console.print(f"[green]✓ Response received:[/green]")
+                console.print("[green]✓ Response received:[/green]")
                 console.print()
                 console.print(f"  {content[:200]}...")
                 console.print()
@@ -455,7 +450,7 @@ def test(provider: str, message: str) -> None:
                 if usage:
                     console.print(f"  [dim]Tokens:[/dim] {usage}")
             else:
-                console.print(f"[yellow]⚠ Empty response[/yellow]")
+                console.print("[yellow]⚠ Empty response[/yellow]")
 
         except Exception as e:
             console.print(f"[red]✗ Error:[/red] {e}")

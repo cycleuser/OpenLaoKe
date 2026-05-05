@@ -11,6 +11,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -82,7 +83,7 @@ class SkillInstaller:
         # Try skills.json first
         try:
             skills_index = await self._fetch_json(f"{raw_base}/skills.json")
-            if skills_index and "skills" in skills_index:
+            if skills_index and isinstance(skills_index, dict) and "skills" in skills_index:
                 results = await self._install_from_index(
                     raw_base, api_base, skills_index, skill_name
                 )
@@ -152,7 +153,7 @@ class SkillInstaller:
         self, raw_base: str, api_base: str, skill_name: str | None
     ) -> list[InstallResult]:
         """Scan the skills/ directory in a GitHub repo and install all skills found."""
-        results = []
+        results: list[InstallResult] = []
 
         # Try skills/ subdirectory
         skills_dir_url = f"{api_base}/skills"
@@ -182,7 +183,7 @@ class SkillInstaller:
         index_url = f"{base}index.json"
 
         index_data = await self._fetch_json(index_url)
-        if not index_data or "skills" not in index_data:
+        if not index_data or not isinstance(index_data, dict) or "skills" not in index_data:
             return []
 
         results = []
@@ -283,16 +284,17 @@ class SkillInstaller:
         except Exception as e:
             return InstallResult(name, False, str(e))
 
-    async def _fetch_json(self, url: str) -> dict | list | None:
+    async def _fetch_json(self, url: str) -> dict[Any, Any] | list[Any] | None:
         """Fetch and parse JSON from URL."""
         resp = await self._client.get(url)
         if resp.status_code == 200:
-            return resp.json()
+            result: dict[Any, Any] | list[Any] = resp.json()
+            return result
         return None
 
     def list_installed(self) -> list[SkillInfo]:
         """List all installed skills."""
-        skills = []
+        skills: list[SkillInfo] = []
         if not self.install_dir.exists():
             return skills
 

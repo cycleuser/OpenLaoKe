@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -23,7 +24,7 @@ class KnowledgeSnippet:
 class KnowledgeBase:
     """Local knowledge base for small models."""
 
-    BUILTIN_KNOWLEDGE = {
+    BUILTIN_KNOWLEDGE: dict[str, dict[str, Any]] = {
         "cpu_benchmark": {
             "topic": "CPU Benchmark Implementation",
             "content": """
@@ -162,10 +163,10 @@ Debug tips:
         """Load built-in knowledge snippets."""
         for key, data in self.BUILTIN_KNOWLEDGE.items():
             self.knowledge_cache[key] = KnowledgeSnippet(
-                topic=data["topic"],
-                content=data["content"],
-                source=data["source"],
-                tags=data.get("tags", []),
+                topic=str(data["topic"]),
+                content=str(data["content"]),
+                source=str(data["source"]),
+                tags=data.get("tags", []) if isinstance(data.get("tags"), list) else [],
             )
 
     def search(self, query: str, max_results: int = 3) -> list[KnowledgeSnippet]:

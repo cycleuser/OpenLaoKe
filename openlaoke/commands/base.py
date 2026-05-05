@@ -7,9 +7,10 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from openlaoke.core.dual_model_config import DualModelConfig
     from openlaoke.core.state import AppState
 
 
@@ -804,7 +805,7 @@ class DistillCommand(SlashCommand):
             from openlaoke.core.distilled_templates import DistilledTemplateManager
 
             manager = DistilledTemplateManager()
-            matched = manager.match_templates(parts[1])
+            matched: list[Any] = manager.match_templates(parts[1])
             if not matched:
                 return CommandResult(message=f"No templates match: {parts[1]}")
             lines = [f"Matched {len(matched)} templates:", ""]
@@ -822,7 +823,7 @@ class DistillCommand(SlashCommand):
                     message="Usage: /distill generate <category> <triggers>\nExample: /distill generate code_sort sort,排序,quicksort",
                 )
             category = parts[1]
-            triggers = [t.strip() for t in parts[2].split(",")]
+            trigger_list = [t.strip() for t in parts[2].split(",")]
 
             from openlaoke.core.distilled_templates import (
                 DISTILLED_TEMPLATES_PATH,
@@ -837,7 +838,7 @@ class DistillCommand(SlashCommand):
             lines = [
                 f"[bold]Generating distilled template: {template_id}[/bold]",
                 f"Category: {category}",
-                f"Triggers: {', '.join(triggers)}",
+                f"Triggers: {', '.join(trigger_list)}",
                 "",
                 "[dim]Note: Template generation requires an online provider.[/dim]",
                 "[dim]Switch to an online provider first, then run this command.[/dim]",
@@ -1787,9 +1788,9 @@ class HistoryCommand(SlashCommand):
             return CommandResult(success=False, message=f"Failed to clear history for {abs_path}")
 
         # Show history for specific file
-        from openlaoke.utils.file_history import get_file_history
+        from openlaoke.utils.file_history import get_history
 
-        file_history = get_file_history(abs_path)
+        file_history = get_history(abs_path)
         if not file_history:
             return CommandResult(message=f"No history found for {abs_path}")
 
@@ -1870,7 +1871,7 @@ class AtomicCommand(SlashCommand):
                 lines.append(f"  • {task_info['task_id']} ({task_info['estimated_lines']} lines)")
 
         generator = create_generator_with_api(tier, Path(cwd), ctx.app_state)
-        completed_code = {}
+        completed_code: dict[str, str] = {}
 
         if console:
             console.print(Panel("\n".join(lines), title="Atomic Task Plan", border_style="cyan"))
@@ -1907,6 +1908,9 @@ class AtomicCommand(SlashCommand):
                             console.print(f"  [red]✗ Failed: {', '.join(code_result.errors)}[/red]")
 
                 iteration += 1
+
+        if result.task_graph is None:
+            return CommandResult(success=False, message="Task graph is None")
 
         final_code = generator.assemble_final_code(result.task_graph, completed_code)
 
@@ -2362,9 +2366,9 @@ class DualModelConfigCommand(SlashCommand):
                 table.add_column("Message", style="yellow")
 
                 for role, (available, message) in results.items():
-                    config = manager.get_config()
-                    if config:
-                        endpoint = getattr(config, role, None)
+                    dual_config: DualModelConfig | None = manager.get_config()
+                    if dual_config:
+                        endpoint = getattr(dual_config, role, None)
                         if endpoint:
                             table.add_row(
                                 role,
@@ -2438,11 +2442,16 @@ class DualModelConfigCommand(SlashCommand):
 
             manager.set_active_config(name)
 
+            if config.planner and config.executor and config.validator:
+                detail = (
+                    f"  Planner: {config.planner.model_name} ({config.planner.provider.value})\n"
+                    f"  Executor: {config.executor.model_name} ({config.executor.provider.value})\n"
+                    f"  Validator: {config.validator.model_name} ({config.validator.provider.value})"
+                )
+            else:
+                detail = ""
             return CommandResult(
-                message=f"[green]✓ Created and activated config: {name}[/green]\n"
-                f"  Planner: {config.planner.model_name} ({config.planner.provider.value})\n"
-                f"  Executor: {config.executor.model_name} ({config.executor.provider.value})\n"
-                f"  Validator: {config.validator.model_name} ({config.validator.provider.value})"
+                message=f"[green]✓ Created and activated config: {name}[/green]\n{detail}"
             )
 
         else:
@@ -2489,7 +2498,9 @@ class LessonsCommand(SlashCommand):
             tracker = BitterLessonTracker()
             stats = tracker.get_strategy_stats()
             if not stats:
-                return CommandResult(message="No strategy data yet. Keep using the system to gather data.")
+                return CommandResult(
+                    message="No strategy data yet. Keep using the system to gather data."
+                )
 
             lines = ["=== Strategy Statistics ===", ""]
             for key, s in stats.items():

@@ -132,9 +132,9 @@ class ExplorationStrategy:
 
         estimated_duration_value = template.get("estimated_duration", 120.0)
         estimated_duration: float = (
-            estimated_duration_value
-            if isinstance(estimated_duration_value, float)
-            else float(estimated_duration_value)
+            float(estimated_duration_value)
+            if isinstance(estimated_duration_value, (int, float))
+            else 120.0
         )
 
         plan = ExplorationPlan(
@@ -358,7 +358,8 @@ class ExplorationStrategy:
         elif "dependency" in action.lower():
             arch = await explorer.explore_architecture(target_path)
             deps = arch.dependencies
-            graph_data = deps.get("graph", {})
+            _raw_graph: dict[str, Any] | list[str] = deps.get("graph", {})
+            graph_data: dict[str, Any] = _raw_graph if isinstance(_raw_graph, dict) else {}
             nodes: list[Any] = []
             if isinstance(graph_data, dict):
                 nodes = graph_data.get("nodes", [])
@@ -504,7 +505,7 @@ class ExplorationStrategy:
                     isinstance(step, dict)
                     and str(step.get("action", "")).lower()
                     in str(template.get("description", "")).lower()
-                    for step in []
+                    for step in (e.steps if hasattr(e, "steps") else [])
                 )
             ]
 

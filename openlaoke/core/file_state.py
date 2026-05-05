@@ -121,10 +121,7 @@ class FileStateStore:
             return False
 
         content_hash = _hash_content(content)
-        return (
-            abs(current_mtime - state.read_mtime) < 1.0
-            and content_hash == state.read_hash
-        )
+        return abs(current_mtime - state.read_mtime) < 1.0 and content_hash == state.read_hash
 
     def get_state(self, path: str) -> FileReadState | None:
         abs_path = os.path.realpath(path)

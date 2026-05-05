@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
-from .extended_web.config_integration import extract_cookie_in_wizard
 from .extended_web import BrowserAuthManager
+from .extended_web.config_integration import extract_cookie_in_wizard
 
 console = Console()
 
@@ -129,7 +127,7 @@ async def configure_extended_web(config, provider, key: str) -> bool:
             console.print()
             console.print("[yellow]⚠ Authentication was not completed.[/yellow]")
             console.print("[dim]You can authenticate later by running:[/dim]")
-            console.print(f"  python3 -m openlaoke.core.extended_web.auto_cookie_extractor")
+            console.print("  python3 -m openlaoke.core.extended_web.auto_cookie_extractor")
             return False
 
     # Save the extended_web provider config

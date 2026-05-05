@@ -58,9 +58,7 @@ class RustSandbox:
         return self.cargo is not None
 
     def _find_bin(self, name: str) -> str | None:
-        p = subprocess.run(
-            ["which", name], capture_output=True, text=True, timeout=5
-        )
+        p = subprocess.run(["which", name], capture_output=True, text=True, timeout=5)
         if p.returncode == 0:
             return p.stdout.strip()
         return None
@@ -86,21 +84,17 @@ class RustSandbox:
             src_dir = os.path.join(project_dir, "src")
             os.makedirs(src_dir, exist_ok=True)
 
-            cargo_toml = (
-                '[package]\n'
-                'name = "sandbox"\n'
-                'version = "0.1.0"\n'
-                'edition = "2024"\n'
-            )
+            cargo_toml = '[package]\nname = "sandbox"\nversion = "0.1.0"\nedition = "2024"\n'
             with open(os.path.join(project_dir, "Cargo.toml"), "w", encoding="utf-8") as f:
                 f.write(cargo_toml)
 
             with open(os.path.join(src_dir, "main.rs"), "w", encoding="utf-8") as f:
                 f.write(code)
 
+            cargo = self.cargo or "cargo"
             check_start = time.time()
             check_result = subprocess.run(
-                [self.cargo, "check", "--message-format=json"],
+                [cargo, "check", "--message-format=json"],
                 capture_output=True,
                 text=True,
                 timeout=min(timeout_ms / 1000.0, 60.0),
@@ -120,7 +114,7 @@ class RustSandbox:
 
             build_start = time.time()
             build_result = subprocess.run(
-                [self.cargo, "build"],
+                [cargo, "build"],
                 capture_output=True,
                 text=True,
                 timeout=min(timeout_ms / 1000.0, 60.0),
@@ -140,7 +134,7 @@ class RustSandbox:
 
             test_start = time.time()
             test_result = subprocess.run(
-                [self.cargo, "test"],
+                [cargo, "test"],
                 capture_output=True,
                 text=True,
                 timeout=min(timeout_ms / 1000.0, 60.0),

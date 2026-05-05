@@ -345,9 +345,10 @@ class ComputeCalculator:
 
     def __init__(self, gpu_type: GPUType = GPUType.A100_80GB):
         self.gpu_type = gpu_type
-        self.gpu = GPU_DATABASE.get(gpu_type)
-        if not self.gpu:
+        gpu = GPU_DATABASE.get(gpu_type)
+        if not gpu:
             raise ValueError(f"Unknown GPU type: {gpu_type}")
+        self.gpu: GPUConfig = gpu
 
     def get_effective_tflops(self, precision: str) -> float:
         """Get effective TFLOPS for given precision."""
@@ -360,7 +361,7 @@ class ComputeCalculator:
 
     def estimate_inference_cost(self, config: InferenceConfig) -> InferenceCost:
         """Estimate inference cost for given configuration."""
-        gpu = GPU_DATABASE.get(config.gpu_type, self.gpu)
+        gpu = GPU_DATABASE.get(config.gpu_type) or self.gpu
         precision = config.precision
 
         # Calculate memory requirements
@@ -442,7 +443,7 @@ class ComputeCalculator:
 
     def estimate_training_cost(self, config: TrainingConfig) -> TrainingCost:
         """Estimate training cost for given configuration."""
-        gpu = GPU_DATABASE.get(config.gpu_type, self.gpu)
+        gpu = GPU_DATABASE.get(config.gpu_type) or self.gpu
         precision = config.precision
 
         # Calculate FLOPs required
@@ -693,11 +694,11 @@ def quick_estimate(
     calc = ComputeCalculator(gpu_type)
 
     if mode == "inference":
-        config = InferenceConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
-        return calc.estimate_inference_cost(config)
+        inference_config = InferenceConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
+        return calc.estimate_inference_cost(inference_config)
     else:
-        config = TrainingConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
-        return calc.estimate_training_cost(config)
+        training_config = TrainingConfig(model_size_b=model_size_b, gpu_type=gpu_type, **kwargs)
+        return calc.estimate_training_cost(training_config)
 
 
 if __name__ == "__main__":
@@ -715,6 +716,7 @@ if __name__ == "__main__":
         avg_tokens_per_output=256,
         requests_per_hour=100,
     )
+    assert isinstance(inference_cost, InferenceCost)
     print(print_inference_report(inference_cost))
     print()
 
@@ -729,6 +731,7 @@ if __name__ == "__main__":
         dataset_size_tokens=1_000_000_000,  # 1B tokens
         epochs=1,
     )
+    assert isinstance(training_cost, TrainingCost)
     print(print_training_report(training_cost))
     print()
 
@@ -748,4 +751,4 @@ if __name__ == "__main__":
     calc = ComputeCalculator(GPUType.H100)
     comparison = calc.compare_cloud_providers(GPUType.H100, hours=24)
     for provider, cost in comparison.items():
-        print(f"  {provider.value}: {format_currency(cost)}")
+        print(f"  {provider}: {format_currency(cost)}")

@@ -79,7 +79,7 @@ class DistilledTemplateManager:
 
     def save_user_templates(self) -> None:
         os.makedirs(os.path.dirname(DISTILLED_TEMPLATES_PATH), exist_ok=True)
-        data = {"templates": {}}
+        data: dict[str, dict[str, dict[str, Any]]] = {"templates": {}}
         for tid, tmpl in self.templates.items():
             if tid.startswith("user_"):
                 data["templates"][tid] = {

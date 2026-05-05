@@ -28,7 +28,7 @@ class KnowledgeSnippet:
 class EnhancedKnowledgeBase:
     """Knowledge base with builtin knowledge and downloadable docs."""
 
-    BUILTIN_KNOWLEDGE = {
+    BUILTIN_KNOWLEDGE: dict[str, dict[str, str | list[str]]] = {
         "python_basics": {
             "topic": "Python Programming Basics",
             "content": """
@@ -237,11 +237,17 @@ func divide(a, b float64) (float64, error) {
         """Load built-in knowledge snippets."""
         for key, data in self.BUILTIN_KNOWLEDGE.items():
             self.knowledge_cache[key] = KnowledgeSnippet(
-                topic=data["topic"],
-                content=data["content"],
-                source=data["source"],
-                tags=data.get("tags", []),
-                language=data.get("language", "general"),
+                topic=str(data["topic"]),
+                content=str(data["content"]),
+                source=str(data["source"]),
+                tags=(
+                    [str(t) for t in tags_raw]
+                    if isinstance((tags_raw := data.get("tags", [])), list)
+                    else [str(tags_raw)]
+                    if isinstance(tags_raw, str)
+                    else []
+                ),
+                language=str(data.get("language", "general")),
             )
 
     def _load_downloaded_knowledge(self) -> None:

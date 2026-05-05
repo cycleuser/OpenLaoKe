@@ -39,7 +39,7 @@ async def download_model(model_id: str | None = None) -> None:
             model_id,
             model_config["modelscope_id"],
             model_config["filename"],
-            model.name,
+            model.name if model else model_id,
         )
         return
 
@@ -97,7 +97,8 @@ async def download_model(model_id: str | None = None) -> None:
 
     # 处理内置模型
     if model_id:
-        models = [manager.get_model(model_id)]
+        found = manager.get_model(model_id)
+        models = [found] if found else []
         if not models[0]:
             console.print(f"[red]Unknown model: {model_id}[/red]")
             console.print("[dim]Available models:[/dim]")

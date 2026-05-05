@@ -88,7 +88,7 @@ class Skill:
     @classmethod
     def from_content(cls, content: str, path: Path | None = None) -> Skill:
         """Parse skill from content string."""
-        metadata = {}
+        metadata: dict[str, str] = {}
         body = content
 
         if content.startswith("---"):
@@ -124,7 +124,10 @@ class Skill:
         if isinstance(description, str):
             description = description.strip()
         version = metadata.get("version", "1.0.0")
-        allowed_tools = metadata.get("allowed-tools", metadata.get("allowed_tools", []))
+        _raw_tools: str | list[str] = metadata.get(
+            "allowed-tools", metadata.get("allowed_tools", [])
+        )
+        allowed_tools: list[str] = _raw_tools if isinstance(_raw_tools, list) else [str(_raw_tools)]
 
         return cls(
             name=name,

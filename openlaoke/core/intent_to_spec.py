@@ -64,9 +64,9 @@ class IntentToSpecConverter:
         if handler:
             specs = handler(intent)
 
-        errors = []
-        warnings = []
-        suggestions = []
+        errors: list[str] = []
+        warnings: list[str] = []
+        suggestions: list[str] = []
 
         for spec in specs:
             if spec.api_spec is None:

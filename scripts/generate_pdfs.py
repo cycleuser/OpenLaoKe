@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import os
-import re
-from pathlib import Path
+
 from fpdf import FPDF
 
 
@@ -62,7 +61,7 @@ class PDFGenerator(FPDF):
         else:
             self.set_font("Courier", "", 8)
         self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f"Generated: 2025", 0, align="C")
+        self.cell(0, 10, "Generated: 2025", 0, align="C")
 
     def clean_text(self, text: str) -> str:
         """Clean text to ensure it's compatible with fonts."""
@@ -446,7 +445,7 @@ def generate_code_pdf(root_dir: str, output_path: str) -> None:
     errors = 0
     for i, filepath in enumerate(python_files):
         try:
-            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
             if not content.strip():
@@ -486,7 +485,7 @@ def generate_docs_pdf(root_dir: str, output_path: str) -> None:
     errors = 0
     for i, filepath in enumerate(doc_files):
         try:
-            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
             if not content.strip():

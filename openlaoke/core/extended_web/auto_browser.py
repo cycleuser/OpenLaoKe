@@ -7,16 +7,15 @@ with remote debugging enabled, making authentication seamless.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import platform
 import socket
 import subprocess
 import tempfile
 import time
-from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
-import httpx
 from rich.console import Console
 
 console = Console()
@@ -64,10 +63,10 @@ def get_default_browser() -> tuple[str, BrowserType]:
 
         for browser_path, browser_type in browsers:
             if os.path.exists(browser_path):
-                return browser_path, browser_type
+                return browser_path, cast(BrowserType, browser_type)
 
         # Fallback to Chrome
-        return browsers[0]
+        return browsers[0][0], cast(BrowserType, browsers[0][1])
 
     elif system == "Windows":
         browsers = [
@@ -80,35 +79,35 @@ def get_default_browser() -> tuple[str, BrowserType]:
 
         for browser_path, browser_type in browsers:
             if os.path.exists(browser_path):
-                return browser_path, browser_type
+                return browser_path, cast(BrowserType, browser_type)
 
         # Try to get from registry
         try:
             import winreg
 
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
                 r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice",
             ) as key:
-                prog_id = winreg.QueryValueEx(key, "ProgId")[0]
+                prog_id = winreg.QueryValueEx(key, "ProgId")[0]  # type: ignore[attr-defined]
                 if "Chrome" in prog_id:
-                    return browsers[0]
+                    return browsers[0][0], cast(BrowserType, browsers[0][1])
                 elif "Edge" in prog_id:
-                    return browsers[2]
+                    return browsers[2][0], cast(BrowserType, browsers[2][1])
                 elif "Firefox" in prog_id:
-                    return browsers[4]
+                    return browsers[4][0], cast(BrowserType, browsers[4][1])
         except Exception:
             pass
 
-        return browsers[0]
+        return browsers[0][0], cast(BrowserType, browsers[0][1])
 
     else:  # Linux
         # Try common environment variables
         browser_env = os.environ.get("BROWSER")
         if browser_env:
             if "firefox" in browser_env.lower():
-                return browser_env, "firefox"
-            return browser_env, "chrome"
+                return browser_env, cast(BrowserType, "firefox")
+            return browser_env, cast(BrowserType, "chrome")
 
         # Try common browsers
         browsers = [
@@ -129,7 +128,7 @@ def get_default_browser() -> tuple[str, BrowserType]:
                     timeout=5,
                 )
                 if result.returncode == 0:
-                    return result.stdout.strip(), browser_type
+                    return result.stdout.strip(), cast(BrowserType, browser_type)
             except Exception:
                 pass
 
@@ -250,7 +249,7 @@ class AutoBrowserManager:
             # Browser already running
             return self.port
 
-        self.port, self._process = launch_browser_with_debug(
+        self.port, self._process, _browser_type = launch_browser_with_debug(
             url=url,
             port=self.port,
             headless=headless,
@@ -341,7 +340,7 @@ async def authenticate_with_auto_browser(
         console.print(f"[green]✓ Browser launched on port {port}[/green]")
         console.print()
         console.print("📱 [bold]Please complete the login in the browser window.[/bold]")
-        console.print(f"   The browser should have opened automatically.")
+        console.print("   The browser should have opened automatically.")
         console.print(f"   If not, open: [cyan]{login_url}[/cyan]")
         console.print()
         console.print("[dim]Waiting for authentication...[/dim]")
@@ -387,12 +386,10 @@ async def authenticate_with_auto_browser(
                     # Try to capture bearer token
                     bearer_token = ""
                     if config.bearer_token:
-                        try:
+                        with contextlib.suppress(Exception):
                             bearer_token = await page.evaluate(
                                 "() => localStorage.getItem('accessToken') || ''"
                             )
-                        except Exception:
-                            pass
 
                     auth_data = {
                         "provider_type": provider_type,
@@ -406,7 +403,7 @@ async def authenticate_with_auto_browser(
                     # Save authentication
                     auth_manager.save_auth(provider_type, auth_data)
 
-                    console.print(f"[green]✓ Authentication saved![/green]")
+                    console.print("[green]✓ Authentication saved![/green]")
                     console.print(f"  Cookie length: {len(cookie_string)}")
                     console.print(f"  Auth file: {auth_manager._get_auth_file(provider_type)}")
 

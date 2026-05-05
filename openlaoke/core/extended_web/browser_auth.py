@@ -7,6 +7,7 @@ authentication cookies and tokens.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -52,9 +53,10 @@ class BrowserAuthManager:
             return None
 
         try:
-            with open(auth_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+            with open(auth_file, encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else None
+        except (OSError, json.JSONDecodeError):
             return None
 
     def save_auth(self, provider_type: str, auth_data: dict) -> None:
@@ -174,7 +176,7 @@ class BrowserAuthManager:
             raise ValueError(f"Unknown provider type: {provider_type}")
 
         print(f"\n📱 Please log in to {config.name} in the browser window.")
-        print(f"   If already logged in, the page should be detected automatically.")
+        print("   If already logged in, the page should be detected automatically.")
         print(f"   Waiting for login... (timeout: {timeout}s)")
 
         # Navigate to login URL
@@ -230,7 +232,7 @@ class BrowserAuthManager:
                 "() => localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')"
             )
             if token:
-                return token
+                return str(token)
         except Exception:
             pass
 
@@ -238,7 +240,7 @@ class BrowserAuthManager:
         try:
             token = await page.evaluate("() => window.__TOKEN__ || window.token || ''")
             if token:
-                return token
+                return str(token)
         except Exception:
             pass
 
@@ -260,7 +262,6 @@ class BrowserAuthManager:
         Returns:
             Auth data dict
         """
-        import asyncio
         from .types import WEB_PROVIDERS
 
         # Check if already authenticated

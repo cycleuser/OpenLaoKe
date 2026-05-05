@@ -59,7 +59,7 @@ class Tool(ABC):
         """Return the JSON schema for tool input validation."""
         if isinstance(self.input_schema, dict):
             return self.input_schema
-        if hasattr(self.input_schema, "model_json_schema"):
+        if self.input_schema is not None and hasattr(self.input_schema, "model_json_schema"):
             return self.input_schema.model_json_schema()
         return {}
 
@@ -67,7 +67,7 @@ class Tool(ABC):
         """Validate tool input before execution with full type checking."""
         if isinstance(self.input_schema, dict):
             return self._validate_schema_dict(input_data, self.input_schema)
-        if hasattr(self.input_schema, "model_json_schema"):
+        if self.input_schema is not None and hasattr(self.input_schema, "model_json_schema"):
             try:
                 schema = self.input_schema.model_json_schema()
                 return self._validate_schema_dict(input_data, schema)
@@ -81,7 +81,7 @@ class Tool(ABC):
     ) -> ValidationResult:
         required = schema.get("required", [])
         properties = schema.get("properties", {})
-        type_map = {
+        type_map: dict[str, type | tuple[type, ...]] = {
             "string": str,
             "integer": int,
             "number": (int, float),

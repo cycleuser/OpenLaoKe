@@ -23,7 +23,7 @@ class SafeCommandResult:
 class SafeCommand:
     name = "safe"
     description = "Workspace safety: checkpoint, undo, diff, and rollback"
-    aliases = ["undo", "checkpoint", "rollback", "gitlog", "safe"]
+    aliases: list[str] = ["undo", "checkpoint", "rollback", "gitlog", "safe"]
     hidden = False
 
     async def execute(self, ctx: SafeCommandContext) -> SafeCommandResult:
@@ -80,12 +80,8 @@ class SafeCommand:
 
         info = git.auto_commit("user checkpoint")
         if info:
-            return SafeCommandResult(
-                message=f"[green]Checkpoint created:[/] {info.short_sha}"
-            )
-        return SafeCommandResult(
-            message="[dim]No changes to checkpoint.[/]"
-        )
+            return SafeCommandResult(message=f"[green]Checkpoint created:[/] {info.short_sha}")
+        return SafeCommandResult(message="[dim]No changes to checkpoint.[/]")
 
     def _do_undo(self, git: GitStore) -> SafeCommandResult:
         if not git.initialized:
@@ -156,6 +152,7 @@ class SafeCommandContext:
 
 
 def register_command() -> None:
-    from openlaoke.commands.registry import register_command as reg
+    from openlaoke.commands.registry import _commands
 
-    reg(SafeCommand())
+    cmd = SafeCommand()
+    _commands[cmd.name] = cmd  # type: ignore[assignment]

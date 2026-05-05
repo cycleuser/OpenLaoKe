@@ -6,7 +6,6 @@ execution and can restore them if the task fails.
 
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import time
@@ -55,7 +54,21 @@ CHECKPOINT_DIR = Path(tempfile.gettempdir()) / "openlaoke" / "checkpoints"
 
 def _get_changed_files(cwd: str, extensions: Sequence[str] | None = None) -> list[str]:
     """Get list of files that may be affected by the task."""
-    extensions = extensions or (".py", ".js", ".ts", ".go", ".rs", ".md", ".json", ".yaml", ".yml", ".toml", ".cfg", ".css", ".html")
+    extensions = extensions or (
+        ".py",
+        ".js",
+        ".ts",
+        ".go",
+        ".rs",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".cfg",
+        ".css",
+        ".html",
+    )
 
     changed: list[str] = []
     cwd_path = Path(cwd)
@@ -70,7 +83,19 @@ def _get_changed_files(cwd: str, extensions: Sequence[str] | None = None) -> lis
 
 def _should_include(path: Path) -> bool:
     """Check if file should be included in checkpoint."""
-    skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache", "dist", "build", ".eggs"}
+    skip_dirs = {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".eggs",
+    }
     for part in path.parts:
         if part in skip_dirs:
             return False
@@ -193,12 +218,14 @@ def list_checkpoints(cwd: str | None = None) -> list[dict[str, str]]:
         if cwd and meta.get("cwd") != cwd:
             continue
 
-        checkpoints.append({
-            "id": ckpt_dir.name,
-            "timestamp": meta.get("timestamp", "unknown"),
-            "cwd": meta.get("cwd", "unknown"),
-            "files": meta.get("files", "0"),
-        })
+        checkpoints.append(
+            {
+                "id": ckpt_dir.name,
+                "timestamp": meta.get("timestamp", "unknown"),
+                "cwd": meta.get("cwd", "unknown"),
+                "files": meta.get("files", "0"),
+            }
+        )
 
     return checkpoints
 

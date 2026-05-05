@@ -217,6 +217,7 @@ class MemoryCommand:
 
 
 def register_command() -> None:
-    from openlaoke.commands.registry import register_command as reg
+    from openlaoke.commands.registry import _commands
 
-    reg(MemoryCommand())
+    cmd = MemoryCommand()
+    _commands[cmd.name] = cmd  # type: ignore[assignment]

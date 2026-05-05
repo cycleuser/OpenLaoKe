@@ -6,10 +6,11 @@ This module provides Firefox-specific authentication support.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import time
-from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -51,7 +52,7 @@ def launch_firefox_with_marionette(
     url: str = "",
     port: int = 2828,
     headless: bool = False,
-) -> tuple[int, any]:
+) -> tuple[int, Any]:
     """Launch Firefox with Marionette debugging enabled.
 
     Args:
@@ -145,9 +146,6 @@ async def authenticate_with_firefox(
         from selenium import webdriver
         from selenium.webdriver.firefox.options import Options
         from selenium.webdriver.firefox.service import Service
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support import expected_conditions as EC
     except ImportError:
         _console.print("[red]Error:[/red] Selenium not installed")
         _console.print("\n[dim]Install with: pip install selenium[/dim]")
@@ -210,12 +208,10 @@ async def authenticate_with_firefox(
                     # Try to capture bearer token
                     bearer_token = ""
                     if config.bearer_token:
-                        try:
+                        with contextlib.suppress(Exception):
                             bearer_token = driver.execute_script(
                                 "return localStorage.getItem('accessToken') || '';"
                             )
-                        except Exception:
-                            pass
 
                     auth_data = {
                         "provider_type": provider_type,
@@ -229,14 +225,14 @@ async def authenticate_with_firefox(
                     # Save authentication
                     auth_manager.save_auth(provider_type, auth_data)
 
-                    _console.print(f"[green]✓ Authentication saved![/green]")
+                    _console.print("[green]✓ Authentication saved![/green]")
                     _console.print(f"  Cookie length: {len(cookie_string)}")
                     _console.print(f"  Auth file: {auth_manager._get_auth_file(provider_type)}")
 
                     cookie_found = True
                     break
 
-            except Exception as e:
+            except Exception:
                 # Ignore transient errors
                 pass
 

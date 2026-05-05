@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 
 class MemoryManager:
     _instance: MemoryManager | None = None
+    _store: MemoryStore
+    _nudger: MemoryNudger
+    _searcher: MemorySearcher
+    _sqlite: SQLiteMemoryStore
+    _loaded: bool
+    _recent_failures: list[str]
 
     def __new__(cls) -> MemoryManager:
         if cls._instance is None:
@@ -46,7 +52,7 @@ class MemoryManager:
             cls._instance._searcher = MemorySearcher()
             cls._instance._sqlite = SQLiteMemoryStore()
             cls._instance._loaded = False
-            cls._instance._recent_failures: list[str] = []
+            cls._instance._recent_failures = []
         return cls._instance
 
     def load(self) -> None:

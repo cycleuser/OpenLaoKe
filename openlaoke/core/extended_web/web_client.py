@@ -205,5 +205,5 @@ class WebServiceClient:
         choices = data.get("choices", [])
         if choices:
             delta = choices[0].get("delta", {})
-            return delta.get("content", "")
+            return str(delta.get("content", ""))
         return ""

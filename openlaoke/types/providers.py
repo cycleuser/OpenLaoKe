@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 
 def _check_local_server(url: str) -> bool:
@@ -95,6 +96,7 @@ class MultiProviderConfig:
     local_n_ctx: int = 262144
     local_repetition_penalty: float = 1.1
     local_temperature: float = 0.3
+    _builtin_client: Any = None
 
     @staticmethod
     def _get_local_builtin_models() -> list[str]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +17,15 @@ DEFAULT_MODEL_DIR = os.path.expanduser("~/.openlaoke/models")
 CUSTOM_MODELS_REGISTRY = os.path.join(DEFAULT_MODEL_DIR, "custom_models.json")
 
 MODELSCOPE_API_BASE = "https://www.modelscope.cn"
+
+
+def _normalize_tags(tags: Any) -> list[str]:
+    if isinstance(tags, list):
+        return [str(t) for t in tags]
+    if isinstance(tags, str):
+        return [tags]
+    return []
+
 
 # 已知的 GGUF 模型发布者/组织
 GGUF_SOURCE_ORGS = [
@@ -34,7 +44,7 @@ GGUF_SOURCE_ORGS = [
     "second-state",
 ]
 
-DEFAULT_BUILTIN_MODELS = {}
+DEFAULT_BUILTIN_MODELS: dict[str, dict[str, str]] = {}
 
 
 @dataclass
@@ -76,10 +86,10 @@ class LocalModelManager:
                 name=model_config["name"],
                 filename=model_config["filename"],
                 path=filepath,
-                size_mb=model_config["size_mb"],
+                size_mb=float(model_config["size_mb"]),
                 description=model_config["description"],
                 modelscope_id=model_config["modelscope_id"],
-                tags=model_config.get("tags", []),
+                tags=_normalize_tags(model_config.get("tags", [])),
                 downloaded=downloaded,
             )
         self._load_custom_models_registry()
@@ -226,7 +236,7 @@ class LocalModelManager:
         self,
         model_id: str,
         filename: str,
-        progress_callback: callable | None = None,
+        progress_callback: Callable | None = None,
     ) -> str:
         """Download a model file from ModelScope, replacing old quantization if exists."""
         filepath = os.path.join(self.model_dir, filename)
@@ -291,7 +301,7 @@ class LocalModelManager:
     async def download_model(
         self,
         model_id: str,
-        progress_callback: callable | None = None,
+        progress_callback: Callable | None = None,
     ) -> str:
         """Download a model with progress tracking."""
         if model_id in DEFAULT_BUILTIN_MODELS:

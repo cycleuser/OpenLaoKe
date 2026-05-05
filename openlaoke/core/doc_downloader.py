@@ -52,9 +52,9 @@ class DocumentationDownloader:
             return []
 
         source_info = DOC_SOURCES[source_id]
-        source_name = source_info["name"]
-        urls = source_info["urls"]
-        category = source_info.get("category", "general")
+        source_name: str = source_info["name"]
+        urls: list[str] = source_info["urls"]
+        category: str = source_info.get("category", "general")
         language = self._detect_language(source_id, category)
 
         all_chunks = []

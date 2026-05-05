@@ -54,12 +54,12 @@ class MemoryStoreTool:
             )
             mid = store.store(record)
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Memory stored: {mid}\nType: {memory_type}\nContent: {content[:100]}",
             )
         except Exception as e:
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Failed to store memory: {e}",
                 is_error=True,
             )
@@ -88,7 +88,7 @@ class MemoryRecallTool:
             )
             if not results:
                 return ToolResultBlock(
-                    type="text",
+                    tool_use_id="",
                     content=f"No memories found for: {query}",
                 )
             lines = [f"Found {len(results)} memories for: {query}\n"]
@@ -102,12 +102,12 @@ class MemoryRecallTool:
                     lines.append(f"   Session: {record.source_session[:12]}")
                 lines.append("")
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content="\n".join(lines),
             )
         except Exception as e:
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Failed to recall memories: {e}",
                 is_error=True,
             )
@@ -133,7 +133,7 @@ class MemoryTimelineTool:
             )
             if not events:
                 return ToolResultBlock(
-                    type="text",
+                    tool_use_id="",
                     content="No timeline events found.",
                 )
             lines = [f"Timeline ({len(events)} events):\n"]
@@ -141,12 +141,12 @@ class MemoryTimelineTool:
                 ts = time.strftime("%H:%M:%S", time.localtime(event.created_at))
                 lines.append(f"[{ts}] {event.event_type}: {event.summary}")
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content="\n".join(lines),
             )
         except Exception as e:
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Failed to query timeline: {e}",
                 is_error=True,
             )
@@ -170,12 +170,12 @@ class MemoryStatsTool:
                 for mtype, count in stats["memory_types"].items():
                     lines.append(f"  {mtype}: {count}")
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content="\n".join(lines),
             )
         except Exception as e:
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Failed to get stats: {e}",
                 is_error=True,
             )
@@ -196,7 +196,7 @@ class MemorySearchTool:
             records = store.get_by_type(memory_type, limit=limit)
             if not records:
                 return ToolResultBlock(
-                    type="text",
+                    tool_use_id="",
                     content=f"No memories of type '{memory_type}'.",
                 )
             lines = [f"Memories of type '{memory_type}' ({len(records)}):\n"]
@@ -208,12 +208,12 @@ class MemorySearchTool:
                     lines.append(f"   Tags: {', '.join(record.tags[:5])}")
                 lines.append("")
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content="\n".join(lines),
             )
         except Exception as e:
             return ToolResultBlock(
-                type="text",
+                tool_use_id="",
                 content=f"Failed to search memories: {e}",
                 is_error=True,
             )

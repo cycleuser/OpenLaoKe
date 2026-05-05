@@ -72,7 +72,9 @@ class CodeRunnerTool(Tool):
             if round_num > 0:
                 history.append(f"\n--- Round {round_num} ---")
                 history.append(f"Previous code:\n{last_code}")
-                history.append(f"Feedback:\n{self._format_result(result)}")
+                history.append(
+                    f"Feedback:\n{self._format_result(result) if result else 'No result'}"
+                )
 
             result = sandbox.run(
                 code=inp.code,
@@ -110,7 +112,7 @@ class CodeRunnerTool(Tool):
             if round_num < MAX_REFINEMENT_ROUNDS - 1:
                 feedback = "\n".join(lines)
                 last_code = inp.code
-                inp.code = self._suggest_fix(ctx, inp.code, feedback, inp.language)
+                inp.code = await self._suggest_fix(ctx, inp.code, feedback, inp.language)
                 if inp.code == last_code:
                     break
 
@@ -118,7 +120,7 @@ class CodeRunnerTool(Tool):
         return ToolResultBlock(
             tool_use_id=ctx.tool_use_id,
             content=content,
-            is_error=not result.success,
+            is_error=not result.success if result else True,
         )
 
     def _format_result(self, result: StructuredResult) -> str:
@@ -129,7 +131,7 @@ class CodeRunnerTool(Tool):
                 parts.append(f"[{a.tool}/{a.severity}{loc}] {a.message}")
         return "\n".join(parts)
 
-    def _suggest_fix(
+    async def _suggest_fix(
         self,
         ctx: ToolContext,
         code: str,
@@ -161,7 +163,7 @@ class CodeRunnerTool(Tool):
                         "content": f"Code:\n```\n{code}\n```\n\nFeedback:\n{feedback}",
                     },
                 ]
-                response, _, _ = api.send_message(
+                response, _, _ = await api.send_message(
                     system_prompt=system,
                     messages=messages,
                     model=model,

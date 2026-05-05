@@ -60,7 +60,7 @@ class REPL:
         self._prompt_manager = PromptSessionManager(multiline=False)
         self.supervisor = TaskSupervisor(app_state)
         self._current_task_id: str | None = None
-        self._insomnia_engine = None
+        self._insomnia_engine: Any = None
         self._theme = ThemeManager(app_state.theme)
 
         from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
@@ -478,7 +478,7 @@ class REPL:
         iteration = 0
         failed_tool_calls: dict[str, int] = {}
 
-        messages: list[dict[str, Any]] = []
+        messages: list[Any] = []
         for msg in self.app_state.messages:
             if msg.role == MessageRole.USER:
                 messages.append({"role": "user", "content": msg.content})
@@ -628,9 +628,7 @@ class REPL:
                     status_text = Text(f"  [{self._c('primary')}]0 tokens[/]")
 
                     try:
-                        with Live(
-                            status_text, console=self.console, refresh_per_second=4
-                        ) as live:
+                        with Live(status_text, console=self.console, refresh_per_second=4) as live:
                             async for chunk in self.api.stream_message(
                                 system_prompt=system_prompt,
                                 messages=messages,
@@ -681,9 +679,7 @@ class REPL:
                     )
 
                     if stream_error:
-                        self.console.print(
-                            f"  [bold {self._c('error')}]Error:[/] {stream_error}"
-                        )
+                        self.console.print(f"  [bold {self._c('error')}]Error:[/] {stream_error}")
                         break
 
                     if token_count == 0 and elapsed > 5:
@@ -725,9 +721,7 @@ class REPL:
                     if content_text:
                         brief = content_text[:200].replace("\n", " ").strip()
                         if brief:
-                            self.console.print(
-                                f"  [{self._c('muted')}]{brief}...[/]"
-                            )
+                            self.console.print(f"  [{self._c('muted')}]{brief}...[/]")
 
                     for tu in tool_uses:
                         file_path = tu.input.get("file_path", "")
@@ -746,7 +740,7 @@ class REPL:
                         msg = AssistantMessage(
                             role=MessageRole.ASSISTANT,
                             content=content_text,
-                            tool_uses=tool_uses if tool_uses else None,
+                            tool_uses=tool_uses if tool_uses else [],
                         )
                         self.app_state.add_message(msg)
                         assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
@@ -834,9 +828,7 @@ class REPL:
                     if response.content:
                         brief = response.content[:200].replace("\n", " ").strip()
                         if brief:
-                            self.console.print(
-                                f"  [{self._c('muted')}]{brief}...[/]"
-                            )
+                            self.console.print(f"  [{self._c('muted')}]{brief}...[/]")
 
                     if self._hook_system.has_hooks("message_transform"):
                         from openlaoke.core.hook_system import HookInput, HookOutput
@@ -854,11 +846,11 @@ class REPL:
                                 "content", response.content
                             )
 
-                    assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
+                    response_dict: dict[str, Any] = {"role": "assistant"}
                     if response.content:
-                        assistant_msg_dict["content"] = response.content
+                        response_dict["content"] = response.content
                     if response.tool_uses:
-                        assistant_msg_dict["tool_calls"] = [
+                        response_dict["tool_calls"] = [
                             {
                                 "id": tu.id,
                                 "type": "function",
@@ -869,7 +861,7 @@ class REPL:
                             }
                             for tu in response.tool_uses
                         ]
-                    messages.append(assistant_msg_dict)
+                    messages.append(response_dict)
 
                     if not response.tool_uses:
                         break
@@ -1179,9 +1171,7 @@ class REPL:
                     )
                     for km in kv_pattern.finditer(body):
                         params[km.group(1)] = km.group(2).strip()
-                    last_kv = re.search(
-                        r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)}\s*$", body, re.DOTALL
-                    )
+                    last_kv = re.search(r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)}\s*$", body, re.DOTALL)
                     if last_kv:
                         key = last_kv.group(1)
                         val = last_kv.group(2).rstrip("}").strip()
@@ -1221,16 +1211,26 @@ class REPL:
     @staticmethod
     def _is_plan_response(content: str) -> bool:
         plan_keywords = [
-            "实施步骤", "实施计划", "创建项目结构", "代码实现",
-            "第一步", "第二步", "第三步", "步骤", "step",
-            "1.", "2.", "3.", "I will create", "I will write",
-            "Let me first", "First,", "接下来",
+            "实施步骤",
+            "实施计划",
+            "创建项目结构",
+            "代码实现",
+            "第一步",
+            "第二步",
+            "第三步",
+            "步骤",
+            "step",
+            "1.",
+            "2.",
+            "3.",
+            "I will create",
+            "I will write",
+            "Let me first",
+            "First,",
+            "接下来",
         ]
         lower = content.lower()
-        return (
-            "<tool_call>" not in lower
-            and any(kw.lower() in lower for kw in plan_keywords)
-        )
+        return "<tool_call>" not in lower and any(kw.lower() in lower for kw in plan_keywords)
 
     def _verify_file_written(self, tool_input: dict[str, Any], result: ToolResultBlock) -> None:
         file_path = tool_input.get("file_path", "")
@@ -1254,9 +1254,7 @@ class REPL:
                 f"  [{self._c('success')}]✓ Verified: {abs_path} ({lines} lines, {size} bytes)[/]"
             )
         else:
-            self.console.print(
-                f"  [{self._c('error')}]✗ Missing: {abs_path} was NOT created[/]"
-            )
+            self.console.print(f"  [{self._c('error')}]✗ Missing: {abs_path} was NOT created[/]")
 
     def _print_banner(self) -> None:
         from openlaoke import __version__
