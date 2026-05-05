@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import jieba
+import jieba  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
