@@ -20,13 +20,11 @@ console = Console()
 @click.group()
 def auth() -> None:
     """Authentication management commands."""
-    pass
 
 
 @auth.group("extended-web")
 def extended_web() -> None:
     """Extended Web provider authentication."""
-    pass
 
 
 @extended_web.command("login")
