@@ -24,7 +24,7 @@ class AssemblyResult:
     code: str
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    test_results: dict[str, bool] = field(default_factory=dict)
+    test_results: dict[str, Any] = field(default_factory=dict)
     coverage: float = 0.0
 
 
@@ -89,9 +89,9 @@ class CodeAssembler:
         )
 
     def assemble_atomic_task(self, task: AtomicTask, graph: TaskGraph) -> AssemblyResult:
-        code_parts = []
-        errors = []
-        warnings = []
+        code_parts: list[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         for dep_id in task.dependencies:
             if dep_id in graph.failed:
@@ -174,9 +174,9 @@ class CodeAssembler:
             )
 
     def _validate_code(self, code: str, task: AtomicTask) -> ValidationResult:
-        errors = []
-        warnings = []
-        suggestions = []
+        errors: list[str] = []
+        warnings: list[str] = []
+        suggestions: list[str] = []
 
         try:
             ast.parse(code)
@@ -246,9 +246,9 @@ class IntegrationValidator:
         self.project_root = project_root
 
     def validate_assembly(self, result: AssemblyResult) -> ValidationResult:
-        errors = []
-        warnings = []
-        suggestions = []
+        errors: list[str] = []
+        warnings: list[str] = []
+        suggestions: list[str] = []
 
         if not result.code.strip():
             errors.append("Empty code generated")
@@ -304,7 +304,7 @@ class IntegrationValidator:
         )
 
     def run_integration_tests(self, result: AssemblyResult) -> dict[str, bool]:
-        test_results = {}
+        test_results: dict[str, Any] = {}
 
         if not result.code.strip():
             return test_results

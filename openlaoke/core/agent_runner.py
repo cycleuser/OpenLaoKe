@@ -50,7 +50,7 @@ async def run_subagent(
 
     max_iterations = 50
     iteration = 0
-    result_parts = []
+    result_parts: list[str] = []
 
     state_path = None
     if getattr(app_state, "insomnia_mode", False):

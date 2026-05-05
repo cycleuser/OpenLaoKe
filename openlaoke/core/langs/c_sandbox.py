@@ -45,9 +45,7 @@ class CSandbox:
     def compiler(self) -> str | None:
         if self._compiler is None:
             for cc in _CC_PRIORITY:
-                p = subprocess.run(
-                    ["which", cc], capture_output=True, text=True, timeout=5
-                )
+                p = subprocess.run(["which", cc], capture_output=True, text=True, timeout=5)
                 if p.returncode == 0:
                     self._compiler = cc
                     return self._compiler
@@ -83,8 +81,9 @@ class CSandbox:
                 f.write(code)
 
             bin_path = tempfile.mktemp(suffix="", dir=cwd)
+            compiler = self.compiler or "gcc"
             compile_result = subprocess.run(
-                [self.compiler, "-Wall", "-Wextra", "-fsanitize=address", "-o", bin_path, src_path],
+                [compiler, "-Wall", "-Wextra", "-fsanitize=address", "-o", bin_path, src_path],
                 capture_output=True,
                 text=True,
                 timeout=30.0,
@@ -145,13 +144,9 @@ class CSandbox:
                 with contextlib.suppress(OSError):
                     os.unlink(bin_path)
 
-    def _parse_compile_output(
-        self, stderr: str, stdout: str
-    ) -> list[CompileMessage]:
+    def _parse_compile_output(self, stderr: str, stdout: str) -> list[CompileMessage]:
         msgs: list[CompileMessage] = []
-        pattern = re.compile(
-            r"^(.*?):(\d+):(\d+):\s*(error|warning|note):\s*(.+)$", re.MULTILINE
-        )
+        pattern = re.compile(r"^(.*?):(\d+):(\d+):\s*(error|warning|note):\s*(.+)$", re.MULTILINE)
         combined = (stderr or "") + "\n" + (stdout or "")
         for m in pattern.finditer(combined):
             msgs.append(

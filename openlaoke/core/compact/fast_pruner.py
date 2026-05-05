@@ -129,10 +129,10 @@ def fast_prune(
         f"Key information preserved:\n{keyword_lines}"
     )
 
-    from openlaoke.types.core_types import SystemMessage
+    from openlaoke.types.core_types import MessageRole, SystemMessage
 
     summary_msg = SystemMessage(
-        role="system",
+        role=MessageRole.SYSTEM,
         content=summary_content,
         subtype="compact",
     )

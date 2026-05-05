@@ -14,7 +14,6 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 import httpx
 
@@ -46,7 +45,7 @@ TEST_CASES = [
         expected_keywords=["def fib", "return", "print", "55"],
     ),
     TestCase(
-        id="py_e2", 
+        id="py_e2",
         language="python",
         description="List comprehension filter",
         prompt="Write Python code that takes a list of numbers and returns only the even numbers squared. Print the result for [1,2,3,4,5,6].",
@@ -244,8 +243,8 @@ def _extract_code(text: str, language: str) -> str:
 
 
 def _check_exec_success(code: str, language: str) -> bool:
-    from openlaoke.core.langs.python_sandbox import PythonSandbox
     from openlaoke.core.langs.c_sandbox import CSandbox
+    from openlaoke.core.langs.python_sandbox import PythonSandbox
     try:
         if language == 'python':
             sb = PythonSandbox()
@@ -321,7 +320,7 @@ def _run_rust(code: str) -> tuple[str, str]:
 
 async def main() -> None:
     print("=" * 70)
-    print(f"SOTA Code Ability Evaluation")
+    print("SOTA Code Ability Evaluation")
     print(f"Model: {MODEL_NAME}")
     print(f"Test cases: {len(TEST_CASES)}")
     print("=" * 70)

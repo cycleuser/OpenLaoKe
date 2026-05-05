@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from openlaoke.core.state import AppState, create_app_state
 from openlaoke.types.core_types import (
     AssistantMessage,
+    AttachmentMessage,
     MessageRole,
     ProgressMessage,
     SystemMessage,
@@ -41,7 +42,7 @@ class SessionInfo:
 
 def _message_from_dict(
     msg_data: dict,
-) -> UserMessage | AssistantMessage | SystemMessage | ProgressMessage | None:
+) -> UserMessage | AssistantMessage | SystemMessage | ProgressMessage | AttachmentMessage | None:
     msg = message_from_dict(msg_data)
     if msg is not None:
         return msg

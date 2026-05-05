@@ -15,7 +15,7 @@ def get_firefox_path():
     """Get Firefox path."""
     import platform
     system = platform.system()
-    
+
     if system == "Darwin":
         paths = [
             "/Applications/Firefox.app/Contents/MacOS/firefox",
@@ -27,7 +27,7 @@ def get_firefox_path():
         ]
     else:
         paths = ["/usr/bin/firefox", "/usr/bin/firefox-esr"]
-    
+
     for path in paths:
         if Path(path).exists():
             return path
@@ -39,9 +39,9 @@ def main():
         console.print("[red]Usage: python3 quick_auth_firefox_simple.py <provider>[/red]")
         console.print("Example: python3 quick_auth_firefox_simple.py deepseek-chat")
         sys.exit(1)
-    
+
     provider = sys.argv[1]
-    
+
     # Login URLs
     login_urls = {
         "deepseek-chat": "https://chat.deepseek.com",
@@ -55,26 +55,26 @@ def main():
         "doubao-web": "https://doubao.com",
         "glm-web": "https://chatglm.cn",
     }
-    
+
     login_url = login_urls.get(provider, "https://chat.deepseek.com")
-    
+
     console.print(f"[bold]Firefox Authentication for {provider}[/bold]")
     console.print(f"Login URL: [cyan underline]{login_url}[/cyan underline]")
     console.print()
-    
+
     # Get Firefox path
     firefox_path = get_firefox_path()
     console.print(f"Firefox: {firefox_path}")
-    
+
     # Create temp profile
     profile_dir = tempfile.mkdtemp(prefix="openlaoke-firefox-")
     console.print(f"Profile: {profile_dir}")
     console.print()
-    
+
     console.print("[bold]Launching Firefox...[/bold]")
     console.print("[dim]A Firefox window should open on your screen.[/dim]")
     console.print()
-    
+
     # Launch Firefox directly
     cmd = [
         firefox_path,
@@ -83,13 +83,13 @@ def main():
         "-new-instance",
         login_url,
     ]
-    
+
     console.print(f"Command: {' '.join(cmd)}")
     console.print()
-    
+
     # Launch Firefox
     process = subprocess.Popen(cmd)
-    
+
     console.print("[green]✓ Firefox launched![/green]")
     console.print()
     console.print("[bold red]IMPORTANT:[/bold red]")
@@ -99,7 +99,7 @@ def main():
     console.print()
     console.print("[dim]Waiting for you to login...[/dim]")
     console.print()
-    
+
     try:
         # Wait for user to login
         while True:
@@ -109,7 +109,7 @@ def main():
         console.print("[yellow]Process interrupted[/yellow]")
         console.print("[dim]Note: Manual cookie extraction not implemented yet.[/dim]")
         console.print("[dim]For now, just keep using Firefox normally.[/dim]")
-    
+
     process.terminate()
 
 

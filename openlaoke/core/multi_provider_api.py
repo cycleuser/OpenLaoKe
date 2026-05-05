@@ -817,25 +817,25 @@ class MultiProviderClient:
                         continue
 
                     if provider.provider_type == ProviderType.ANTHROPIC:
-                        for chunk in self._parse_anthropic_stream_events(
+                        for stream_chunk in self._parse_anthropic_stream_events(
                             event, pending_tool_calls, model
                         ):
-                            if chunk.event_type == StreamEventType.USAGE:
-                                if chunk.usage:
-                                    final_usage = chunk.usage
-                                if chunk.cost:
-                                    final_cost = chunk.cost
-                            yield chunk
+                            if stream_chunk.event_type == StreamEventType.USAGE:
+                                if stream_chunk.usage:
+                                    final_usage = stream_chunk.usage
+                                if stream_chunk.cost:
+                                    final_cost = stream_chunk.cost
+                            yield stream_chunk
                     else:
-                        for chunk in self._parse_openai_stream_events(
+                        for stream_chunk in self._parse_openai_stream_events(
                             event, pending_tool_calls, model
                         ):
-                            if chunk.event_type == StreamEventType.USAGE:
-                                if chunk.usage:
-                                    final_usage = chunk.usage
-                                if chunk.cost:
-                                    final_cost = chunk.cost
-                            yield chunk
+                            if stream_chunk.event_type == StreamEventType.USAGE:
+                                if stream_chunk.usage:
+                                    final_usage = stream_chunk.usage
+                                if stream_chunk.cost:
+                                    final_cost = stream_chunk.cost
+                            yield stream_chunk
 
         for tc_idx, tc_data in pending_tool_calls.items():
             args_str = tc_data.get("arguments", "")

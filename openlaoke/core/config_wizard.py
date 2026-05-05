@@ -675,8 +675,12 @@ def _configure_builtin_provider(
             except subprocess.CalledProcessError:
                 console.print("[red]✗ Installation failed.[/red]")
                 console.print("[dim]Try: pip install llama-cpp-python[/dim]")
-                console.print("[dim]Linux: sudo apt install build-essential cmake && pip install llama-cpp-python[/dim]")
-                console.print("[dim]Or use OpenCode Zen (free, no install needed) as an alternative.[/dim]")
+                console.print(
+                    "[dim]Linux: sudo apt install build-essential cmake && pip install llama-cpp-python[/dim]"
+                )
+                console.print(
+                    "[dim]Or use OpenCode Zen (free, no install needed) as an alternative.[/dim]"
+                )
                 return config
 
     from openlaoke.core.local_model_manager import LocalModelManager

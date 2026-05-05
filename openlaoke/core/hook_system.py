@@ -14,6 +14,7 @@ Inspired by:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -240,7 +241,9 @@ class HookSystem:
 
             try:
                 if hook.is_async:
-                    await hook.fn(input_data, output)
+                    result = hook.fn(input_data, output)
+                    if inspect.iscoroutine(result):
+                        await result
                 else:
                     hook.fn(input_data, output)
                 executed_count += 1

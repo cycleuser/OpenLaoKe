@@ -115,7 +115,7 @@ class IntentBasedPipeline:
         if not result.success or not result.task_graph:
             return {}
 
-        plan = {
+        plan: dict[str, Any] = {
             "total_tasks": len(result.tasks),
             "ready_tasks": [],
             "pending_tasks": [],

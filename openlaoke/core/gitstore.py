@@ -192,7 +192,8 @@ class GitStore:
         try:
             result = subprocess.run(
                 [
-                    "git", "log",
+                    "git",
+                    "log",
                     "--oneline",
                     f"-n{max_count}",
                     "--format=%H|%s|%at",

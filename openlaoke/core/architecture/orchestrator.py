@@ -191,6 +191,8 @@ class IncrementalOrchestrator:
         return ready[:1]
 
     def _execute_step(self, step: WorkflowStep, workflow: IncrementalWorkflow) -> AssemblyResult:
+        if workflow.task_graph is None:
+            return AssemblyResult(success=False, code="", errors=["No task graph available"])
         return self.assembler.assemble_atomic_task(step.task, workflow.task_graph)
 
     def _get_max_attempts_for_task(self, task: AtomicTask) -> int:

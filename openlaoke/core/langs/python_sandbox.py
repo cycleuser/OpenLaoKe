@@ -119,8 +119,8 @@ class PythonSandbox:
 
     def _clean_code(self, code: str) -> str:
         code = code.strip()
-        code = re.sub(r'^```(?:python|py)?\s*\n', '', code)
-        code = re.sub(r'\n```\s*$', '', code)
+        code = re.sub(r"^```(?:python|py)?\s*\n", "", code)
+        code = re.sub(r"\n```\s*$", "", code)
         return code
 
     def _run_static_analysis(self, filepath: str, timeout_sec: float) -> list[AnalysisResult]:

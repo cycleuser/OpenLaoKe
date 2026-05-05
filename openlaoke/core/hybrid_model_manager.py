@@ -187,7 +187,7 @@ class HybridModelManager:
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("models", [])
+                return list(data.get("models", []))
 
         except Exception:
             pass
@@ -292,7 +292,7 @@ class HybridModelManager:
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("response", "")
+                return str(data.get("response", ""))
             else:
                 return f"Error: HTTP {response.status_code}"
 

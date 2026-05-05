@@ -2,8 +2,9 @@
 """测试 OpenLaoKe 的免费模型功能"""
 
 import asyncio
-from openlaoke.types.providers import MultiProviderConfig
+
 from openlaoke.core.multi_provider_api import MultiProviderClient
+from openlaoke.types.providers import MultiProviderConfig
 
 
 async def test_free_model(model: str, prompt: str = "你好") -> None:

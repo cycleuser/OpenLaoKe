@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-
 WebProviderType = Literal[
     "deepseek-chat",
     "deepseek-coder",
@@ -36,7 +35,7 @@ class WebProviderConfig:
 
 
 # Provider configurations
-WEB_PROVIDERS: dict[WebProviderType, WebProviderConfig] = {
+WEB_PROVIDERS: dict[str, WebProviderConfig] = {
     "deepseek-chat": WebProviderConfig(
         provider_type="deepseek-chat",
         name="DeepSeek Chat",

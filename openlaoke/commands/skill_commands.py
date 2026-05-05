@@ -74,9 +74,9 @@ class SkillCommand(SlashCommand):
         if extra:
             msg += "\n\n  [Loaded from skill dirs]"
             for name in sorted(extra):
-                skill = registry.get_skill(name)
-                if skill:
-                    desc = skill.description[:50] if skill.description else ""
+                found_skill = registry.get_skill(name)
+                if found_skill:
+                    desc = found_skill.description[:50] if found_skill.description else ""
                     msg += f"\n    /{name:25} - {desc}"
 
         msg += "\n\n  Use /skill install <url> to install new skills"

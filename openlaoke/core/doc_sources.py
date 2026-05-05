@@ -6,7 +6,9 @@ for all major programming languages and frameworks.
 
 from __future__ import annotations
 
-DOC_SOURCES = {
+from typing import Any
+
+DOC_SOURCES: dict[str, dict[str, Any]] = {
     "python": {
         "name": "Python",
         "category": "programming_language",

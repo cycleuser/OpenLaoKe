@@ -79,6 +79,8 @@ class AppState:
 
     _listeners: list[Callable[[AppState], None]] = field(default_factory=list, repr=False)
     _persist_path: str | None = None
+    _insomnia_engine: Any = None
+    _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if not self.cwd:

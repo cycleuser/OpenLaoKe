@@ -194,7 +194,9 @@ _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
 def _make_loader(module_name: str, class_name: str) -> Callable[[], Tool]:
     def loader() -> Tool:
         module = importlib.import_module(module_name)
-        return getattr(module, class_name)()
+        cls = getattr(module, class_name)
+        tool: Tool = cls()
+        return tool
 
     return loader
 

@@ -53,7 +53,7 @@ def _verify_installation(logger) -> None:
     try:
         import rich
 
-        logger.info(f"Rich version: {rich.__version__}")
+        logger.info(f"Rich version: {getattr(rich, '__version__', 'unknown')}")
     except ImportError as e:
         logger.error(f"Rich not installed: {e}")
         raise

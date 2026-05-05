@@ -34,9 +34,21 @@ def main() -> None:
             filtered_argv.append(tok)
         elif tok.startswith("-"):
             filtered_argv.append(tok)
-            if tok in ("-m", "--model", "-p", "--permission", "-c", "--cwd",
-                       "--provider", "--api-key", "--base-url", "--proxy",
-                       "--max-tokens", "--thinking-budget", "--cors"):
+            if tok in (
+                "-m",
+                "--model",
+                "-p",
+                "--permission",
+                "-c",
+                "--cwd",
+                "--provider",
+                "--api-key",
+                "--base-url",
+                "--proxy",
+                "--max-tokens",
+                "--thinking-budget",
+                "--cors",
+            ):
                 val = next(args_iter, "")
                 if val:
                     filtered_argv.append(val)

@@ -77,7 +77,7 @@ class MemoryStore:
             if query_lower in entry.key.lower() or query_lower in entry.content.lower():
                 results.append(entry)
                 entry.access()
-        results.sort(key=lambda e: (e.confidence * e.hit_count), reverse=True)
+        results.sort(key=lambda e: e.confidence * e.hit_count, reverse=True)
         self._dirty = bool(results)
         return results
 
@@ -123,9 +123,7 @@ class MemoryStore:
         return None
 
     def _cleanup_low_confidence(self) -> None:
-        to_remove = [
-            mid for mid, entry in self._memories.items() if entry.confidence < 0.15
-        ]
+        to_remove = [mid for mid, entry in self._memories.items() if entry.confidence < 0.15]
         for mid in to_remove:
             del self._memories[mid]
 

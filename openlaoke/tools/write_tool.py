@@ -118,7 +118,7 @@ def _is_user_home_path(path: str) -> bool:
     home = os.path.realpath(os.path.expanduser("~"))
     home_parent = os.path.dirname(home)
     if path.startswith(home_parent + "/"):
-        parts = path[len(home_parent) + 1:].split("/", 1)
+        parts = path[len(home_parent) + 1 :].split("/", 1)
         if parts and os.path.basename(home).startswith(parts[0]):
             return True
     return False

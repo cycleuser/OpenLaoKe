@@ -27,8 +27,8 @@ class CodeValidator:
 
     def validate_syntax(self, code: str) -> ValidationResult:
         """Check Python syntax validity."""
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         try:
             ast.parse(code)
@@ -130,8 +130,8 @@ class CodeValidator:
 class IncrementalBuilder:
     """Build code incrementally with validation at each step."""
 
-    def __init__(self):
-        self.validator = CodeValidator()
+    def __init__(self) -> None:
+        self.validator: CodeValidator = CodeValidator()
         self.code_parts: list[str] = []
         self.current_code = ""
 

@@ -134,7 +134,11 @@ class BitterLessonTracker:
         )
 
         for lesson in sorted_lessons:
-            status = "DISABLED" if f"{lesson.strategy_name}:{lesson.model_size}" in self.disabled_strategies else "active"
+            status = (
+                "DISABLED"
+                if f"{lesson.strategy_name}:{lesson.model_size}" in self.disabled_strategies
+                else "active"
+            )
             lines.append(
                 f"[{status}] {lesson.strategy_name} ({lesson.model_size}): "
                 f"{lesson.success_rate:.0%} success rate ({lesson.total_attempts} attempts)"
@@ -143,14 +147,17 @@ class BitterLessonTracker:
                 lines.append(f"  -> {lesson.recommendation}")
 
         lines.append("")
-        lines.append("Bitter Lesson Principle: Let computation and learning decide, not human assumptions.")
+        lines.append(
+            "Bitter Lesson Principle: Let computation and learning decide, not human assumptions."
+        )
 
         return "\n".join(lines)
 
     def _update_lessons(self, strategy_name: str, model_size: str) -> None:
         key = f"{strategy_name}:{model_size}"
         relevant = [
-            o for o in self.outcomes
+            o
+            for o in self.outcomes
             if o.strategy_name == strategy_name and o.model_size == model_size
         ]
 
@@ -179,7 +186,7 @@ class BitterLessonTracker:
             success_rate=success_rate,
             total_attempts=total,
             avg_duration_ms=avg_duration,
-            avg_tokens_used=avg_tokens,
+            avg_tokens_used=int(avg_tokens),
             common_errors=error_counts,
             recommendation=recommendation,
         )

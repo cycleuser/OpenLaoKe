@@ -169,7 +169,7 @@ class APIClient:
         system_prompt: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
-    ) -> AssistantMessage:
+    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         """Send a single message request and get the response."""
         client = self._get_client()
         body: dict[str, Any] = {

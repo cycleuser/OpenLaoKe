@@ -283,7 +283,8 @@ class BuiltinModelProvider:
         return text, usage, cost
 
     def _parse_raw_tool_calls(
-        self, raw_content: str,
+        self,
+        raw_content: str,
     ) -> tuple[str, str, list[ToolUseBlock]]:
         import uuid
 

@@ -9,12 +9,12 @@ from uuid import uuid4
 
 
 class MemoryType(StrEnum):
-    PREFERENCE = "preference"   # user preferences (editor, shell, etc.)
-    CORRECTION = "correction"   # user corrected a mistake
-    STYLE = "style"            # communication/response style
-    FACT = "fact"              # user facts (name, role, timezone)
-    LESSON = "lesson"          # learned from tool failures
-    PATTERN = "pattern"        # recurring patterns (rg -> powershell)
+    PREFERENCE = "preference"  # user preferences (editor, shell, etc.)
+    CORRECTION = "correction"  # user corrected a mistake
+    STYLE = "style"  # communication/response style
+    FACT = "fact"  # user facts (name, role, timezone)
+    LESSON = "lesson"  # learned from tool failures
+    PATTERN = "pattern"  # recurring patterns (rg -> powershell)
     EXPECTATION = "expectation"  # what user expects from the agent
 
 

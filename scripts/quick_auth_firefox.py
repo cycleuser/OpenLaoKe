@@ -38,24 +38,24 @@ def main() -> None:
             border_style="cyan",
         ))
         sys.exit(1)
-    
+
     provider = sys.argv[1]
-    
+
     console.print(f"[bold]Authenticating {provider} using Firefox...[/bold]")
     console.print()
     console.print("[dim]Launching Firefox automatically...[/dim]")
     console.print()
-    
+
     try:
         from openlaoke.core.extended_web.auto_browser import authenticate_with_auto_browser
         from openlaoke.core.extended_web.types import WEB_PROVIDERS
-        
+
         config = WEB_PROVIDERS.get(provider)
         if not config:
             console.print(f"[red]Error:[/red] Unknown provider: {provider}")
             console.print(f"\n[dim]Available: {', '.join(WEB_PROVIDERS.keys())}[/dim]")
             sys.exit(1)
-        
+
         # Authenticate using Firefox
         result = asyncio.run(authenticate_with_auto_browser(
             provider_type=provider,
@@ -63,7 +63,7 @@ def main() -> None:
             timeout=300,
             browser_type="firefox",
         ))
-        
+
         console.print()
         console.print(Panel(
             f"[bold green]✓ Authentication successful![/bold green]\n\n"
@@ -73,11 +73,11 @@ def main() -> None:
             f"Auth file: ~/.openlaoke/extended_web/{provider}.json",
             border_style="green",
         ))
-        
+
         console.print()
         console.print("[bold]You can now use:[/bold]")
         console.print(f"  openlaoke --provider extended-web --model {provider}")
-        
+
     except Exception as e:
         console.print(f"\n[red]✗ Error:[/red] {e}")
         console.print("\n[dim]Make sure Firefox is installed.[/dim]")

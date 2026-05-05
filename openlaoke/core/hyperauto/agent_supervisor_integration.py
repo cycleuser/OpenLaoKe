@@ -21,7 +21,7 @@ class AgentSupervisorIntegration:
 
     async def verify_completion(self, context: Any, task_id: str) -> SupervisionResult:
         """Verify that the task is truly completed."""
-        artifacts = {
+        artifacts: dict[str, Any] = {
             "content": "",
             "output_files": [],
             "working_dir": self.app_state.cwd,

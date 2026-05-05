@@ -58,7 +58,7 @@ class TabCompleter:
 
         # Return the next match
         if state < len(self._matches):
-            return self._matches[state]
+            return str(self._matches[state])
 
         return None
 

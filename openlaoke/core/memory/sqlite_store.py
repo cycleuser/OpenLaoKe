@@ -153,6 +153,8 @@ class ConceptNode:
 
 class SQLiteMemoryStore:
     _instances: dict[str, SQLiteMemoryStore] = {}
+    _db_path: Path
+    _conn: sqlite3.Connection
 
     def __new__(cls, db_path: Path | None = None) -> SQLiteMemoryStore:
         db_path = db_path or DB_PATH

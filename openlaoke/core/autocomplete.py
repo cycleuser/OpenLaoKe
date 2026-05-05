@@ -17,6 +17,7 @@ import readline
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from openlaoke.commands.registry import get_all_commands
 from openlaoke.core.skill_system import list_available_skills, load_skill
@@ -251,7 +252,7 @@ class AutocompleteManager:
 
     def _get_file_options(self, query: str) -> list[AutocompleteOption]:
         """获取文件选项"""
-        options = []
+        options: list[AutocompleteOption] = []
 
         try:
             cwd = Path(self._cwd)
@@ -310,7 +311,7 @@ class AutocompleteManager:
             return None
 
         if 0 <= self.state.selected < len(self.state.options):
-            return self.state.options[self.state.selected]
+            return cast(AutocompleteOption | None, self.state.options[self.state.selected])
 
         return None
 

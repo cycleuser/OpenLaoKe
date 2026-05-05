@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import os
+
 import markdown
-from weasyprint import HTML, CSS
+from weasyprint import HTML
 from weasyprint.text.fonts import FontConfiguration
 
 
@@ -194,7 +195,7 @@ def generate_docs_pdf(root_dir: str, output_path: str) -> None:
     processed = 0
     for i, filepath in enumerate(md_files, 1):
         try:
-            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
             if not content.strip():

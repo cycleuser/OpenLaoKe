@@ -22,7 +22,7 @@ class HookManager:
             hook_type=hook_type,
             handler=handler,
             priority=priority,
-            name=name or handler.__name__,
+            name=name or getattr(handler, "__name__", str(handler)),
         )
         if hook_type not in self._hooks:
             self._hooks[hook_type] = []

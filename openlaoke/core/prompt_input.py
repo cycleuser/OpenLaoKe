@@ -232,7 +232,7 @@ async def run_model_picker_async() -> str | None:
     )
 
     picker_completer = ModelPickerCompleter(entries)
-    picker_session = PromptSession(
+    picker_session: PromptSession[str] = PromptSession(
         completer=picker_completer,
         style=picker_style,
         complete_while_typing=True,

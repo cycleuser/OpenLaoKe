@@ -308,7 +308,7 @@ class SearchAndDownloadPapers(Tool):
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, params=params)
+            response = await client.get(url, params=params)  # type: ignore[arg-type]
             response.raise_for_status()
             data = response.json()
 
