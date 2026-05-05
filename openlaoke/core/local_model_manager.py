@@ -162,7 +162,7 @@ class LocalModelManager:
     async def search_modelscope(self, query: str) -> list[dict[str, Any]]:
         """Search for GGUF models on ModelScope across multiple organizations."""
         try:
-            from modelscope.hub.api import HubApi
+            from modelscope.hub.api import HubApi  # type: ignore[import-untyped]
 
             api = HubApi()
             results = []
