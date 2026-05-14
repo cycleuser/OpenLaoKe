@@ -293,6 +293,9 @@ class TaskState:
     notified: bool = False
     output: str = ""
     exit_code: int | None = None
+    slug: str = ""
+    verification_status: str = "unverified"
+    provenance_file: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -308,6 +311,9 @@ class TaskState:
             "output_offset": self.output_offset,
             "notified": self.notified,
             "exit_code": self.exit_code,
+            "slug": self.slug,
+            "verification_status": self.verification_status,
+            "provenance_file": self.provenance_file,
         }
 
 

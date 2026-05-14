@@ -17,6 +17,19 @@ from openlaoke.core.multi_agent.conflict_resolution import (
     ResolutionStrategy,
 )
 from openlaoke.core.multi_agent.coordinator import AgentCoordinator, GlobalState, Task
+from openlaoke.core.multi_agent.research_agents import (
+    RESEARCH_AGENT_PROFILES,
+    ResearchAgentProfile,
+    ResearchAgentType,
+    get_all_research_agent_types,
+    get_research_agent_profile,
+    get_research_agent_system_prompt,
+)
+from openlaoke.core.multi_agent.research_orchestrator import (
+    ResearchWorkflowOrchestrator,
+    WorkflowResult,
+    WorkflowStep,
+)
 from openlaoke.core.multi_agent.task_distribution import (
     Assignment,
     AssignmentStrategy,
@@ -56,4 +69,13 @@ __all__ = [
     "AgentRole",
     "TeamStatus",
     "GlobalState",
+    "ResearchAgentType",
+    "ResearchAgentProfile",
+    "RESEARCH_AGENT_PROFILES",
+    "get_research_agent_profile",
+    "get_research_agent_system_prompt",
+    "get_all_research_agent_types",
+    "ResearchWorkflowOrchestrator",
+    "WorkflowResult",
+    "WorkflowStep",
 ]

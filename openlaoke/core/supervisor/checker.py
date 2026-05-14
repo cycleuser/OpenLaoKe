@@ -6,6 +6,7 @@ import os
 import re
 from typing import Any
 
+from openlaoke.core.supervisor.provenance import ProvenanceRecord, VerificationStatus
 from openlaoke.core.supervisor.requirements import RequirementCheckResult, TaskRequirements
 
 
@@ -21,6 +22,8 @@ class TaskCompletionChecker:
     - files_created: Check for generated files
     - anti_ai_check: Detect AI-typical patterns
     - general: Generic completion check
+    - provenance_check: Verify provenance sidecar exists and is valid
+    - citation_check: Verify inline citations are present and valid
     """
 
     AI_PATTERNS = [
@@ -45,9 +48,13 @@ class TaskCompletionChecker:
 
     def __init__(self):
         self._anti_ai_enabled = True
+        self._provenance_enabled = True
 
     def enable_anti_ai_check(self, enabled: bool = True) -> None:
         self._anti_ai_enabled = enabled
+
+    def enable_provenance_check(self, enabled: bool = True) -> None:
+        self._provenance_enabled = enabled
 
     async def check_requirement(
         self,
@@ -76,6 +83,8 @@ class TaskCompletionChecker:
             "references_exist": self._check_references_exist,
             "citations_quality": self._check_citations_quality,
             "general": self._check_general,
+            "provenance_check": self._check_provenance,
+            "citation_check": self._check_citations,
         }
 
         handler = check_handlers.get(check_type)
@@ -475,4 +484,98 @@ class TaskCompletionChecker:
             message=f"Citation quality score: {quality_score}/5. "
             f"Unique citations: {len(unique_citations)}, "
             f"arXiv: {has_arxiv_refs}, DOI: {has_doi_refs}",
+        )
+
+    def _check_provenance(
+        self,
+        requirement: TaskRequirements,
+        artifacts: dict[str, Any],
+    ) -> RequirementCheckResult:
+        if not self._provenance_enabled:
+            return RequirementCheckResult(
+                requirement=requirement,
+                satisfied=True,
+                message="Provenance check disabled",
+            )
+
+        output_files = artifacts.get("output_files", [])
+        provenance_file = artifacts.get("provenance_file", "")
+
+        if provenance_file and os.path.exists(provenance_file):
+            try:
+                record = ProvenanceRecord.load(provenance_file)
+                status = record.verification
+                satisfied = status in (
+                    VerificationStatus.PASS,
+                    VerificationStatus.PASS_WITH_NOTES,
+                )
+                return RequirementCheckResult(
+                    requirement=requirement,
+                    satisfied=satisfied,
+                    actual_value={
+                        "verification_status": status.value,
+                        "sources_consulted": len(record.sources_consulted),
+                        "sources_accepted": len(record.sources_accepted),
+                    },
+                    message=f"Provenance verification: {status.value}",
+                )
+            except Exception as e:
+                return RequirementCheckResult(
+                    requirement=requirement,
+                    satisfied=False,
+                    message=f"Failed to load provenance: {e}",
+                )
+
+        for f in output_files:
+            if f.endswith(".provenance.md") and os.path.exists(f):
+                return RequirementCheckResult(
+                    requirement=requirement,
+                    satisfied=True,
+                    actual_value=f,
+                    message=f"Provenance file exists: {f}",
+                )
+
+        return RequirementCheckResult(
+            requirement=requirement,
+            satisfied=False,
+            message="No provenance file found",
+        )
+
+    def _check_citations(
+        self,
+        requirement: TaskRequirements,
+        artifacts: dict[str, Any],
+    ) -> RequirementCheckResult:
+        content = artifacts.get("content", "")
+
+        inline_citations = re.findall(r"\[(\d+)\]", content)
+        unique_citations = set(inline_citations)
+
+        has_citations = len(unique_citations) >= 3
+
+        sources_section = re.search(
+            r"##\s+Sources\s*\n(.*?)(?=##|\Z)", content, re.DOTALL
+        )
+        has_sources_section = sources_section is not None
+
+        orphan_citations = []
+        if has_sources_section:
+            sources_text = sources_section.group(1)
+            source_ids = set(re.findall(r"^(\d+)\.", sources_text, re.MULTILINE))
+            orphan_citations = [c for c in unique_citations if c not in source_ids]
+
+        satisfied = has_citations and has_sources_section and len(orphan_citations) == 0
+
+        return RequirementCheckResult(
+            requirement=requirement,
+            satisfied=satisfied,
+            actual_value={
+                "inline_citations": len(inline_citations),
+                "unique_citations": len(unique_citations),
+                "has_sources_section": has_sources_section,
+                "orphan_citations": len(orphan_citations),
+            },
+            message=f"Citations: {len(unique_citations)} unique, "
+            f"sources section: {has_sources_section}, "
+            f"orphans: {len(orphan_citations)}",
         )

@@ -181,19 +181,29 @@ class SkillRegistry:
         return self._load_skills_from_dir(directory)
 
     def _load_skills_from_dir(self, directory: Path) -> int:
-        """Load all skills from a directory."""
+        """Load all skills from a directory.
+
+        Supports both flat structure (dir/SKILL.md) and nested (dir/subdir/SKILL.md).
+        """
         count = 0
 
-        for skill_dir in directory.iterdir():
-            if not skill_dir.is_dir():
-                continue
-
-            skill_file = skill_dir / "SKILL.md"
-            if skill_file.exists():
-                skill = Skill.from_file(skill_file)
-                if skill and skill.name:
-                    self._skills[skill.name] = skill
-                    count += 1
+        for item in directory.iterdir():
+            if item.is_dir():
+                skill_file = item / "SKILL.md"
+                if skill_file.exists():
+                    skill = Skill.from_file(skill_file)
+                    if skill and skill.name:
+                        self._skills[skill.name] = skill
+                        count += 1
+                else:
+                    for sub in item.iterdir():
+                        if sub.is_dir():
+                            sub_file = sub / "SKILL.md"
+                            if sub_file.exists():
+                                skill = Skill.from_file(sub_file)
+                                if skill and skill.name:
+                                    self._skills[skill.name] = skill
+                                    count += 1
 
         return count
 
@@ -229,21 +239,19 @@ def get_default_skill_dirs() -> list[Path]:
     2. ~/.openlaoke/skills (OpenLaoKe installed)
     3. ~/.config/opencode/skills (OpenCode) - highest priority
     4. ~/.opencode/skills (alternative OpenCode path)
+    5. openlaoke/skills (bundled research skills)
     """
     home = Path.home()
     dirs = []
 
-    # Load Claude first (lowest priority)
     claude_skills = home / ".claude" / "skills"
     if claude_skills.exists():
         dirs.append(claude_skills)
 
-    # Then OpenLaoKe installed skills
     openlaoke_skills = home / ".openlaoke" / "skills"
     if openlaoke_skills.exists():
         dirs.append(openlaoke_skills)
 
-    # OpenCode overrides (highest priority - these are the originals)
     opencode_config_skills = home / ".config" / "opencode" / "skills"
     if opencode_config_skills.exists():
         dirs.append(opencode_config_skills)
@@ -251,6 +259,10 @@ def get_default_skill_dirs() -> list[Path]:
     opencode_skills = home / ".opencode" / "skills"
     if opencode_skills.exists():
         dirs.append(opencode_skills)
+
+    bundled_skills = Path(__file__).parent.parent / "skills"
+    if bundled_skills.exists():
+        dirs.append(bundled_skills)
 
     return dirs
 
