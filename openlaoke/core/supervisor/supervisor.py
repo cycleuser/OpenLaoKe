@@ -117,6 +117,38 @@ class TaskSupervisor:
         requirements = []
         request_lower = request.lower()
 
+        if any(word in request_lower for word in ["research", "研究", "investigate", "调查", "survey"]):
+            requirements.extend(
+                [
+                    TaskRequirements(
+                        name="provenance_created",
+                        description="Provenance sidecar file must be created",
+                        check_type="provenance_check",
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="has_inline_citations",
+                        description="Output must have inline citations [1], [2], etc.",
+                        check_type="citation_check",
+                        critical=True,
+                    ),
+                    TaskRequirements(
+                        name="evidence_table",
+                        description="Must include evidence table with sources",
+                        check_type="contains",
+                        patterns=["| # |", "| Source |", "| URL |", "evidence table"],
+                        critical=False,
+                    ),
+                    TaskRequirements(
+                        name="verification_status",
+                        description="Must record verification status",
+                        check_type="contains",
+                        patterns=["PASS", "BLOCKED", "UNVERIFIED", "verification"],
+                        critical=True,
+                    ),
+                ]
+            )
+
         if any(word in request_lower for word in ["写", "write", "撰写", "创建"]) and any(
             word in request_lower for word in ["文章", "article", "paper"]
         ):

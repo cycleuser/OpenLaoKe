@@ -39,6 +39,12 @@ from openlaoke.commands.base import (
     VimCommand,
 )
 from openlaoke.commands.hyperauto_command import HyperAutoCommand
+from openlaoke.commands.research_commands import (
+    DeepResearchCommand,
+    LitReviewCommand,
+    OutputsCommand,
+    ReviewCommand,
+)
 from openlaoke.commands.scaffold_commands import (
     KnowledgeDownloadCommand,
     QuickStartCommand,
@@ -92,6 +98,10 @@ def register_all() -> None:
         VimCommand(),
         SkillCommand(),
         UseSkillCommand(),
+        DeepResearchCommand(),
+        LitReviewCommand(),
+        ReviewCommand(),
+        OutputsCommand(),
     ]
     for cmd in commands:
         _commands[cmd.name] = cmd
