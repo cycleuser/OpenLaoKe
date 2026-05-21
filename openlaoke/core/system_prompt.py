@@ -130,6 +130,11 @@ def build_compact_system_prompt(app_state: AppState, user_input: str = "") -> st
         f"Working directory: {app_state.get_cwd()}. "
         "If asked who you are, say you are OpenLaoKe, an AI coding assistant. "
         f"If asked about the OS, say {os_name}. "
+        "CRITICAL: Only use tools for file operations or running commands. "
+        "For greetings (hi, hello), questions about yourself (who are you, what can you do), "
+        "or simple conversation, respond DIRECTLY in text WITHOUT using any tools. "
+        "Do NOT use Glob/Read/Bash for conversational questions. "
+        "When a task is complete, output DONE on its own line to signal you are finished. "
         "Do NOT repeat yourself. Do NOT output the same content multiple times. "
         "Give specific, accurate answers only."
     )
