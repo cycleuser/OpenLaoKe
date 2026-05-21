@@ -329,6 +329,214 @@ class TerminalOutputCompressor:
         return "\n".join(result[:30])
 
 
+@dataclass
+class SmallModelGuard:
+    """Runtime guard for small model behavior during task execution.
+
+    Tracks and enforces limits on:
+    - Total tool calls per task
+    - Consecutive same-tool calls (loop detection)
+    - Repeated identical responses (stuck detection)
+    - Tool call format quality (parse failures -> corrective hints)
+    """
+
+    model_size: str = "small"
+    total_tool_calls: int = field(default=0)
+    max_tool_calls: int = field(default=0)
+    last_tool_name: str = ""
+    same_tool_streak: int = 0
+    max_same_tool_streak: int = 0
+    consecutive_parse_failures: int = 0
+    max_parse_failures: int = 4
+    last_response_hash: str = ""
+    response_repeat_count: int = 0
+    max_response_repeats: int = 3
+    task_tool_calls: int = 0
+    max_task_tool_calls: int = 0
+
+    def __post_init__(self) -> None:
+        limits = {"tiny": (12, 4, 15), "small": (20, 6, 25), "medium": (30, 8, 40), "large": (50, 12, 60)}
+        toks, streak, task = limits.get(self.model_size, (20, 6, 25))
+        self.max_tool_calls = toks
+        self.max_same_tool_streak = streak
+        self.max_task_tool_calls = task
+
+    def check_before_api_call(self) -> str | None:
+        if self.task_tool_calls >= self.max_task_tool_calls:
+            return (
+                f"Maximum tool calls ({self.max_task_tool_calls}) reached for this task. "
+                "Summarize what you've done and stop using tools."
+            )
+        return None
+
+    def check_after_api_call(self, content: str, tool_count: int) -> str | None:
+        content_hash = str(hash((content or "").strip()[:200]))
+        if content_hash == self.last_response_hash:
+            self.response_repeat_count += 1
+            if self.response_repeat_count >= self.max_response_repeats:
+                return (
+                    "You have repeated the same response. The task is not progressing. "
+                    "Either take a different approach with tools, or state that you cannot complete the task."
+                )
+        else:
+            self.last_response_hash = content_hash
+            self.response_repeat_count = 0
+
+        if not content or not content.strip():
+            return "Your response was empty. Provide text or use tools."
+
+        if len(content.strip()) < 3 and tool_count == 0:
+            return (
+                "Your response was too short and used no tools. "
+                "Either provide a proper text response or use tools."
+            )
+
+        return None
+
+    def notify_tool_call(self, tool_name: str) -> str | None:
+        self.total_tool_calls += 1
+        self.task_tool_calls += 1
+
+        if tool_name == self.last_tool_name:
+            self.same_tool_streak += 1
+            if self.same_tool_streak >= self.max_same_tool_streak:
+                return (
+                    f"You have called '{tool_name}' {self.same_tool_streak} times in a row. "
+                    "Try a different tool or summarize your findings."
+                )
+        else:
+            self.last_tool_name = tool_name
+            self.same_tool_streak = 1
+
+        if self.total_tool_calls >= self.max_tool_calls:
+            return (
+                f"Tool call limit ({self.max_tool_calls}) reached for this iteration. "
+                "Respond with text only."
+            )
+
+        return None
+
+    def notify_parse_failure(self, raw_content: str) -> str:
+        self.consecutive_parse_failures += 1
+        snippet = raw_content[:150].replace("\n", " ")
+        base = (
+            f"Your tool call format was incorrect. "
+            f'Use EXACTLY: <tool_call> <function=ToolName> <parameter=param> value </tool_call>\n'
+            f"Your output was: {snippet}\n"
+        )
+        if self.consecutive_parse_failures >= self.max_parse_failures:
+            base += (
+                "You have failed to format tool calls correctly multiple times. "
+                "Stop using tools and explain what you want to do in plain text."
+            )
+        return base
+
+    def notify_parse_success(self) -> None:
+        self.consecutive_parse_failures = 0
+
+    def reset_task(self) -> None:
+        self.task_tool_calls = 0
+        self.last_tool_name = ""
+        self.same_tool_streak = 0
+        self.consecutive_parse_failures = 0
+        self.last_response_hash = ""
+        self.response_repeat_count = 0
+
+
+@dataclass
+class ToolCallValidator:
+    """Post-hoc validation and correction of small model tool calls.
+
+    Inspired by Needle's grammar-constrained decoding, but operating
+    post-generation since we can't control GGUF model logits.
+    """
+
+    known_names: list[str] = field(default_factory=list)
+    name_schemas: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    _param_aliases: dict[str, str] = field(default_factory=lambda: {
+        "file": "file_path", "path": "file_path", "filename": "file_path",
+        "filepath": "file_path", "dest": "file_path", "target": "file_path",
+        "cmd": "command", "shell": "command", "run": "command", "exec": "command",
+        "code": "content", "text": "content", "body": "content", "data": "content",
+        "source": "content", "val": "content",
+        "pattern": "pattern", "glob": "pattern", "regex": "pattern",
+        "query": "query", "search": "query", "find": "query",
+        "old": "old_string", "old_text": "old_string", "before": "old_string",
+        "new": "new_string", "new_text": "new_string", "after": "new_string",
+        "seconds": "seconds", "duration": "seconds", "time": "seconds",
+        "url": "url", "link": "url", "address": "url",
+    })
+
+    def set_tools(self, tool_registry: Any) -> None:
+        from openlaoke.core.tool import Tool
+
+        tools: list[Tool] = tool_registry.get_all()
+        self.known_names = [t.name for t in tools]
+        for t in tools:
+            schema = t.get_input_schema()
+            if schema and "properties" in schema:
+                self.name_schemas[t.name] = schema
+
+    def _fuzzy_name(self, name: str) -> str | None:
+        name_lower = name.lower().strip()
+        for known in self.known_names:
+            if known.lower() == name_lower:
+                return known
+        for known in self.known_names:
+            if known.lower().startswith(name_lower[:3]) and len(name_lower) >= 3:
+                return known
+        return None
+
+    def _correct_params(self, tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        hints: list[str] = []
+        schema = self.name_schemas.get(tool_name, {})
+        schema_props = schema.get("properties", {})
+        schema_required = schema.get("required", [])
+
+        new_params: dict[str, Any] = {}
+        mapped_keys: set[str] = set()
+
+        for key, val in params.items():
+            key_lower = key.lower().strip()
+            if key_lower in schema_props:
+                new_params[key_lower] = val
+                mapped_keys.add(key_lower)
+            elif key_lower in self._param_aliases:
+                canonical = self._param_aliases[key_lower]
+                new_params[canonical] = val
+                mapped_keys.add(canonical)
+                hints.append(f"Corrected parameter '{key}' to '{canonical}'")
+            else:
+                new_params[key] = val
+                hints.append(f"Unknown parameter '{key}' for {tool_name}")
+
+        for req in schema_required:
+            if req not in mapped_keys and req not in new_params:
+                hints.append(f"MISSING required parameter '{req}' for {tool_name}")
+
+        return new_params, hints
+
+    def validate(self, tool_name: str, params: dict[str, Any]) -> tuple[str, dict[str, Any], str | None]:
+        corrected_name = self._fuzzy_name(tool_name) or tool_name
+        name_hint = None
+        if corrected_name != tool_name:
+            name_hint = f"Corrected tool name '{tool_name}' to '{corrected_name}'"
+
+        corrected_params, param_hints = self._correct_params(corrected_name, params)
+
+        hint = None
+        parts = []
+        if name_hint:
+            parts.append(name_hint)
+        if param_hints:
+            parts.append("; ".join(param_hints))
+        if parts:
+            hint = ". ".join(parts)
+
+        return corrected_name, corrected_params, hint
+
+
 def apply_structured_thinking_prefix(task_type: str) -> str:
     """Generate structured internal thinking prompt before coding output.
 
@@ -381,6 +589,16 @@ def estimate_model_size_from_name(model_name: str) -> str:
         "qwen2.5-14b": "medium",
         "qwen2.5-32b": "large",
         "qwen2.5-72b": "large",
+        "qwen3-0.6b": "tiny",
+        "qwen3-1.7b": "tiny",
+        "qwen3-4b": "small",
+        "qwen3-8b": "small",
+        "qwen3.5-0.8b": "tiny",
+        "qwen3.5-1.7b": "tiny",
+        "qwen3.5-4b": "small",
+        "qwen3.5-8b": "small",
+        "qwen3.5-14b": "medium",
+        "qwen3.5-32b": "large",
         "llama-3.2-1b": "tiny",
         "llama-3.2-3b": "small",
         "llama-3.1-8b": "medium",
@@ -402,8 +620,8 @@ def estimate_model_size_from_name(model_name: str) -> str:
             return size
 
     size_patterns = [
-        (r"0\.6b|0\.6\b|600m", "tiny"),
-        (r"\b1b\b|1\.5b\b|\b2b\b|2\.5b\b|\b3b\b", "tiny"),
+        (r"0\.[5-9]b\b|0\.[5-9]\b|600m|500m|700m|800m", "tiny"),
+        (r"\b1b\b|1\.[0-9]b\b|\b2b\b|2\.[0-9]b\b|\b3b\b", "tiny"),
         (r"\b4b\b|\b5b\b|\b6b\b|\b7b\b|\b8b\b|\b9b\b", "small"),
         (r"\b10b\b|\b11b\b|\b12b\b|\b13b\b|\b14b\b|\b15b\b|\b16b\b|\b18b\b|\b20b\b", "medium"),
         (r"\b30b\b|\b32b\b|\b34b\b|\b40b\b|\b48b\b|\b60b\b|\b65b\b|\b70b\b|\b72b\b", "large"),
@@ -420,15 +638,20 @@ def get_small_model_guidance(model_size: str) -> str:
     """Return model-size-specific guidance for the system prompt."""
     if model_size == "tiny":
         return (
-            "You are a small model. Keep responses concise. "
-            "Focus on one file at a time. "
-            "Use tools one at a time. "
-            "Always read a file before editing it. "
-            "Keep code changes minimal and targeted."
+            "You are a tiny 0.8B model. Work ONE step at a time.\n"
+            "RULES:\n"
+            "1. For questions: answer directly in 1-3 sentences. NO tools.\n"
+            "2. For tasks: use ONE tool per response. Output DONE on its own line when finished.\n"
+            "3. Tool format: 'Write file_path=x content=...' or 'Bash command=...'\n"
+            "4. Read a file BEFORE editing it.\n"
+            "5. Keep responses under 150 words.\n"
+            "6. If you fail 3 times, explain the problem in text and output DONE.\n"
+            "NEVER chain tools. NEVER describe what you'll do - just DO it."
         )
     elif model_size == "small":
         return (
-            "You are a medium-small model. "
+            "You are a small model. "
+            "Answer simple questions directly without tools. "
             "Read files before editing. "
             "Focus on one task at a time. "
             "Keep responses focused and concise."

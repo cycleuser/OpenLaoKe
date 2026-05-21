@@ -70,11 +70,15 @@ class REPL:
         from openlaoke.core.memory import get_memory_manager
         from openlaoke.core.small_model_optimizations import (
             ReadLoopTracker,
+            SmallModelGuard,
             TerminalOutputCompressor,
+            ToolCallValidator,
         )
 
         self._read_loop_tracker = ReadLoopTracker()
+        self._guard: SmallModelGuard | None = None
         self._output_compressor = TerminalOutputCompressor()
+        self._tool_validator = ToolCallValidator()
         self._lesson_tracker = BitterLessonTracker()
         self._hook_system = HookRegistry.get()
         self._memory = get_memory_manager()
@@ -86,6 +90,7 @@ class REPL:
 
         register_all()
         register_all_tools(self.registry)
+        self._tool_validator.set_tools(self.registry)
 
     def _c(self, name: str) -> str:
         return self._theme.color(name)
@@ -516,6 +521,10 @@ class REPL:
             from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
 
             model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+            if self._guard is None or self._guard.model_size != model_size:
+                from openlaoke.core.small_model_optimizations import SmallModelGuard
+
+                self._guard = SmallModelGuard(model_size=model_size)
             max_tokens_map = {
                 "tiny": 4096,
                 "small": 8192,
@@ -586,15 +595,42 @@ class REPL:
 
             needs_tool_hint = is_local_builtin or self._is_ollama_provider()
             if needs_tool_hint:
+                import re
+
+                _coding_triggers = re.compile(
+                    r"(write|code|implement|create|build|fix|debug|edit|modify|change|update|"
+                    r"add|remove|delete|refactor|test|run|install|deploy|commit|push|pull|merge|"
+                    r"search|find|check|look|read|show|list|explain|how|make|generate)",
+                    re.IGNORECASE,
+                )
+                _conversation_only = re.compile(
+                    r"^(hi|hello|hey|who are you|what can you do|你会做什么|你能做什么|"
+                    r"你是谁|你好|谢谢|thank|help|what is|what are|天气|时间|日期)$",
+                    re.IGNORECASE,
+                )
                 for i in range(len(messages) - 1, -1, -1):
                     if messages[i].get("role") == "user":
-                        ti = (
-                            "\n\n[Use tools: output <tool_call> <function=FUNC> <parameter=KEY> value "
-                            "</tool_call> for each action. Do NOT describe, just DO. "
-                            "Available: Write(file_path,content) Read(file_path) Glob(pattern) Bash(command)]"
-                        )
-                        if ti not in messages[i].get("content", ""):
-                            messages[i]["content"] = messages[i].get("content", "") + ti
+                        content = messages[i].get("content", "")
+                        stripped = content.strip()
+                        if _conversation_only.match(stripped) or (
+                            len(stripped) < 30 and not _coding_triggers.search(stripped)
+                        ):
+                            break
+                        if model_size == "tiny":
+                            ti = (
+                                "\n\n[Use ONE tool now. Simple format: "
+                                "Write file_path=name content=code  OR  "
+                                "Bash command=cmd  OR  Read file_path=name  OR  "
+                                "Glob pattern=*.py. Do NOT describe, just OUTPUT the tool line.]"
+                            )
+                        else:
+                            ti = (
+                                "\n\n[Use tools: output <tool_call> <function=FUNC> <parameter=KEY> value "
+                                "</tool_call> for each action. Do NOT describe, just DO. "
+                                "Available: Write(file_path,content) Read(file_path) Glob(pattern) Bash(command)]"
+                            )
+                        if ti not in content:
+                            messages[i]["content"] = content + ti
                         break
 
             from openlaoke.core.small_model_optimizations import sanitize_tool_schema
@@ -607,6 +643,13 @@ class REPL:
                 self.console.print(f"[{self._c('muted')}]Insomnia iteration {iteration}[/]")
 
             try:
+                if self._guard:
+                    limit_msg = self._guard.check_before_api_call()
+                    if limit_msg:
+                        messages.append({"role": "user", "content": limit_msg})
+                        if self._guard.task_tool_calls >= self._guard.max_task_tool_calls:
+                            break
+
                 if not self.api:
                     return
 
@@ -689,11 +732,23 @@ class REPL:
                         )
                         break
 
+                    if self._guard:
+                        quality_msg = self._guard.check_after_api_call(
+                            content_text, len(tool_uses)
+                        )
+                        if quality_msg:
+                            messages.append({"role": "user", "content": quality_msg})
+
                     if content_text and not tool_uses and "<tool_call>" in content_text:
                         parsed_tool_uses = self._parse_inline_tool_calls(content_text)
                         if parsed_tool_uses:
+                            if self._guard:
+                                self._guard.notify_parse_success()
                             tool_uses = parsed_tool_uses
                             content_text = self._strip_tool_calls(content_text)
+                        elif self._guard:
+                            parse_msg = self._guard.notify_parse_failure(content_text)
+                            messages.append({"role": "user", "content": parse_msg})
 
                     is_plan_only = (
                         content_text
@@ -706,15 +761,19 @@ class REPL:
                             f"[{self._c('muted')}](auto-retry: requesting tool calls...)[/]"
                         )
                         plan_retry_count += 1
+                        if model_size == "tiny":
+                            retry_content = (
+                                "Do NOT list steps. Output ONE tool line NOW. "
+                                "Format: Write file_path=x content=code  OR  Bash command=cmd  OR  Read file_path=x"
+                            )
+                        else:
+                            retry_content = (
+                                "Do NOT describe steps. Use tools NOW. "
+                                "Output <tool_call> format immediately. "
+                                "Start with Read or Glob to explore the project."
+                            )
                         messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Do NOT describe steps. Use tools NOW. "
-                                    "Output <tool_call> format immediately. "
-                                    "Start with Read or Glob to explore the project."
-                                ),
-                            }
+                            {"role": "user", "content": retry_content}
                         )
                         continue
 
@@ -761,14 +820,32 @@ class REPL:
                         messages.append(assistant_msg_dict)
 
                     if not tool_uses:
+                        if content_text.strip().upper().startswith("DONE") or \
+                           "\nDONE" in content_text.upper() or \
+                           content_text.strip().upper() == "DONE":
+                            self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                         break
 
                     for tool_use in tool_uses:
                         if not self._running:
                             break
 
+                        corrected_name, corrected_params, val_hint = (
+                            self._tool_validator.validate(tool_use.name, tool_use.input)
+                        )
+                        if corrected_name != tool_use.name or corrected_params != tool_use.input:
+                            tool_use.name = corrected_name
+                            tool_use.input = corrected_params
+                            if val_hint:
+                                messages.append({"role": "user", "content": val_hint})
+
                         tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
                         failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+
+                        if self._guard:
+                            loop_msg = self._guard.notify_tool_call(tool_use.name)
+                            if loop_msg:
+                                messages.append({"role": "user", "content": loop_msg})
 
                         if failed_tool_calls[tool_key] > 3:
                             self.console.print(
@@ -817,6 +894,14 @@ class REPL:
                     finally:
                         spinner.stop()
 
+                    if self._guard:
+                        content_for_check = response.content or ""
+                        quality_msg = self._guard.check_after_api_call(
+                            content_for_check, len(response.tool_uses)
+                        )
+                        if quality_msg:
+                            messages.append({"role": "user", "content": quality_msg})
+
                     self.app_state.accumulate_tokens(usage)
                     self.app_state.accumulate_cost(cost)
 
@@ -864,14 +949,31 @@ class REPL:
                     messages.append(response_dict)
 
                     if not response.tool_uses:
+                        rc = (response.content or "").strip().upper()
+                        if rc.startswith("DONE") or "\nDONE" in rc:
+                            self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                         break
 
                     for tool_use in response.tool_uses:
                         if not self._running:
                             break
 
+                        corrected_name, corrected_params, val_hint = (
+                            self._tool_validator.validate(tool_use.name, tool_use.input)
+                        )
+                        if corrected_name != tool_use.name or corrected_params != tool_use.input:
+                            tool_use.name = corrected_name
+                            tool_use.input = corrected_params
+                            if val_hint:
+                                messages.append({"role": "user", "content": val_hint})
+
                         tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
                         failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+
+                        if self._guard:
+                            loop_msg = self._guard.notify_tool_call(tool_use.name)
+                            if loop_msg:
+                                messages.append({"role": "user", "content": loop_msg})
 
                         if failed_tool_calls[tool_key] > 3:
                             self.console.print(
@@ -1121,15 +1223,38 @@ class REPL:
         if not all_tools:
             return ""
 
+        essential_order = [
+            "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+            "ListDirectory", "TodoWrite", "WebSearch", "WebFetch",
+            "TaskKill", "Agent", "Question", "Git", "Batch",
+            "Sleep", "MemoryStore", "MemoryRecall", "Plan",
+        ]
+        ordered = []
+        for name in essential_order:
+            for t in all_tools:
+                if getattr(t, "name", "") == name:
+                    ordered.append(t)
+                    break
+        for t in all_tools:
+            if t not in ordered:
+                ordered.append(t)
+
         lines = [
-            "\n\n## Available Tools — USE THEM NOW, do NOT describe what you'll do",
-            "Output tool calls in this EXACT format on their own line:",
-            "<tool_call> <function=ToolName> <parameter=param1> value1 <parameter=param2> value2 </tool_call>",
-            "You MUST output real tool calls, not just say you will. Start with Read or Glob to explore.",
+            "\n\n## Tools Available (use ONLY when needed for files/commands)",
+            "For questions, greetings, or conversation: respond directly WITHOUT tools.",
+            "Output ONE tool per line using SIMPLE format:",
+            "Write file_path=filename content=your code here",
+            "Bash command=your command here",
+            "Read file_path=filename",
+            "Glob pattern=*.py",
+            "Edit file_path=file old_string=old new_string=new",
+            "Grep pattern=keyword",
+            "",
+            "Or use XML format: <tool_call> <function=Name> <parameter=key> value </tool_call>",
             "",
         ]
-        max_tools = min(len(all_tools), 8)
-        for t in all_tools[:max_tools]:
+        max_tools = min(len(ordered), 10)
+        for t in ordered[:max_tools]:
             name = getattr(t, "name", "?")
             desc = (getattr(t, "description", "") or "")[:50]
             lines.append(f"- {name}: {desc}")
@@ -1141,11 +1266,47 @@ class REPL:
         import uuid
 
         tool_uses: list[ToolUseBlock] = []
-        pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
+        _tool_aliases: dict[str, str] = {
+            "write": "Write", "read": "Read", "edit": "Edit", "bash": "Bash",
+            "glob": "Glob", "grep": "Grep", "ls": "ListDirectory",
+            "list": "ListDirectory", "dir": "ListDirectory",
+        }
+
+        def _clean(val: str) -> str:
+            val = val.strip().rstrip(",").rstrip(";")
+            if (val.startswith('"') and val.endswith('"')) or \
+               (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            return val
+
+        def _parse_simple_line(line: str) -> tuple[str, dict[str, str]] | None:
+            parts = line.strip().split()
+            if not parts:
+                return None
+            raw_name = parts[0]
+            name = _tool_aliases.get(raw_name, raw_name)
+            name = name[0].upper() + name[1:] if name[0].islower() else name
+
+            params: dict[str, str] = {}
+            remaining = " ".join(parts[1:])
+            kv_pattern = re.compile(r"(\w[\w_]*)\s*=\s*")
+            pos = 0
+            last_key = None
+            for km in kv_pattern.finditer(remaining):
+                if last_key:
+                    params[last_key] = _clean(remaining[pos:km.start()])
+                last_key = km.group(1)
+                pos = km.end()
+            if last_key:
+                params[last_key] = _clean(remaining[pos:])
+            return (name, params) if name and params else None
+
+        has_xml_format = "<tool_call>" in content
+        pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
         for block in pattern.findall(content):
             tool_name = None
-            params: dict[str, Any] = {}
+            params = {}
 
             fn_match = re.search(r"<function=(\w+)>", block)
             if fn_match:
@@ -1161,7 +1322,7 @@ class REPL:
                         if val:
                             params[key] = val
                         i += 2
-            else:
+            elif not tool_uses:
                 alt_match = re.match(r"(\w+)\{(.+)\}", block.strip(), re.DOTALL)
                 if alt_match:
                     tool_name = alt_match.group(1)
@@ -1186,18 +1347,46 @@ class REPL:
                         input=params,
                     )
                 )
+
+        if not tool_uses and not has_xml_format:
+            for line in content.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                parsed = _parse_simple_line(line)
+                if parsed:
+                    raw_name = parsed[0]
+                    if raw_name and (raw_name[0].isupper() or raw_name in _tool_aliases):
+                        tool_uses.append(
+                            ToolUseBlock(
+                                id=f"call_{uuid.uuid4().hex[:12]}",
+                                name=raw_name,
+                                input=parsed[1],
+                            )
+                        )
+
         return tool_uses
 
     @staticmethod
     def _strip_tool_calls(content: str) -> str:
         import re
 
-        return re.sub(
+        content = re.sub(
             r"<tool_call>.*?</tool_call>",
             "",
             content,
             flags=re.DOTALL,
-        ).strip()
+        )
+        for tool_name in ["Write", "Read", "Edit", "Bash", "Glob", "Grep",
+                          "ListDirectory", "write", "read", "edit", "bash",
+                          "glob", "grep", "ls"]:
+            content = re.sub(
+                rf"^{tool_name}\s+\w[\w_]*\s*=.*$",
+                "",
+                content,
+                flags=re.MULTILINE,
+            )
+        return content.strip()
 
     def _is_ollama_provider(self) -> bool:
         cfg = self.app_state.multi_provider_config
