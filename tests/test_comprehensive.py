@@ -1578,9 +1578,11 @@ class TestCrossProjectLessons:
 
 class TestModelAssessment:
     def test_known_model_tiers(self):
-        from openlaoke.core.model_assessment.types import KNOWN_MODEL_TIERS
+        from openlaoke.core.model_assessment.types import classify_model_tier, ModelTier
 
-        assert "claude-3-opus" in KNOWN_MODEL_TIERS or len(KNOWN_MODEL_TIERS) > 0
+        assert classify_model_tier("claude-sonnet-4-20250514") == ModelTier.TIER_1_ADVANCED
+        assert classify_model_tier("llama-3.2-1b") == ModelTier.TIER_5_LIMITED
+        assert classify_model_tier("unknown-model") == ModelTier.TIER_3_MODERATE
 
     def test_tier_enum(self):
         from openlaoke.core.model_assessment.types import ModelTier

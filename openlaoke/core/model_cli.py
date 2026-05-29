@@ -296,7 +296,7 @@ async def search_modelscope(query: str) -> None:
     if not results:
         console.print("[yellow]No GGUF models found.[/yellow]")
         console.print(
-            "[dim]Try different search terms like 'qwen3', 'qwen2.5', 'llama', 'gemma', 'phi', etc.[/dim]"
+            "[dim]Try different search terms like 'llama', 'gemma', 'qwen', 'phi', 'mistral', etc.[/dim]"
         )
         return
 
