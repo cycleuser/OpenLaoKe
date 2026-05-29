@@ -74,6 +74,7 @@ class REPL:
             TerminalOutputCompressor,
             ToolCallValidator,
         )
+        from openlaoke.core.world_sensor import SensorData, sense_world
 
         self._read_loop_tracker = ReadLoopTracker()
         self._guard: SmallModelGuard | None = None
@@ -85,12 +86,15 @@ class REPL:
         self._memory.load()
         self._file_state = FileStateStore()
         self._git_store: GitStore | None = None
+        self._world_sensor: SensorData | None = None
 
         self._register_memory_hooks()
 
         register_all()
         register_all_tools(self.registry)
         self._tool_validator.set_tools(self.registry)
+
+        self._sense_world()
 
     def _c(self, name: str) -> str:
         return self._theme.color(name)
@@ -671,7 +675,7 @@ class REPL:
                     status_text = Text(f"  [{self._c('primary')}]0 tokens[/]")
 
                     try:
-                        with Live(status_text, console=self.console, refresh_per_second=4) as live:
+                        with Live(status_text, console=self.console, refresh_per_second=10, transient=True) as live:
                             async for chunk in self.api.stream_message(
                                 system_prompt=system_prompt,
                                 messages=messages,
@@ -705,11 +709,20 @@ class REPL:
 
                                 elapsed = max(time.time() - start_time, 0.01)
                                 tps = token_count / elapsed
-                                live.update(
-                                    Text(
-                                        f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
+                                if content_text:
+                                    preview = content_text[-400:]
+                                    live.update(
+                                        Text(
+                                            f"  [{self._c('muted')}]{preview}[/]\n"
+                                            f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
+                                        )
                                     )
-                                )
+                                else:
+                                    live.update(
+                                        Text(
+                                            f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
+                                        )
+                                    )
                     except httpx.HTTPStatusError as e:
                         stream_error = f"API {e.response.status_code}"
                     except Exception as e:
@@ -778,9 +791,7 @@ class REPL:
                         continue
 
                     if content_text:
-                        brief = content_text[:200].replace("\n", " ").strip()
-                        if brief:
-                            self.console.print(f"  [{self._c('muted')}]{brief}...[/]")
+                        self._render_response(content_text)
 
                     for tu in tool_uses:
                         file_path = tu.input.get("file_path", "")
@@ -911,9 +922,7 @@ class REPL:
                         )
 
                     if response.content:
-                        brief = response.content[:200].replace("\n", " ").strip()
-                        if brief:
-                            self.console.print(f"  [{self._c('muted')}]{brief}...[/]")
+                        self._render_response(response.content)
 
                     if self._hook_system.has_hooks("message_transform"):
                         from openlaoke.core.hook_system import HookInput, HookOutput
@@ -1157,6 +1166,17 @@ class REPL:
             self._print_tool_result(rendered, tool_use.name, result.is_error)
 
         return result
+
+    def _render_response(self, content: str) -> None:
+        """Render assistant response with proper terminal formatting."""
+        if not content.strip():
+            return
+        try:
+            from rich.markdown import Markdown
+            md = Markdown(content, code_theme="monokai")
+            self.console.print(md)
+        except Exception:
+            self.console.print(content)
 
     async def _ask_permission(self, tool_name: str, tool_input: dict[str, Any], tool: Tool) -> bool:
         prompt_text = Text()

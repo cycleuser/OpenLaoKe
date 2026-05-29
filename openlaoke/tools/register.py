@@ -188,6 +188,36 @@ _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
         "Search memories by type",
         "memory search list type",
     ),
+    "ContractCreate": (
+        "openlaoke.core.contract_tools",
+        "ContractCreateTool",
+        "Declare a Definition-of-Done contract with testable assertions",
+        "contract done assertion verify",
+    ),
+    "ContractAssertPass": (
+        "openlaoke.core.contract_tools",
+        "ContractAssertPassTool",
+        "Mark a contract assertion as passed with evidence",
+        "contract pass assertion evidence",
+    ),
+    "ContractAssertFail": (
+        "openlaoke.core.contract_tools",
+        "ContractAssertFailTool",
+        "Mark a contract assertion as failed with evidence",
+        "contract fail assertion evidence",
+    ),
+    "ContractAssertSkip": (
+        "openlaoke.core.contract_tools",
+        "ContractAssertSkipTool",
+        "Mark a contract assertion as skipped (out of scope)",
+        "contract skip assertion scope",
+    ),
+    "ContractStatus": (
+        "openlaoke.core.contract_tools",
+        "ContractStatusTool",
+        "Show active contract assertions, states, and blockers",
+        "contract status assertion list",
+    ),
 }
 
 
