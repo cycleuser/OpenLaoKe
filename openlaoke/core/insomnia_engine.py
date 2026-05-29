@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from openlaoke.core.state import AppState
@@ -374,8 +377,8 @@ class InsomniaEngine:
             }
             with open(self.STATE_PATH, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2, default=str)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to save insomnia state: %s", e)
 
     def _load_state(self) -> None:
         """Load engine state from disk."""

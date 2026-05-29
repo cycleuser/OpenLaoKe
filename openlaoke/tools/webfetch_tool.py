@@ -1,14 +1,64 @@
-"""WebFetch tool - fetch content from URLs."""
+"""WebFetch tool - fetch content from URLs with SSRF protection."""
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
+
+BLOCKED_HOSTS = {
+    "169.254.169.254",  # AWS metadata
+    "metadata.google.internal",  # GCP metadata
+    "100.100.100.200",  # Alibaba Cloud metadata
+    "instance-data",  # EC2 metadata
+    "0.0.0.0",
+}
+
+BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> tuple[bool, str]:
+    """Validate URL is safe to fetch (SSRF protection)."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Invalid URL format"
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "No hostname in URL"
+
+    if hostname in BLOCKED_HOSTS:
+        return False, f"Blocked internal host: {hostname}"
+
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+        except Exception:
+            return True, ""
+
+    for net in BLOCKED_NETWORKS:
+        if addr in net:
+            return False, f"Blocked private network: {hostname}"
+    return True, ""
 
 
 class WebFetchInput(BaseModel):
@@ -50,6 +100,14 @@ class WebFetchTool(Tool):
 
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
+
+        safe, reason = _is_safe_url(url)
+        if not safe:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Security: {reason}",
+                is_error=True,
+            )
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:

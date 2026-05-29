@@ -11,6 +11,7 @@ Improved with:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import time
@@ -30,6 +31,7 @@ from openlaoke.core.state import AppState
 from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
+from openlaoke.core.world_sensor import SensorData, sense_world
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
     AssistantMessage,
@@ -53,6 +55,7 @@ class REPL:
         self.registry = ToolRegistry()
         self.api: MultiProviderClient | None = None
         self._running = False
+        self._last_thinking: str = ""
         self._active_tasks: set[asyncio.Task] = set()
         self.multi_provider_config: MultiProviderConfig | None = None
         self.app_config: Any = None
@@ -74,7 +77,6 @@ class REPL:
             TerminalOutputCompressor,
             ToolCallValidator,
         )
-        from openlaoke.core.world_sensor import SensorData, sense_world
 
         self._read_loop_tracker = ReadLoopTracker()
         self._guard: SmallModelGuard | None = None
@@ -130,6 +132,11 @@ class REPL:
             priority=5,
             plugin_name="memory",
         )
+
+    def _sense_world(self) -> None:
+        """Collect environment context for the AI's world awareness."""
+        with contextlib.suppress(Exception):
+            self._world_sensor = sense_world()
 
     async def run(self) -> None:
         self._running = True
@@ -306,6 +313,8 @@ class REPL:
 
         self.app_state.is_running = True
         self.app_state.set_error(None)
+
+        self._sense_world()
 
         if self.app_state.local_mode:
             self.supervisor.parse_request(user_input)
@@ -560,11 +569,20 @@ class REPL:
                     if msg.get("role") == "user":
                         user_input = msg.get("content", "")
                         break
-                system_prompt = build_compact_system_prompt(self.app_state, user_input)
+                world_ctx = ""
+                if self._world_sensor:
+                    world_ctx = self._world_sensor.to_summary()
+                system_prompt = build_compact_system_prompt(
+                    self.app_state, user_input, world_context=world_ctx
+                )
             else:
+                world_ctx = ""
+                if self._world_sensor:
+                    world_ctx = self._world_sensor.to_context_block()
                 system_prompt = build_system_prompt(
                     self.app_state,
                     self.registry.get_all_for_prompt(),
+                    world_context=world_ctx,
                 )
 
             tool_list = self._build_tool_list_for_small_model()
@@ -672,7 +690,7 @@ class REPL:
                     token_count = 0
                     stream_error: str | None = None
                     start_time = time.time()
-                    status_text = Text(f"  [{self._c('primary')}]0 tokens[/]")
+                    status_text = self._build_streaming_display("", 0, 0.0, 0.0)
 
                     try:
                         with Live(status_text, console=self.console, refresh_per_second=10, transient=True) as live:
@@ -709,20 +727,11 @@ class REPL:
 
                                 elapsed = max(time.time() - start_time, 0.01)
                                 tps = token_count / elapsed
-                                if content_text:
-                                    preview = content_text[-400:]
-                                    live.update(
-                                        Text(
-                                            f"  [{self._c('muted')}]{preview}[/]\n"
-                                            f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
-                                        )
+                                live.update(
+                                    self._build_streaming_display(
+                                        content_text, token_count, tps, elapsed
                                     )
-                                else:
-                                    live.update(
-                                        Text(
-                                            f"  [{self._c('primary')}]{token_count} tokens ({tps:.0f} t/s)[/]"
-                                        )
-                                    )
+                                )
                     except httpx.HTTPStatusError as e:
                         stream_error = f"API {e.response.status_code}"
                     except Exception as e:
@@ -917,9 +926,21 @@ class REPL:
                     self.app_state.accumulate_cost(cost)
 
                     if response.thinking:
-                        self.console.print(
-                            f"[{self._c('muted')} italic]Thinking: {response.thinking}[/]"
-                        )
+                        self._last_thinking = response.thinking
+                        self.app_state.last_thinking = response.thinking
+                        thinking_lines = response.thinking.split("\n")
+                        max_preview_lines = 5
+                        if len(thinking_lines) > max_preview_lines:
+                            preview = "\n".join(thinking_lines[:max_preview_lines])
+                            remaining = len(thinking_lines) - max_preview_lines
+                            self.console.print(
+                                f"[{self._c('muted')} italic]Thinking:[/]\n{preview}\n"
+                                f"[{self._c('muted')} dim]  ... ({remaining} more lines, /thinking to expand)[/]"
+                            )
+                        else:
+                            self.console.print(
+                                f"[{self._c('muted')} italic]Thinking: {response.thinking}[/]"
+                            )
 
                     if response.content:
                         self._render_response(response.content)
@@ -1166,6 +1187,43 @@ class REPL:
             self._print_tool_result(rendered, tool_use.name, result.is_error)
 
         return result
+
+    def _build_streaming_display(
+        self, content: str, tokens: int, tps: float, elapsed: float
+    ) -> Any:
+        from rich.box import ROUNDED
+        from rich.console import Group
+        from rich.panel import Panel
+        from rich.text import Text
+
+        visible_lines = 8
+
+        if content:
+            lines = content.split("\n")
+            if len(lines) > visible_lines:
+                shown = lines[-visible_lines:]
+                body = "\n".join(shown)
+                hidden = len(lines) - visible_lines
+                body += f"\n[{self._c('muted')}]+ {hidden} more lines[/]"
+            else:
+                body = content
+        else:
+            body = f"[{self._c('muted')}]...[/]"
+
+        panel = Panel(
+            Text.from_markup(body, justify="left"),
+            title=f"[{self._c('muted')}]Streaming[/]",
+            border_style=self._c("muted"),
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+
+        counter = Text()
+        counter.append(f"  [{self._c('primary')}]{tokens} tokens[/]")
+        if tps > 0:
+            counter.append(f" [{self._c('muted')}]· {tps:.0f} t/s · {elapsed:.1f}s[/]")
+
+        return Group(panel, counter)
 
     def _render_response(self, content: str) -> None:
         """Render assistant response with proper terminal formatting."""

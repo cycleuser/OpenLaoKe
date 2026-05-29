@@ -95,17 +95,24 @@ class LocalModelManager:
         self._load_custom_models_registry()
 
     def _load_custom_models_registry(self) -> None:
-        """Load custom models from the persistent JSON registry."""
+        """Load custom models from the persistent JSON registry.
+
+        Automatically cleans up entries whose model files no longer exist.
+        """
         registry_path = os.path.join(self.model_dir, "custom_models.json")
         if not os.path.exists(registry_path):
             return
         try:
             with open(registry_path) as f:
                 custom_models: dict[str, dict[str, Any]] = json.load(f)
+            stale: list[str] = []
             for model_id, model_data in custom_models.items():
                 if model_id in self._models:
                     continue
                 filepath = os.path.join(self.model_dir, str(model_data["filename"]))
+                if not os.path.exists(filepath):
+                    stale.append(model_id)
+                    continue
                 self._models[model_id] = ModelInfo(
                     model_id=str(model_data["model_id"]),
                     name=str(model_data["name"]),
@@ -115,8 +122,13 @@ class LocalModelManager:
                     description=str(model_data.get("description", "")),
                     modelscope_id=str(model_data.get("modelscope_id", "")),
                     tags=list(model_data.get("tags", [])),
-                    downloaded=os.path.exists(filepath),
+                    downloaded=True,
                 )
+            if stale:
+                for sid in stale:
+                    del custom_models[sid]
+                with open(registry_path, "w") as f:
+                    json.dump(custom_models, f, indent=2)
         except (json.JSONDecodeError, KeyError, TypeError):
             pass
 
@@ -379,12 +391,11 @@ class LocalModelManager:
         return False
 
     def get_default_model(self) -> str | None:
-        """Get the first downloaded model, or recommend qwen3:0.6b."""
+        """Get the first downloaded model, or None if none downloaded."""
         for model in self._models.values():
             if model.downloaded:
                 return model.model_id
-
-        return "qwen3:0.6b"
+        return None
 
     def get_model_path(self, model_id: str) -> str | None:
         """Get the file path for a model.

@@ -26,12 +26,15 @@ Example configurations:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from openlaoke.core.state import AppState
@@ -287,8 +290,8 @@ class DualModelConfigManager:
                 if "active_config" in data:
                     self.active_config_name = data["active_config"]
 
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load dual model configs: %s", e)
 
     def _save_user_configs(self) -> None:
         """Save user-defined configurations."""
@@ -307,8 +310,8 @@ class DualModelConfigManager:
             with open(config_file, "w") as f:
                 json.dump(data, f, indent=2)
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to save dual model config: %s", e)
 
     def get_config(self, name: str | None = None) -> DualModelConfig | None:
         """Get a configuration by name."""

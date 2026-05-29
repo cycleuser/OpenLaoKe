@@ -10,7 +10,11 @@ if TYPE_CHECKING:
     from openlaoke.core.state import AppState
 
 
-def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> str:
+def build_system_prompt(
+    app_state: AppState,
+    tools_description: list[dict],
+    world_context: str = "",
+) -> str:
     """Build the system prompt sent to the model."""
     parts = []
 
@@ -19,6 +23,9 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         "software engineering tasks. You can read and write files, run shell commands, "
         "search codebases, and spawn sub-agents for parallel work.\n"
     )
+
+    if world_context:
+        parts.append(f"## Current Context\n{world_context}\n")
 
     parts.append(
         "## Core Principles\n"
@@ -58,6 +65,15 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
         "- Bash tool: requires 'command'\n"
         "- Read tool: requires 'file_path'\n"
         "Never omit required parameters. If you're unsure about a parameter, ask the user.\n"
+    )
+
+    parts.append(
+        "## Web Research\n"
+        "- You have internet access: use WebSearch to find current information and WebFetch to read pages\n"
+        "- Use WebSearch for: weather, news, documentation, version info, API references, or any factual lookup\n"
+        "- ALWAYS search the web rather than guessing or inventing facts you're not sure about\n"
+        "- Do NOT invent freshness-sensitive facts (weather, prices, dates, versions) when you can search\n"
+        "- When searching, summarize findings and cite source URLs\n"
     )
 
     parts.append(
@@ -118,7 +134,11 @@ def build_system_prompt(app_state: AppState, tools_description: list[dict]) -> s
     return "\n".join(parts)
 
 
-def build_compact_system_prompt(app_state: AppState, user_input: str = "") -> str:
+def build_compact_system_prompt(
+    app_state: AppState,
+    user_input: str = "",
+    world_context: str = "",
+) -> str:
     """Build a minimal system prompt for small local models with limited context."""
     import platform
 
@@ -128,12 +148,18 @@ def build_compact_system_prompt(app_state: AppState, user_input: str = "") -> st
         "You help users with programming tasks: writing code, debugging, explaining concepts. "
         "Be concise and direct. Always answer in the user's language. "
         f"Working directory: {app_state.get_cwd()}. "
+    )
+    if world_context:
+        base += f"Current context: {world_context.replace(chr(10), ' | ')}. "
+    base += (
         "If asked who you are, say you are OpenLaoKe, an AI coding assistant. "
         f"If asked about the OS, say {os_name}. "
         "CRITICAL: Only use tools for file operations or running commands. "
         "For greetings (hi, hello), questions about yourself (who are you, what can you do), "
         "or simple conversation, respond DIRECTLY in text WITHOUT using any tools. "
         "Do NOT use Glob/Read/Bash for conversational questions. "
+        "IMPORTANT: You have WebSearch for web queries (weather, news, docs, facts). "
+        "ALWAYS search the web instead of guessing or saying you don't know. "
         "When a task is complete, output DONE on its own line to signal you are finished. "
         "Do NOT repeat yourself. Do NOT output the same content multiple times. "
         "Give specific, accurate answers only."

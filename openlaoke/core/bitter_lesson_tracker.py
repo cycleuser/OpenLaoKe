@@ -14,10 +14,13 @@ This module implements a self-correcting system that:
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -237,8 +240,8 @@ class BitterLessonTracker:
                         last_updated=lesson_data.get("last_updated", time.time()),
                     )
                 self.disabled_strategies = set(data.get("disabled_strategies", []))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load lessons from %s: %s", self._data_dir, e)
 
     def save(self) -> None:
         try:
@@ -261,5 +264,5 @@ class BitterLessonTracker:
                 "disabled_strategies": list(self.disabled_strategies),
             }
             (self._data_dir / "lessons.json").write_text(json.dumps(data, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to save lessons to %s: %s", self._data_dir, e)

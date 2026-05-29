@@ -160,7 +160,7 @@ class OutputsCommand(SlashCommand):
         lines = ["## Research Outputs\n"]
 
         if os.path.exists(outputs_dir):
-            for root, dirs, files in os.walk(outputs_dir):
+            for root, _dirs, files in os.walk(outputs_dir):
                 for f in files:
                     if not f.startswith("."):
                         lines.append(f"- {os.path.join(root, f)}")

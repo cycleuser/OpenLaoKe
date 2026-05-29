@@ -17,7 +17,7 @@ Supported providers:
 """
 
 from .browser_auth import BrowserAuthManager
-from .deepseek_client import DeepSeekWebClient
+from .clients.deepseek_client import DeepSeekWebClient
 from .types import AuthResult, WebProviderConfig
 
 __all__ = [

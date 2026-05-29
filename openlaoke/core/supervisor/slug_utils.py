@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import re
 import time
-import unicodedata
 
 
 def generate_slug(topic: str, max_words: int = 5) -> str:
@@ -40,8 +39,7 @@ def generate_slug(topic: str, max_words: int = 5) -> str:
         "and", "but", "or", "nor", "not", "so", "yet", "both", "either",
         "neither", "each", "every", "all", "any", "few", "more", "most",
         "other", "some", "such", "no", "only", "own", "same", "than",
-        "too", "very", "just", "about", "up", "if", "then", "do",
-        "know", "see", "look", "get", "go", "make", "take", "come", "give",
+        "too", "very", "just", "about", "up", "if", "then", "know", "see", "look", "get", "go", "make", "take", "come", "give",
     }
 
     has_cjk = any('\u4e00' <= c <= '\u9fff' for c in topic)
@@ -129,6 +127,4 @@ def validate_slug(slug: str) -> bool:
         return False
     if len(slug) > 100:
         return False
-    if not re.match(r"^[a-z0-9\u4e00-\u9fff]+(-[a-z0-9\u4e00-\u9fff]+)*$", slug):
-        return False
-    return True
+    return bool(re.match(r"^[a-z0-9\u4e00-\u9fff]+(-[a-z0-9\u4e00-\u9fff]+)*$", slug))
