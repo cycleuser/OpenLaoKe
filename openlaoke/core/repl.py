@@ -56,6 +56,7 @@ class REPL:
         self.api: MultiProviderClient | None = None
         self._running = False
         self._last_thinking: str = ""
+        self._turn_start: float = 0.0
         self._active_tasks: set[asyncio.Task] = set()
         self.multi_provider_config: MultiProviderConfig | None = None
         self.app_config: Any = None
@@ -690,6 +691,7 @@ class REPL:
                     token_count = 0
                     stream_error: str | None = None
                     start_time = time.time()
+                    self._turn_start = start_time
                     status_text = self._build_streaming_display("", 0, 0.0, 0.0)
 
                     try:
@@ -928,18 +930,20 @@ class REPL:
                     if response.thinking:
                         self._last_thinking = response.thinking
                         self.app_state.last_thinking = response.thinking
+                        duration_ms = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
                         thinking_lines = response.thinking.split("\n")
                         max_preview_lines = 5
                         if len(thinking_lines) > max_preview_lines:
                             preview = "\n".join(thinking_lines[:max_preview_lines])
                             remaining = len(thinking_lines) - max_preview_lines
                             self.console.print(
-                                f"[{self._c('muted')} italic]Thinking:[/]\n{preview}\n"
+                                f"[{self._c('muted')} italic]Thought: {duration_ms:.0f}ms[/]\n"
+                                f"[{self._c('muted')}]{preview}[/]\n"
                                 f"[{self._c('muted')} dim]  ... ({remaining} more lines, /thinking to expand)[/]"
                             )
                         else:
                             self.console.print(
-                                f"[{self._c('muted')} italic]Thinking: {response.thinking}[/]"
+                                f"[{self._c('muted')} italic]Thought: {duration_ms:.0f}ms - {response.thinking}[/]"
                             )
 
                     if response.content:
