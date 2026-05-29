@@ -22,15 +22,18 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
 def _get_local_builtin_model_ids() -> list[str]:
-    """Get custom local model IDs from registry only."""
     model_ids = []
     try:
         registry_path = CONFIG_DIR / "models" / "custom_models.json"
         if registry_path.exists():
             with open(registry_path) as f:
                 custom_models = json.load(f)
-            for model_id in custom_models:
-                if model_id not in model_ids:
+            for model_id, model_data in custom_models.items():
+                if model_id in model_ids:
+                    continue
+                dl = model_data.get("downloaded", False)
+                path = model_data.get("path", "")
+                if dl and path and os.path.exists(path):
                     model_ids.append(model_id)
     except (json.JSONDecodeError, KeyError, TypeError, OSError):
         pass

@@ -143,6 +143,7 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             )
             if set_as_default:
                 config.providers.active_provider = provider_key
+                config.providers.active_model = ""
                 console.print(f"[green]✓[/green] Active provider set to: {provider_key}")
                 break
         else:
@@ -812,6 +813,7 @@ def quick_setup(provider: str, api_key: str, model: str = "") -> AppConfig:
         if model:
             config.providers.providers[provider].default_model = model
         config.providers.active_provider = provider
+        config.providers.active_model = ""
         config.first_run = False
 
     return config
