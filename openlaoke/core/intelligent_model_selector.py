@@ -7,9 +7,9 @@ This module automatically selects optimal models based on:
 4. Performance requirements
 
 Selection Strategy:
-- < 8 GB VRAM: gemma3:1b (CPU) + qwen2.5:0.5b (GPU)
-- 8-16 GB VRAM: gemma3:1b (CPU) + gemma4:e2b (GPU)
-- > 16 GB VRAM: gemma3:1b (CPU) + gemma4:e4b (GPU)
+- < 4 GB VRAM: gemma3:1b (CPU) + small GGUF (GPU)
+- 4-8 GB VRAM: gemma3:4b (CPU) + gemma3:1b (GPU)
+- > 8 GB VRAM: gemma3:4b (CPU) + gemma3:12b (GPU)
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class IntelligentModelSelector:
         ModelCombination(
             name="ultra_light",
             planner_model="gemma3:1b",
-            executor_model="qwen2.5:0.5b",
+            executor_model="gemma3:1b",
             validator_model="gemma3:1b",
             planner_device="cpu",
             executor_device="gpu",

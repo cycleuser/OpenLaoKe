@@ -2,13 +2,13 @@
 
 from openlaoke.core.model_assessment.assessor import ModelAssessor, TaskDecomposer
 from openlaoke.core.model_assessment.types import (
-    KNOWN_MODEL_TIERS,
     TIER_GRANULARITIES,
     CapabilityCategory,
     CapabilityScore,
     ModelBenchmark,
     ModelTier,
     TaskGranularity,
+    classify_model_tier,
 )
 
 __all__ = [
@@ -19,6 +19,6 @@ __all__ = [
     "TaskGranularity",
     "CapabilityScore",
     "CapabilityCategory",
-    "KNOWN_MODEL_TIERS",
     "TIER_GRANULARITIES",
+    "classify_model_tier",
 ]

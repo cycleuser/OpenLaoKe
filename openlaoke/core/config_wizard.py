@@ -617,7 +617,6 @@ def _select_model_from_list(models: list[str], default: str) -> str:
 
     # Find preferred default
     preferred_defaults = [
-        "qwen3:0.6b",
         "gemma3:1b",
         "gemma4:e4b",
         "llama3.2",

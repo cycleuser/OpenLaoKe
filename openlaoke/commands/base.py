@@ -1826,18 +1826,9 @@ class AtomicCommand(SlashCommand):
             if hasattr(ctx.app_state, "session_config")
             else "unknown"
         )
-        tier = ModelTier.TIER_5_LIMITED
+        from openlaoke.core.model_assessment.types import classify_model_tier
 
-        known_models = {
-            "gemma3:1b": ModelTier.TIER_5_LIMITED,
-            "qwen3.5:0.8b": ModelTier.TIER_5_LIMITED,
-            "llama3.2:1b": ModelTier.TIER_5_LIMITED,
-        }
-        model_lower = model_name.lower()
-        for known, known_tier in known_models.items():
-            if known in model_lower:
-                tier = known_tier
-                break
+        tier = classify_model_tier(model_name)
 
         cwd = ctx.app_state.get_cwd() if hasattr(ctx.app_state, "get_cwd") else Path.cwd()
 

@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from openlaoke.core.model_assessment.types import (
-    KNOWN_MODEL_TIERS,
     TIER_GRANULARITIES,
     CapabilityCategory,
     CapabilityScore,
     ModelBenchmark,
     ModelTier,
     TaskGranularity,
+    classify_model_tier,
 )
 
 if TYPE_CHECKING:
@@ -32,11 +32,7 @@ class ModelAssessor:
         self._cache: dict[str, ModelBenchmark] = {}
 
     def get_tier(self, model: str) -> ModelTier:
-        model_lower = model.lower()
-        for known, tier in KNOWN_MODEL_TIERS.items():
-            if known.lower() in model_lower:
-                return tier
-        return ModelTier.TIER_3_MODERATE
+        return classify_model_tier(model)
 
     def get_granularity(self, model: str) -> TaskGranularity:
         return TIER_GRANULARITIES[self.get_tier(model)]
