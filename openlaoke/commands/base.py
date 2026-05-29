@@ -1812,7 +1812,7 @@ class AtomicCommand(SlashCommand):
 
         from openlaoke.core.atomic_generator_api import create_generator_with_api
         from openlaoke.core.intent_pipeline import create_pipeline_for_model
-        from openlaoke.core.model_assessment.types import ModelTier
+        from openlaoke.core.model_assessment.types import classify_model_tier
 
         request = ctx.args.strip()
         if not request:
@@ -1826,7 +1826,6 @@ class AtomicCommand(SlashCommand):
             if hasattr(ctx.app_state, "session_config")
             else "unknown"
         )
-        from openlaoke.core.model_assessment.types import classify_model_tier
 
         tier = classify_model_tier(model_name)
 
