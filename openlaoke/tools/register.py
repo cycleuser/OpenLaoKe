@@ -218,6 +218,24 @@ _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
         "Show active contract assertions, states, and blockers",
         "contract status assertion list",
     ),
+    "ReadAndPatch": (
+        "openlaoke.tools.compound_tools",
+        "ReadAndPatchTool",
+        "Read a file and apply a patch in a single operation",
+        "read patch edit file replace",
+    ),
+    "FindAndRead": (
+        "openlaoke.tools.compound_tools",
+        "FindAndReadTool",
+        "Find files by glob pattern and read contents in one operation",
+        "find glob read file search",
+    ),
+    "SearchAndRead": (
+        "openlaoke.tools.compound_tools",
+        "SearchAndReadTool",
+        "Search code with regex and read matching files in one operation",
+        "grep search read code regex",
+    ),
 }
 
 

@@ -47,16 +47,11 @@ class WebBrowserTool(Tool):
     async def _ensure_browser(self, headless: bool = True) -> tuple[Any, Any]:
         """Ensure browser instance is running."""
         if self._page is None:
-            try:
-                from playwright.async_api import async_playwright
+            from playwright.async_api import async_playwright
 
-                self._playwright = await async_playwright().start()
-                self._browser = await self._playwright.chromium.launch(headless=headless)
-                self._page = await self._browser.new_page()
-            except ImportError:
-                raise RuntimeError(
-                    "Playwright not installed. Install with: pip install playwright && playwright install chromium"
-                ) from None
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(headless=headless)
+            self._page = await self._browser.new_page()
         return self._browser, self._page
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:

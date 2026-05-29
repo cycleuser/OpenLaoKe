@@ -255,7 +255,6 @@ class ProvenanceRecord:
         record = cls(topic="Unknown", slug="unknown")
 
         in_evidence_table = False
-        in_sources_section = False
 
         for line in content.split("\n"):
             if line.startswith("# Provenance:"):
@@ -274,10 +273,8 @@ class ProvenanceRecord:
                     record.verification = VerificationStatus.UNVERIFIED
             elif line.startswith("## Evidence Table"):
                 in_evidence_table = True
-                in_sources_section = False
             elif line.startswith("## "):
                 in_evidence_table = False
-                in_sources_section = False
             elif in_evidence_table and line.startswith("|") and not line.startswith("| #"):
                 parts = [p.strip() for p in line.split("|") if p.strip()]
                 if len(parts) >= 6:

@@ -2531,3 +2531,17 @@ class LessonsCommand(SlashCommand):
                     "  summary - Show bitter lesson tracker summary"
                 ),
             )
+
+
+class ThinkingCommand(SlashCommand):
+    name = "thinking"
+    description = "Show or expand the model's thinking/reasoning from the last response"
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        thinking = getattr(ctx.app_state, "last_thinking", "")
+        if not thinking:
+            return CommandResult(
+                success=False,
+                message="No thinking content available. The model may not support reasoning display."
+            )
+        return CommandResult(message=f"Thinking:\n\n{thinking}")

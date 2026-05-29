@@ -1,7 +1,12 @@
-"""WebSearch tool - search the web using DuckDuckGo."""
+"""WebSearch tool - search the web using DuckDuckGo.
+
+Primary: duckduckgo_search Python package (clean API, no parsing).
+Fallback: html.duckduckgo.com HTML scraping (no external deps).
+"""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -14,18 +19,16 @@ from openlaoke.types.core_types import ToolResultBlock
 class WebSearchInput(BaseModel):
     query: str = Field(description="The search query")
     num_results: int = Field(
-        default=5, ge=1, le=20, description="Number of results to return (default 5, max 20)"
+        default=5, ge=1, le=20, description="Number of results (default 5, max 20)"
     )
 
 
 class WebSearchTool(Tool):
-    """Search the web using DuckDuckGo HTML search."""
-
     name = "WebSearch"
     description = (
-        "Searches the web using DuckDuckGo. "
-        "Returns a list of search results with titles, URLs, and snippets. "
-        "Use this tool when you need to find information on the web."
+        "Searches the web using DuckDuckGo. Returns titles, URLs, and snippets. "
+        "Use for: weather, news, docs, facts, current information, research. "
+        "ALWAYS search before saying you don't know something."
     )
     input_schema = WebSearchInput
     is_read_only = True
@@ -45,46 +48,73 @@ class WebSearchTool(Tool):
             )
 
         try:
-            results = await self._search_duckduckgo(query, num_results)
-
-            if not results:
-                return ToolResultBlock(
-                    tool_use_id=ctx.tool_use_id,
-                    content=f"No results found for: {query}",
-                    is_error=False,
-                )
-
-            output_lines = [f"Search results for: {query}\n"]
-            for i, result in enumerate(results, 1):
-                output_lines.append(f"{i}. {result['title']}")
-                output_lines.append(f"   URL: {result['url']}")
-                output_lines.append(f"   {result['snippet']}\n")
-
-            return ToolResultBlock(
-                tool_use_id=ctx.tool_use_id,
-                content="\n".join(output_lines),
-                is_error=False,
-            )
-
+            results = await self._search(query, num_results)
         except Exception as e:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=f"Error performing search: {e}",
+                content=f"Search error: {e}",
                 is_error=True,
             )
 
-    async def _search_duckduckgo(self, query: str, num_results: int) -> list[dict[str, str]]:
+        if not results:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"No results found for: {query}",
+                is_error=False,
+            )
+
+        lines = [f"Search results for: {query}\n"]
+        for i, r in enumerate(results, 1):
+            lines.append(f"{i}. {r['title']}")
+            lines.append(f"   URL: {r['url']}")
+            lines.append(f"   {r['snippet']}\n")
+
+        return ToolResultBlock(
+            tool_use_id=ctx.tool_use_id,
+            content="\n".join(lines),
+            is_error=False,
+        )
+
+    async def _search(self, query: str, num: int) -> list[dict[str, str]]:
+        results = await self._search_ddg_lib(query, num)
+        if results:
+            return results
+        return await self._search_ddg_html(query, num)
+
+    async def _search_ddg_lib(self, query: str, num: int) -> list[dict[str, str]]:
+        def _run() -> list[dict[str, str]]:
+            for mod_name in ("ddgs", "duckduckgo_search"):
+                try:
+                    import importlib
+                    mod = importlib.import_module(mod_name)
+                    raw = list(mod.DDGS().text(query, max_results=num))
+                    results = [
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("href", r.get("link", "")),
+                            "snippet": r.get("body", r.get("snippet", "")),
+                        }
+                        for r in raw
+                    ]
+                    if results:
+                        return results
+                except Exception:
+                    continue
+            return []
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception:
+            return []
+
+    async def _search_ddg_html(self, query: str, num: int) -> list[dict[str, str]]:
         url = "https://html.duckduckgo.com/html/"
-        params = {"q": query}
-
-        # Use a simple client without proxy for web search
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.post(url, data=params)
-            response.raise_for_status()
+            resp = await client.post(url, data={"q": query})
+            resp.raise_for_status()
+        return self._parse_html(resp.text, num)
 
-        return self._parse_ddg_html(response.text, num_results)
-
-    def _parse_ddg_html(self, html: str, max_results: int) -> list[dict[str, str]]:
+    def _parse_html(self, html: str, max_results: int) -> list[dict[str, str]]:
         results: list[dict[str, str]] = []
         i = 0
         while i < len(html) and len(results) < max_results:
@@ -98,11 +128,17 @@ class WebSearchTool(Tool):
                 continue
 
             href_start = html.find('href="', a_start)
-            if href_start == -1:
+            href_start2 = html.find("href='", a_start)
+            if href_start == -1 and href_start2 == -1:
                 i = a_start + 1
                 continue
+            if href_start2 != -1 and (href_start == -1 or href_start2 < href_start):
+                href_start = href_start2
+                q = "'"
+            else:
+                q = '"'
 
-            href_end = html.find('"', href_start + 6)
+            href_end = html.find(q, href_start + 6)
             if href_end == -1:
                 i = href_start + 1
                 continue
@@ -119,34 +155,30 @@ class WebSearchTool(Tool):
                 i = text_start
                 continue
 
-            title = html[text_start:text_end]
-            title = self._strip_tags(title).strip()
+            title = self._strip_tags(html[text_start:text_end]).strip()
 
             snippet = ""
-            snippet_start = html.find('class="result__snippet"', text_end)
-            if snippet_start != -1 and snippet_start < html.find(
-                'class="result__', text_end + 1 if text_end + 1 < len(html) else len(html)
-            ):
-                snippet_a = html.find(">", snippet_start) + 1
-                snippet_end = html.find("</a>", snippet_a)
-                if snippet_end != -1:
-                    snippet = html[snippet_a:snippet_end]
-                    snippet = self._strip_tags(snippet).strip()
+            snippet_class = html.find('class="result__snippet"', text_end)
+            next_result = html.find('class="result__', text_end + 1)
+            if snippet_class != -1 and (next_result == -1 or snippet_class < next_result):
+                snip_a = html.find(">", snippet_class) + 1
+                snip_end = html.find("</a>", snip_a)
+                if snip_end != -1:
+                    snippet = self._strip_tags(html[snip_a:snip_end]).strip()
 
             if title and url and not url.startswith("javascript:"):
-                results.append(
-                    {
-                        "title": title,
-                        "url": url,
-                        "snippet": snippet or "(No description)",
-                    }
-                )
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet or "(No description)",
+                })
 
             i = text_end + 4
 
         return results
 
-    def _strip_tags(self, text: str) -> str:
+    @staticmethod
+    def _strip_tags(text: str) -> str:
         result = []
         in_tag = False
         for char in text:
