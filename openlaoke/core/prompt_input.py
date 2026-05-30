@@ -23,6 +23,7 @@ class PromptAction(Enum):
     TEXT = "text"
     PICKER = "picker"
     EXIT = "exit"
+    TOGGLE_THINKING = "toggle_thinking"
 
 
 @dataclass
@@ -41,6 +42,10 @@ class PromptResult:
     @property
     def is_text(self) -> bool:
         return self.action == PromptAction.TEXT
+
+    @property
+    def is_toggle_thinking(self) -> bool:
+        return self.action == PromptAction.TOGGLE_THINKING
 
 
 def _get_skill_source(path: Any) -> str:
@@ -276,9 +281,11 @@ async def run_model_picker_async() -> str | None:
 
 
 class PromptSessionManager:
-    def __init__(self, *, multiline: bool = False) -> None:
+    def __init__(self, *, multiline: bool = False, on_toggle_thinking: Any = None) -> None:
         self._multiline = multiline
         self._picker_requested = False
+        self._toggle_thinking_requested = False
+        self._on_toggle_thinking = on_toggle_thinking
         self._session: PromptSession | None = None
 
     def _build_keybindings(self) -> KeyBindings:
@@ -288,6 +295,11 @@ class PromptSessionManager:
         @kb.add("c-p")
         def _ctrl_p(event: Any) -> None:
             manager._picker_requested = True
+            event.app.exit(exception=EOFError())
+
+        @kb.add("escape", "t")
+        def _alt_t(event: Any) -> None:
+            manager._toggle_thinking_requested = True
             event.app.exit(exception=EOFError())
 
         return kb
@@ -321,6 +333,7 @@ class PromptSessionManager:
 
     async def get_user_input(self) -> PromptResult:
         self._picker_requested = False
+        self._toggle_thinking_requested = False
         session = self.get_session()
         try:
             result = await session.prompt_async("OpenLaoKe: ")
@@ -335,6 +348,10 @@ class PromptSessionManager:
         except EOFError:
             if self._picker_requested:
                 return PromptResult(action=PromptAction.PICKER)
+            if self._toggle_thinking_requested:
+                if self._on_toggle_thinking:
+                    self._on_toggle_thinking()
+                return PromptResult(action=PromptAction.TOGGLE_THINKING)
             return PromptResult(action=PromptAction.EXIT)
 
 
