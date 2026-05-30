@@ -167,9 +167,18 @@ class WebFetchTool(Tool):
                 is_error=True,
             )
         except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            detail = {
+                403: "Forbidden — this site blocks automated access. Try a different URL or search term.",
+                404: "Not Found — the URL does not exist.",
+                429: "Too Many Requests — the site is rate limiting. Wait and try again.",
+                500: "Server Error — the remote server is having issues.",
+                502: "Bad Gateway — upstream server error.",
+                503: "Service Unavailable — the site is temporarily down.",
+            }.get(status, e.response.reason_phrase)
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=f"Error: HTTP {e.response.status_code} - {e.response.reason_phrase}",
+                content=f"Error: HTTP {status} — {detail}",
                 is_error=True,
             )
         except Exception as e:

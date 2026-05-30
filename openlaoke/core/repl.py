@@ -56,6 +56,8 @@ class REPL:
         self.api: MultiProviderClient | None = None
         self._running = False
         self._last_thinking: str = ""
+        self._thinking_duration: float = 0.0
+        self._thinking_visible: bool = False
         self._turn_start: float = 0.0
         self._active_tasks: set[asyncio.Task] = set()
         self.multi_provider_config: MultiProviderConfig | None = None
@@ -196,6 +198,10 @@ class REPL:
             selection = await run_model_picker_async()
             if selection:
                 self._handle_model_switch(selection)
+            return
+
+        if result.is_toggle_thinking:
+            self._display_thinking_panel()
             return
 
         user_input = result.text
@@ -930,21 +936,14 @@ class REPL:
                     if response.thinking:
                         self._last_thinking = response.thinking
                         self.app_state.last_thinking = response.thinking
-                        duration_ms = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
-                        thinking_lines = response.thinking.split("\n")
-                        max_preview_lines = 5
-                        if len(thinking_lines) > max_preview_lines:
-                            preview = "\n".join(thinking_lines[:max_preview_lines])
-                            remaining = len(thinking_lines) - max_preview_lines
-                            self.console.print(
-                                f"[{self._c('muted')} italic]Thought: {duration_ms:.0f}ms[/]\n"
-                                f"[{self._c('muted')}]{preview}[/]\n"
-                                f"[{self._c('muted')} dim]  ... ({remaining} more lines, /thinking to expand)[/]"
-                            )
-                        else:
-                            self.console.print(
-                                f"[{self._c('muted')} italic]Thought: {duration_ms:.0f}ms - {response.thinking}[/]"
-                            )
+                        self._thinking_visible = False
+                        self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        preview = response.thinking.strip().split("\n")[0][:120]
+                        self.console.print(
+                            f"  [{self._c('muted')}]Thought: {self._thinking_duration:.0f}ms[/] "
+                            f"[dim {self._c('secondary')}]▸ {preview}...[/] "
+                            f"[{self._c('muted')} dim]Alt+T to expand[/]"
+                        )
 
                     if response.content:
                         self._render_response(response.content)
@@ -1228,6 +1227,30 @@ class REPL:
             counter.append(f" [{self._c('muted')}]· {tps:.0f} t/s · {elapsed:.1f}s[/]")
 
         return Group(panel, counter)
+
+    def _display_thinking_panel(self) -> None:
+        if not self._last_thinking:
+            self.console.print(f"  [{self._c('muted')}]No thinking content available.[/]")
+            return
+
+        self._thinking_visible = not self._thinking_visible
+
+        if self._thinking_visible:
+            lines = self._last_thinking.strip().split("\n")
+            self.console.print()
+            self.console.print(
+                f"  [{self._c('muted')}]──────────────────────────────────────────────[/]"
+            )
+            self.console.print(
+                f"  [{self._c('muted')}]Thought ({len(lines)} lines, {self._thinking_duration:.0f}ms):[/]"
+            )
+            for line in lines:
+                self.console.print(f"  [{self._c('muted')}]{line}[/]")
+            self.console.print(
+                f"  [{self._c('muted')}]──────────────────────────── Alt+T to collapse[/]"
+            )
+        else:
+            self.console.print(f"  [{self._c('muted')}]Thought collapsed. Alt+T to expand.[/]")
 
     def _render_response(self, content: str) -> None:
         """Render assistant response with proper terminal formatting."""

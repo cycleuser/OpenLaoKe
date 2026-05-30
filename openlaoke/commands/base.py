@@ -2525,7 +2525,7 @@ class LessonsCommand(SlashCommand):
 
 class ThinkingCommand(SlashCommand):
     name = "thinking"
-    description = "Show or expand the model's thinking/reasoning from the last response"
+    description = "Show the model's thinking/reasoning from the last response"
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
         thinking = getattr(ctx.app_state, "last_thinking", "")
@@ -2534,4 +2534,13 @@ class ThinkingCommand(SlashCommand):
                 success=False,
                 message="No thinking content available. The model may not support reasoning display."
             )
-        return CommandResult(message=f"Thinking:\n\n{thinking}")
+        lines = thinking.strip().split("\n")
+        separator = "\n  " + "─" * 60
+        formatted = (
+            f"\n{'─' * 62}\n"
+            f"  Thought ({len(lines)} lines):\n"
+            f"{separator}\n"
+            + "\n".join(f"  {line}" for line in lines)
+            + f"\n{'─' * 62}"
+        )
+        return CommandResult(message=formatted)
