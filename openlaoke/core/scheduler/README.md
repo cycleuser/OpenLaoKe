@@ -197,8 +197,6 @@ class TaskResult:
 
 ## 配置常量
 
-参考 Deer Flow 项目：
-
 ```python
 MAX_CONCURRENT = 3            # 最大并发任务数
 DEFAULT_TIMEOUT = 15 * 60     # 默认超时（15分钟）

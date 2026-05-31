@@ -1,6 +1,6 @@
 """Compound tools - combine multiple tool operations into single calls.
 
-Inspired by smallcode's compound tools that reduce sequential calls for small models.
+Reduces sequential tool calls for better efficiency with small models.
 """
 from __future__ import annotations
 

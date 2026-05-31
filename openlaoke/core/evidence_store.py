@@ -1,6 +1,6 @@
 """Evidence store - tracks what was tried, what worked, what failed per task.
 
-Inspired by smallcode's evidence.js for automated capture of task outcomes.
+Automated capture of task outcomes for strategy optimization.
 """
 from __future__ import annotations
 

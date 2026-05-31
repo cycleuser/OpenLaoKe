@@ -1,7 +1,6 @@
 """Pure-algorithm context compression (<5ms, no LLM call).
 
-Adapted from kwcode's context_pruner.py - uses keyword extraction
-from middle section instead of LLM summarization.
+Uses keyword extraction from middle section instead of LLM summarization.
 """
 
 from __future__ import annotations

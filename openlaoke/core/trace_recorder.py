@@ -1,6 +1,5 @@
 """Execution trace recorder - records agent turns for replay and debugging.
 
-Inspired by smallcode's trace_recorder.js.
 Each turn records: tool calls, results, timing, model, tokens.
 Traces persist to ~/.openlaoke/traces/ with structured JSON.
 """

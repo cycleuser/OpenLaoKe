@@ -95,7 +95,7 @@ class ContractStore:
     def get_dir(self) -> str:
         if self.base_dir:
             return self.base_dir
-        return os.path.join(os.getcwd(), ".smallcode", "contracts")
+        return os.path.join(os.getcwd(), ".openlaoke", "contracts")
 
     def save(self, contract: Contract) -> None:
         contract.updated_at = datetime.now(UTC).isoformat()

@@ -58,7 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`test_features.py`** — memory, bash classifier, commands, read tracker, context hygiene, integration
 - **`test_new_modules.py`** — 74 tests for all new Round 2 modules (security, classifier, compound tools, router, trace, evidence, images, dependency graph)
 
-### New Modules (from smallcode gap analysis)
+### 新模块
 - `utils/security.py` — path sanitization, credential redaction, ANSI stripping, tool arg sanitization
 - `core/action_classifier.py` — regex-based message intent classification (clarify/action/greeting/praise/respond)
 - `tools/compound_tools.py` — ReadAndPatch, FindAndRead, SearchAndRead (reduce sequential calls for small models)

@@ -1,6 +1,6 @@
 """Skill system for loading and managing agent skills.
 
-Compatible with Claude Code and OpenCode skill formats.
+Compatible with standard SKILL.md format.
 """
 
 from __future__ import annotations
@@ -235,11 +235,11 @@ def get_default_skill_dirs() -> list[Path]:
     """Get default skill directories to search.
 
     Loads in priority order (later dirs overwrite earlier ones):
-    1. ~/.claude/skills (Claude Code) - lowest priority
-    2. ~/.openlaoke/skills (OpenLaoKe installed)
-    3. ~/.config/opencode/skills (OpenCode) - highest priority
-    4. ~/.opencode/skills (alternative OpenCode path)
-    5. openlaoke/skills (bundled research skills)
+    1. ~/.claude/skills - lowest priority
+    2. ~/.openlaoke/skills
+    3. ~/.config/opencode/skills - highest priority
+    4. ~/.opencode/skills - alternative path
+    5. openlaoke/skills - bundled research skills
     """
     home = Path.home()
     dirs = []

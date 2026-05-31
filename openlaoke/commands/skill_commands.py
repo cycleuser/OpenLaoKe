@@ -196,8 +196,8 @@ class SkillCommand(SlashCommand):
     /<skill_name>           Activate a skill directly (Tab to autocomplete)
 
   Skill sources:
-    ~/.claude/skills/       (Claude Code skills)
-    ~/.config/opencode/skills/  (OpenCode skills)
+    ~/.claude/skills/       (standard skills)
+    ~/.config/opencode/skills/  (opencode skills)
     ~/.openlaoke/skills/    (OpenLaoKe installed skills)
 """
         return CommandResult(success=True, message=msg)
