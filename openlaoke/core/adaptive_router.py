@@ -1,7 +1,6 @@
 """Adaptive model router - switches models based on failure rates.
 
-Inspired by smallcode's adaptive_router: when success rate drops below threshold,
-automatically promote to a stronger model tier.
+When success rate drops below threshold, automatically promotes to a stronger model tier.
 """
 from __future__ import annotations
 

@@ -105,7 +105,7 @@ class WriteTool(Tool):
 
 
 def _contains(parent: str, child: str) -> bool:
-    """Check if child path is inside parent (inspired by opencode)."""
+    """Check if child path is inside parent."""
     try:
         rel = os.path.relpath(child, parent)
         return not rel.startswith("..")

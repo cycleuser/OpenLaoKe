@@ -80,7 +80,7 @@ class EvidenceStore:
     def get_dir(self) -> str:
         if self.store_dir:
             return self.store_dir
-        return os.path.join(os.getcwd(), ".smallcode", "evidence")
+        return os.path.join(os.getcwd(), ".openlaoke", "evidence")
 
     def start_task(self, task_id: str) -> None:
         self._current_task_id = task_id

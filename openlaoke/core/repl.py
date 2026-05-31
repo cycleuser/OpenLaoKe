@@ -1,7 +1,7 @@
 """REPL loop - the main interaction loop.
 
 Improved with:
-- Streaming output (character-by-character rendering inspired by Claude Code)
+- Streaming output (character-by-character rendering)
 - Rich-themed permission prompts (replacing bare input())
 - Real-time token counter during generation
 - Theme-aware colors via ThemeManager

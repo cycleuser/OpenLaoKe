@@ -1,6 +1,5 @@
 """Dependency graph for plan steps - enables parallel execution of independent steps.
 
-Inspired by smallcode's dependency_graph.js.
 Analyzes plan steps for file overlaps and produces execution groups.
 """
 from __future__ import annotations

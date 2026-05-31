@@ -1,11 +1,6 @@
-"""Cross-project lessons learned from analyzing 16 AI coding assistant projects.
+"""Cross-project lessons learned from analyzing multiple AI coding assistant projects.
 
-Projects analyzed:
-- kwcode, kaiwu, hermes-agent, hermes-agent-self-evolution, hermes-web-ui
-- OpenHarness, rlm, rlm-minimal, llm_wiki, Viral_Writer_Skill, AutoCLI
-- FreeAskInternet, VibeGPS, learn-claude-code, awesome-hermes-agent
-
-Each lesson follows The Bitter Lesson principle:
+Each lesson follows the principle:
 "Methods that leverage computation and learning scale better than methods
 that rely on human-engineered knowledge."
 """
@@ -31,7 +26,7 @@ class ProjectLesson:
 
 CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
     ProjectLesson(
-        source_project="rlm, rlm-minimal",
+        source_project="community",
         category="small_model",
         lesson="REPL-based context offloading beats stuffing everything into context window",
         what_works="Model writes Python code to explore data instead of reading all files into context. Recursive sub-calls let small models delegate.",
@@ -41,7 +36,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="hermes-agent",
+        source_project="community",
         category="tools",
         lesson="Tool argument type coercion is the #1 fix for small model failures",
         what_works="Automatically coerce '42' -> 42, 'true' -> true before tool execution. Schema sanitization for llama.cpp compatibility.",
@@ -51,7 +46,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="learn-claude-code",
+        source_project="community",
         category="context",
         lesson="Three-layer context compression (micro/auto/compact) enables infinite sessions",
         what_works="Micro: silently shrink tool results every turn. Auto: summarize when threshold hit. Compact: model-triggered.",
@@ -61,7 +56,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="kwcode",
+        source_project="community",
         category="small_model",
         lesson="Deterministic pipeline > LLM-decided next step for small models",
         what_works="Fixed pipeline: locate -> generate -> verify. LLM never decides the next step. Retry with reflection.",
@@ -71,7 +66,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="hermes-agent",
+        source_project="community",
         category="tools",
         lesson="Read-loop prevention stops small models from endlessly reading files",
         what_works="Track consecutive read/search calls. Warn after threshold. Force action-taking.",
@@ -81,7 +76,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="awesome-hermes-agent (RTK)",
+        source_project="community",
         category="context",
         lesson="Terminal output compression saves 60-90% of bash output tokens",
         what_works="Compress long outputs: keep head + tail, omit middle. Extract error lines from tracebacks.",
@@ -91,7 +86,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="hermes-agent",
+        source_project="community",
         category="tools",
         lesson="Dynamic tool schema rebuilding prevents hallucination of unavailable tools",
         what_works="Remove tools from schema when dependencies aren't met. Update descriptions to remove cross-references.",
@@ -101,7 +96,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="learn-claude-code",
+        source_project="community",
         category="prompt",
         lesson="On-demand skill loading (2-layer) saves 100s of tokens per skill",
         what_works="Layer 1: skill names+descriptions in system prompt. Layer 2: full content loaded on demand via tool call.",
@@ -111,7 +106,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="hermes-agent-self-evolution",
+        source_project="community",
         category="architecture",
         lesson="Self-evolution via GEPA optimizes prompts/skills based on real outcomes",
         what_works="Evaluate skills on test tasks. Evolve with genetic-pareto optimization. Gate with regression tests.",
@@ -121,7 +116,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="kwcode",
+        source_project="community",
         category="small_model",
         lesson="Model capability adaptive strategy: adjust behavior by model size",
         what_works="<10B: force plan mode, max 2 files, search after 1 failure. 10-30B: optional plan, max 4 files. >30B: relaxed.",
@@ -131,7 +126,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="kaiwu",
+        source_project="community",
         category="architecture",
         lesson="Hardware-aware KV cache selection and context window optimization",
         what_works="Auto-detect hardware, benchmark KV cache options, find largest sustainable context window.",
@@ -141,7 +136,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="VibeGPS",
+        source_project="community",
         category="ui",
         lesson="Automatic change tracking generates checkpoint + delta reports between user check-ins",
         what_works="Track what changed after each AI round. Generate HTML/Markdown reports with architecture diagrams.",
@@ -151,7 +146,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="llm_wiki",
+        source_project="community",
         category="architecture",
         lesson="Knowledge graph with community detection improves retrieval quality",
         what_works="Two-step chain-of-thought ingest. 4-signal relevance model. Louvain community detection.",
@@ -161,7 +156,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="OpenHarness",
+        source_project="community",
         category="architecture",
         lesson="QueryEngine pattern: clean separation of history, tools, permissions, cost tracking",
         what_works="QueryEngine owns conversation history. Tool registry separate. Permission checker separate. Cost tracker separate.",
@@ -171,7 +166,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="Viral_Writer_Skill",
+        source_project="community",
         category="prompt",
         lesson="Structured internal thinking before output dramatically improves quality",
         what_works="Model completes 11 dimensions of analysis internally before producing output. Applied to coding: architecture, edge cases, testing.",
@@ -181,7 +176,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="done",
     ),
     ProjectLesson(
-        source_project="kwcode",
+        source_project="community",
         category="small_model",
         lesson="Three-stage retry with reflection: normal -> error-first+reflection -> minimal-change",
         what_works="Each retry gets fresh context. Strategy 2: LLM analyzes why it failed. Strategy 3: minimal changes only.",
@@ -191,7 +186,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="kwcode",
+        source_project="community",
         category="architecture",
         lesson="Checkpoint system: auto-snapshot before execution, auto-restore on failure",
         what_works="Snapshot files before task. On failure, restore to previous state. Non-blocking, fire-and-forget.",
@@ -201,7 +196,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="hermes-web-ui",
+        source_project="community",
         category="ui",
         lesson="BFF pattern + SSE streaming for real-time response display",
         what_works="Backend-for-Frontend proxies to gateway. SSE for streaming. Multi-session management with grouping.",
@@ -211,7 +206,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="AutoCLI",
+        source_project="community",
         category="tools",
         lesson="Declarative YAML pipelines for web data extraction",
         what_works="fetch -> select -> map -> filter -> sort -> limit. AI-powered adapter generation for any website.",
@@ -221,7 +216,7 @@ CROSS_PROJECT_LESSONS: list[ProjectLesson] = [
         implementation_status="pending",
     ),
     ProjectLesson(
-        source_project="FreeAskInternet",
+        source_project="community",
         category="tools",
         lesson="Multi-engine search + numbered citation format improves answer quality",
         what_works="SearXNG + DDG parallel search. Content extraction. [citation:x] format in answers.",

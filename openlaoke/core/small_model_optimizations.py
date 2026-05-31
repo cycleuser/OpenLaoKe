@@ -1,6 +1,5 @@
 """Small model optimizations for GGUF/local models (0.6B-8B).
 
-Adapted from hermes-agent, learn-claude-code, and kwcode patterns.
 Key optimizations:
 1. Tool argument type coercion (fixes #1 small model failure mode)
 2. JSON schema sanitization for llama.cpp compatibility

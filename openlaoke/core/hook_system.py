@@ -1,14 +1,8 @@
-"""Hook-based plugin system inspired by codg's 15-hook architecture.
+"""Hook-based plugin system with 15 extension points.
 
-codg's hook pattern: (ReadOnly Input, Mutable Output) => error
 Hooks cannot break the chain (errors are logged, not propagated).
 Each hook can incrementally modify the output.
 Short-circuit hooks (Handled flag) allow plugins to fully take over a behavior.
-
-Inspired by:
-- codg: 15 hook types, priority sorting, short-circuit on Handled
-- opencode: shell-based hooks, approval/block/modify semantics
-- Openclaude: async hook execution, tool input modification
 """
 
 from __future__ import annotations
@@ -45,7 +39,7 @@ class HookInput:
 class HookOutput:
     """Mutable output that hooks can modify.
 
-    Inspired by codg: input=ReadOnly, output=Mutable pointer pattern.
+    Inspired by: input=ReadOnly, output=Mutable pointer pattern.
     Hooks modify specific fields; unset fields (None) mean no modification.
     """
 
@@ -80,7 +74,7 @@ class HookRegistration:
 class HookSystem:
     """Hook-based extension system with 15 extension points.
 
-    Hook types (inspired by codg):
+    Hook types:
     1. tools - modify tool definitions
     2. chat_params - modify temperature, top_p before LLM request
     3. chat_headers - inject custom HTTP headers
@@ -97,7 +91,7 @@ class HookSystem:
     14. message_transform - transform messages before LLM or to user
     15. error_handle - handle/retry/override errors
 
-    Short-circuit hooks (codg pattern): oauth_token, provider_resolve, error_handle
+    Short-circuit hooks: oauth_token, provider_resolve, error_handle
     stop iterating on handled=True, enabling claim-based override.
     """
 
