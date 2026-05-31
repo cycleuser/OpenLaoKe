@@ -281,11 +281,11 @@ async def run_model_picker_async() -> str | None:
 
 
 class PromptSessionManager:
-    def __init__(self, *, multiline: bool = False, on_toggle_thinking: Any = None) -> None:
+    def __init__(self, *, multiline: bool = False) -> None:
         self._multiline = multiline
         self._picker_requested = False
         self._toggle_thinking_requested = False
-        self._on_toggle_thinking = on_toggle_thinking
+        self.thinking_hint: str = ""
         self._session: PromptSession | None = None
 
     def _build_keybindings(self) -> KeyBindings:
@@ -297,10 +297,11 @@ class PromptSessionManager:
             manager._picker_requested = True
             event.app.exit(exception=EOFError())
 
-        @kb.add("escape", "t")
-        def _alt_t(event: Any) -> None:
-            manager._toggle_thinking_requested = True
-            event.app.exit(exception=EOFError())
+        @kb.add("c-g")
+        def _ctrl_g(event: Any) -> None:
+            if manager.thinking_hint:
+                manager._toggle_thinking_requested = True
+                event.app.exit(exception=EOFError())
 
         return kb
 
@@ -335,8 +336,13 @@ class PromptSessionManager:
         self._picker_requested = False
         self._toggle_thinking_requested = False
         session = self.get_session()
+
+        prompt_text = (
+            f"OpenLaoKe {self.thinking_hint}: " if self.thinking_hint else "OpenLaoKe: "
+        )
+
         try:
-            result = await session.prompt_async("OpenLaoKe: ")
+            result = await session.prompt_async(prompt_text)
             if self._picker_requested:
                 return PromptResult(action=PromptAction.PICKER)
             text = result.strip() if result else ""
