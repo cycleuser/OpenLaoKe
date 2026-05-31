@@ -11,9 +11,12 @@ Improved with:
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
+import gc
 import json
 import os
+import signal
 import time
 from typing import Any
 
@@ -101,6 +104,22 @@ class REPL:
         self._tool_validator.set_tools(self.registry)
 
         self._sense_world()
+        self._register_cleanup()
+
+    def _register_cleanup(self) -> None:
+        """Register cleanup handlers for model unload on exit/crash/signal."""
+
+        def _cleanup() -> None:
+            if self.api and self.api._builtin_client:
+                self.api._builtin_client.unload()
+                self.api._builtin_client = None
+                gc.collect()
+
+        atexit.register(_cleanup)
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(sig, lambda s, f: _cleanup() or os._exit(0))
 
     @staticmethod
     def _reset_terminal() -> None:
@@ -217,7 +236,7 @@ class REPL:
             return
 
         if result.is_toggle_thinking:
-            self._display_thinking_panel()
+            self._show_thinking_full()
             return
 
         user_input = result.text
@@ -706,6 +725,7 @@ class REPL:
                 usage = None
                 cost = None
                 content_text = ""
+                reasoning_text = ""
                 tool_uses: list[ToolUseBlock] = []
                 plan_retry_count = 0
 
@@ -727,6 +747,8 @@ class REPL:
                                 if chunk.event_type == StreamEventType.TEXT:
                                     content_text += chunk.text
                                     token_count += 1
+                                elif chunk.event_type == StreamEventType.REASONING:
+                                    reasoning_text += chunk.text
                                 elif chunk.event_type == StreamEventType.TOOL_CALL_START:
                                     try:
                                         args = (
@@ -823,6 +845,12 @@ class REPL:
                         )
                         continue
 
+                    if reasoning_text:
+                        self._last_thinking = reasoning_text
+                        self.app_state.last_thinking = reasoning_text
+                        self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        self._display_thinking_inline(reasoning_text)
+
                     if content_text:
                         self._render_response(content_text)
 
@@ -844,6 +872,7 @@ class REPL:
                             role=MessageRole.ASSISTANT,
                             content=content_text,
                             tool_uses=tool_uses if tool_uses else [],
+                            thinking=reasoning_text,
                         )
                         self.app_state.add_message(msg)
                         assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
@@ -953,13 +982,7 @@ class REPL:
                         self._last_thinking = response.thinking
                         self.app_state.last_thinking = response.thinking
                         self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
-                        preview = response.thinking.strip().split("\n")[0][:100]
-                        self.console.print(
-                            f"  [{self._c('muted')}]Thought: {self._thinking_duration:.0f}ms[/] "
-                            f"[dim {self._c('secondary')}]▸ {preview}...[/] "
-                            f"[{self._c('muted')} dim]Ctrl+G to view[/]"
-                        )
-                        self._prompt_manager.thinking_hint = f"Thought: {self._thinking_duration:.0f}ms"
+                        self._display_thinking_inline(response.thinking)
 
                     if response.content:
                         self._render_response(response.content)
@@ -1244,14 +1267,37 @@ class REPL:
 
         return Group(panel, counter)
 
-    def _display_thinking_panel(self) -> None:
-        if not self._last_thinking:
-            self.console.print(f"  [{self._c('muted')}]No thinking content available.[/]")
+    def _display_thinking_inline(self, thinking: str) -> None:
+        enabled = self.app_state.thinking_enabled
+        if not enabled:
+            self.console.print(
+                f"  [{self._c('muted')} dim]Thought: {self._thinking_duration:.0f}ms (Ctrl+G to view)[/]"
+            )
             return
+        lines = thinking.strip().split("\n")
+        max_show = 5
+        if len(lines) <= max_show:
+            for line in lines:
+                self.console.print(f"  [{self._c('muted')}]{line}[/]")
+        else:
+            for line in lines[:max_show]:
+                self.console.print(f"  [{self._c('muted')}]{line}[/]")
+            self.console.print(
+                f"  [{self._c('muted')} dim]... ({len(lines) - max_show} more lines, Ctrl+G to see all)[/]"
+            )
 
-        from openlaoke.core.thinking_viewer import show_thinking
-
-        show_thinking(self._last_thinking, self._thinking_duration)
+    def _show_thinking_full(self) -> None:
+        if not self._last_thinking:
+            self.console.print(f"  [{self._c('muted')}]No thinking content.[/]")
+            return
+        lines = self._last_thinking.strip().split("\n")
+        self.console.print()
+        self.console.print(
+            f"  [{self._c('muted')}]── Thought ({len(lines)} lines, {self._thinking_duration:.0f}ms) ──[/]"
+        )
+        for line in lines:
+            self.console.print(f"  [{self._c('muted')}]{line}[/]")
+        self.console.print(f"  [{self._c('muted')}]── end ──[/]")
 
     def _render_response(self, content: str) -> None:
         """Render assistant response with proper terminal formatting."""

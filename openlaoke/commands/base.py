@@ -2525,22 +2525,37 @@ class LessonsCommand(SlashCommand):
 
 class ThinkingCommand(SlashCommand):
     name = "thinking"
-    description = "Show the model's thinking/reasoning from the last response"
+    description = "Control thinking display: /thinking [on|off|show]"
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
-        thinking = getattr(ctx.app_state, "last_thinking", "")
-        if not thinking:
+        args = ctx.args.strip().lower()
+
+        if args in ("on", "enable", "1", "true"):
+            ctx.app_state.thinking_enabled = True
+            return CommandResult(message="Thinking display: ON — will show after each response")
+        if args in ("off", "disable", "0", "false"):
+            ctx.app_state.thinking_enabled = False
+            return CommandResult(message="Thinking display: OFF — Ctrl+G to view, /thinking show to see last")
+        if args in ("show", "view"):
+            thinking = getattr(ctx.app_state, "last_thinking", "")
+            if not thinking:
+                return CommandResult(
+                    success=False,
+                    message="No thinking content. The model may not support reasoning output."
+                )
+            lines = thinking.strip().split("\n")
             return CommandResult(
-                success=False,
-                message="No thinking content available. The model may not support reasoning display."
+                message="\n" + "─" * 60 + f"\n  Thought ({len(lines)} lines):\n"
+                + "\n".join(f"  {line}" for line in lines)
+                + "\n" + "─" * 60
             )
-        lines = thinking.strip().split("\n")
-        separator = "\n  " + "─" * 60
-        formatted = (
-            f"\n{'─' * 62}\n"
-            f"  Thought ({len(lines)} lines):\n"
-            f"{separator}\n"
-            + "\n".join(f"  {line}" for line in lines)
-            + f"\n{'─' * 62}"
+
+        enabled = ctx.app_state.thinking_enabled
+        status = "ON" if enabled else "OFF"
+        has = "has" if ctx.app_state.last_thinking else "no"
+        return CommandResult(
+            message=f"Thinking: {status} ({has} content)\n"
+            f"  /thinking on     — enable auto display\n"
+            f"  /thinking off    — disable auto display\n"
+            f"  /thinking show   — view last thinking"
         )
-        return CommandResult(message=formatted)

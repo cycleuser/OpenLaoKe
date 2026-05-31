@@ -285,7 +285,6 @@ class PromptSessionManager:
         self._multiline = multiline
         self._picker_requested = False
         self._toggle_thinking_requested = False
-        self.thinking_hint: str = ""
         self._session: PromptSession | None = None
 
     def _build_keybindings(self) -> KeyBindings:
@@ -299,9 +298,8 @@ class PromptSessionManager:
 
         @kb.add("c-g")
         def _ctrl_g(event: Any) -> None:
-            if manager.thinking_hint:
-                manager._toggle_thinking_requested = True
-                event.app.exit(exception=EOFError())
+            manager._toggle_thinking_requested = True
+            event.app.exit(exception=EOFError())
 
         return kb
 
@@ -337,10 +335,7 @@ class PromptSessionManager:
         self._toggle_thinking_requested = False
         session = self.get_session()
 
-        prompt_text = (
-            f"OpenLaoKe {self.thinking_hint}: " if self.thinking_hint else "OpenLaoKe: "
-        )
-
+        prompt_text = "OpenLaoKe: "
         try:
             result = await session.prompt_async(prompt_text)
             if self._picker_requested:
@@ -355,8 +350,6 @@ class PromptSessionManager:
             if self._picker_requested:
                 return PromptResult(action=PromptAction.PICKER)
             if self._toggle_thinking_requested:
-                if self._on_toggle_thinking:
-                    self._on_toggle_thinking()
                 return PromptResult(action=PromptAction.TOGGLE_THINKING)
             return PromptResult(action=PromptAction.EXIT)
 

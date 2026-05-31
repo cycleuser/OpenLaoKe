@@ -77,6 +77,7 @@ class AppState:
     insomnia_auto_accept: bool = True
     insomnia_log_path: str | None = None
     last_thinking: str = ""
+    thinking_enabled: bool = True
 
     _listeners: list[Callable[[AppState], None]] = field(default_factory=list, repr=False)
     _persist_path: str | None = None

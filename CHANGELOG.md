@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Thinking Display System
+- **Thinking inline display** — model reasoning content shown inline (first 5 lines) with `Ctrl+G` to expand full content
+- **`/thinking on|off|show`** — persistent toggle to control whether thinking auto-displays after each response
+- **`thinking_enabled`** field on `AppState` — per-session thinking preference
+- **Streaming thinking support** — `StreamEventType.REASONING` added; Ollama/cloud providers now stream reasoning content via `_parse_openai_stream_events`
+- **Non-streaming thinking** — `_parse_openai_response` fills `AssistantMessage.thinking` from `reasoning_content` field
+- **Multi-format extraction** — `<thinking>`, response tag detection, `<|thinking|>` support, plus `reasoning_content` field fallback
+
+### Model Memory Cleanup
+- **`BuiltinModelProvider.unload()`** — sets `_llm = None` + `gc.collect()` to free GPU/CPU memory
+- **`atexit` handler** — model unloaded on normal Python exit
+- **`SIGTERM/SIGINT` signal handler** — model unloaded on Ctrl+C or kill
+- **`close()` in REPL `finally` block** — guaranteed cleanup on loop exit
+
+### Code Quality
+- **Dead code removed** (~2068 lines): `utils/compute.py` (754), `services/mcp.py` (600), `core/checkpoint.py` (261), `core/knowledge_base.py` (223), `extended_web/deepseek_client.py` duplicate (215), `utils/model_capabilities.py` (15)
+- **Renamed**: `core/knowledge_base.py` → references updated to `EnhancedKnowledgeBase`
+- **Merged**: ExtendedWeb `deepseek_client.py` duplicates consolidated into `clients/` version
+- **Removed**: empty `components/` package
+- **Fixed**: 4 locations silently swallowing exceptions → `logger.warning()` with context
+- **Fixed**: `web_browser_tool.py` raised `RuntimeError` → returns `ToolResultBlock(is_error=True)`
+- **Lint**: all ruff checks pass (previously 15+ errors across codebase)
+
+### README Rewrite
+- Removed all "built-in models" references — OpenLaoKe works with any model
+- Removed legacy Qwen2.5 and outdated model references
+- Streamlined to modern format with clean Quick Start, Tools, Slash Commands sections
+
+### Model Tier System
+- **`classify_model_tier()`** — heuristic-based tier classification replacing hardcoded `KNOWN_MODEL_TIERS` dict
+- Size-based: >50B→TIER_2, >20B→TIER_3, >5B→TIER_4, ≤5B→TIER_5
+- Provider-based: `claude-*`, `gpt-4o`, `o1` → TIER_1; `deepseek`, `llama-4` → TIER_2
+- Updated `ModelAssessor`, `AtomicCommand`, `model_assessment/__init__.py` to use new function
+
+### Model Names & Config
+- Removed stale Qwen3:0.6b from config wizard preferred defaults
+- `adaptive_router.py` default model: qwen2.5-coder:7b → llama3.2
+- `small_model_optimizations.py`: removed qwen2.5 entries, added llama-4/gemma-3
+- `intelligent_model_selector.py`: removed qwen2.5 references
+- `local_model_manager.py`: `get_default_model()` returns None instead of hardcoded recommendation
+- `_load_custom_models_registry()`: auto-cleans stale entries when model files are deleted
+
+### WebFetch Error Messages
+- Human-readable HTTP error explanations for 403/404/429/500/502/503
+
+### Tests — 375 Pass, 0 Fail, 0.8s
+- **`test_comprehensive.py`** — 181 tests covering all core modules, state, tools, hooks, compact, etc.
+- **`test_core.py`** — deep tests for state, hook system, permissions, pruner, tracker, optimizer, supervisor
+- **`test_tools.py`** — Bash, Read, Write, Edit, Glob, Grep with edge cases
+- **`test_features.py`** — memory, bash classifier, commands, read tracker, context hygiene, integration
+- **`test_new_modules.py`** — 74 tests for all new Round 2 modules (security, classifier, compound tools, router, trace, evidence, images, dependency graph)
+
+### New Modules (from smallcode gap analysis)
+- `utils/security.py` — path sanitization, credential redaction, ANSI stripping, tool arg sanitization
+- `core/action_classifier.py` — regex-based message intent classification (clarify/action/greeting/praise/respond)
+- `tools/compound_tools.py` — ReadAndPatch, FindAndRead, SearchAndRead (reduce sequential calls for small models)
+- `core/adaptive_router.py` — 3-tier auto-promote/demote model routing based on failure rate
+- `core/trace_recorder.py` — per-turn execution trace recording with regression test generation
+- `core/evidence_store.py` — tracks attempted strategies and outcomes (what worked/failed)
+- `core/message_images.py` — image path extraction, base64 encoding, vision API formatting
+- `core/dependency_graph.py` — plan step file-dependency analysis and parallel execution groups
+
 ### Added - Research System
 
 #### 溯源验证系统 (Provenance Tracking)
