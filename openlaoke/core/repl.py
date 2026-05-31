@@ -57,8 +57,9 @@ class REPL:
         self._running = False
         self._last_thinking: str = ""
         self._thinking_duration: float = 0.0
-        self._thinking_visible: bool = False
         self._turn_start: float = 0.0
+
+        self._reset_terminal()
         self._active_tasks: set[asyncio.Task] = set()
         self.multi_provider_config: MultiProviderConfig | None = None
         self.app_config: Any = None
@@ -100,6 +101,20 @@ class REPL:
         self._tool_validator.set_tools(self.registry)
 
         self._sense_world()
+
+    @staticmethod
+    def _reset_terminal() -> None:
+        """Reset terminal state: disable mouse tracking, show cursor, etc."""
+        import sys
+
+        # Disable mouse tracking (all modes)
+        sys.stdout.write("\x1b[?1000l")  # VT200 tracking
+        sys.stdout.write("\x1b[?1002l")  # button-event tracking
+        sys.stdout.write("\x1b[?1003l")  # any-event tracking
+        sys.stdout.write("\x1b[?1006l")  # SGR extended mode
+        # Show cursor
+        sys.stdout.write("\x1b[?25h")
+        sys.stdout.flush()
 
     def _c(self, name: str) -> str:
         return self._theme.color(name)
@@ -185,6 +200,7 @@ class REPL:
                 self._insomnia_engine._save_state()
             if self.api:
                 await self.api.close()
+            self._reset_terminal()
 
     async def _handle_input(self) -> None:
         self.console.print()
@@ -936,14 +952,14 @@ class REPL:
                     if response.thinking:
                         self._last_thinking = response.thinking
                         self.app_state.last_thinking = response.thinking
-                        self._thinking_visible = False
                         self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
-                        preview = response.thinking.strip().split("\n")[0][:120]
+                        preview = response.thinking.strip().split("\n")[0][:100]
                         self.console.print(
                             f"  [{self._c('muted')}]Thought: {self._thinking_duration:.0f}ms[/] "
                             f"[dim {self._c('secondary')}]▸ {preview}...[/] "
-                            f"[{self._c('muted')} dim]Alt+T to expand[/]"
+                            f"[{self._c('muted')} dim]Ctrl+G to view[/]"
                         )
+                        self._prompt_manager.thinking_hint = f"Thought: {self._thinking_duration:.0f}ms"
 
                     if response.content:
                         self._render_response(response.content)
@@ -1233,24 +1249,9 @@ class REPL:
             self.console.print(f"  [{self._c('muted')}]No thinking content available.[/]")
             return
 
-        self._thinking_visible = not self._thinking_visible
+        from openlaoke.core.thinking_viewer import show_thinking
 
-        if self._thinking_visible:
-            lines = self._last_thinking.strip().split("\n")
-            self.console.print()
-            self.console.print(
-                f"  [{self._c('muted')}]──────────────────────────────────────────────[/]"
-            )
-            self.console.print(
-                f"  [{self._c('muted')}]Thought ({len(lines)} lines, {self._thinking_duration:.0f}ms):[/]"
-            )
-            for line in lines:
-                self.console.print(f"  [{self._c('muted')}]{line}[/]")
-            self.console.print(
-                f"  [{self._c('muted')}]──────────────────────────── Alt+T to collapse[/]"
-            )
-        else:
-            self.console.print(f"  [{self._c('muted')}]Thought collapsed. Alt+T to expand.[/]")
+        show_thinking(self._last_thinking, self._thinking_duration)
 
     def _render_response(self, content: str) -> None:
         """Render assistant response with proper terminal formatting."""
