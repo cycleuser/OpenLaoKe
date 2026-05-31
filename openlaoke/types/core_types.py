@@ -147,6 +147,7 @@ class StreamEventType(StrEnum):
     TOOL_CALL_START = "tool_call_start"
     TOOL_CALL_DELTA = "tool_call_delta"
     USAGE = "usage"
+    REASONING = "reasoning"
 
 
 @dataclass

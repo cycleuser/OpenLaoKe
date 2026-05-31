@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import re
@@ -208,17 +209,26 @@ class BuiltinModelProvider:
                 content = parsed_content
                 thinking = thinking_content
             else:
-                thinking_tag_open = "<" + "think" + "ing>"
-                thinking_tag_close = "</" + "think" + "ing>"
-                thinking_pattern = (
-                    re.escape(thinking_tag_open) + r"(.*?)" + re.escape(thinking_tag_close)
-                )
-                thinking_match = re.search(thinking_pattern, raw_content, re.DOTALL)
-                if thinking_match:
-                    thinking = thinking_match.group(1).strip()
-                    content = re.sub(thinking_pattern, "", raw_content, flags=re.DOTALL).strip()
-                else:
+                # Check reasoning_content field first (some models put thinking there)
+                reasoning = message.get("reasoning_content", "")
+                if reasoning:
+                    thinking = reasoning
                     content = raw_content
+                else:
+                    # Try multiple thinking tag formats
+                    thinking_patterns = [
+                        (re.compile(r"<thinking>\s*(.*?)</thinking>", re.DOTALL)),
+                        (re.compile(r"<think>\s*(.*?)</think>", re.DOTALL)),
+                        (re.compile(r"<\|thinking\|>(.*?)<\|/thinking\|>", re.DOTALL)),
+                    ]
+                    for pat in thinking_patterns:
+                        m = pat.search(raw_content)
+                        if m:
+                            thinking = m.group(1).strip()
+                            content = pat.sub("", raw_content).strip()
+                            break
+                    else:
+                        content = raw_content
 
             for tool_call in message.get("tool_calls", []):
                 func = tool_call.get("function", {})
@@ -346,8 +356,8 @@ class BuiltinModelProvider:
     def unload(self) -> None:
         """Unload the model to free memory."""
         if self._llm is not None:
-            del self._llm
             self._llm = None
+            gc.collect()
             self.logger.info("Model unloaded")
 
     def __del__(self) -> None:

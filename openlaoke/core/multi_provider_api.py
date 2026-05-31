@@ -610,6 +610,7 @@ class MultiProviderClient:
                 content=content,
                 tool_uses=tool_uses,
                 stop_reason=choices[0].get("finish_reason") if choices else None,
+                thinking=message.get("reasoning_content", "") if choices else "",
             ),
             usage,
             cost,
@@ -914,6 +915,7 @@ class MultiProviderClient:
     ) -> list[StreamChunk]:
         chunks: list[StreamChunk] = []
         text = ""
+        reasoning = ""
         usage = None
         cost = None
 
@@ -923,6 +925,10 @@ class MultiProviderClient:
             content = delta.get("content")
             if content:
                 text = content
+
+            reasoning_content = delta.get("reasoning_content")
+            if reasoning_content:
+                reasoning = reasoning_content
 
             tool_calls = delta.get("tool_calls")
             if tool_calls:
@@ -961,6 +967,8 @@ class MultiProviderClient:
 
         if text:
             chunks.append(StreamChunk(event_type=StreamEventType.TEXT, text=text))
+        if reasoning:
+            chunks.append(StreamChunk(event_type=StreamEventType.REASONING, text=reasoning))
         if usage:
             chunks.append(StreamChunk(event_type=StreamEventType.USAGE, usage=usage, cost=cost))
 
