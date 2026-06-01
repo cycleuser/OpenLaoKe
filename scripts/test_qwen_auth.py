@@ -12,7 +12,7 @@ console = Console()
 
 def extract_cookie_from_firefox() -> str:
     """Help user extract cookie from Firefox.
-    
+
     Returns:
         Cookie string
     """
@@ -43,7 +43,7 @@ def extract_cookie_from_firefox() -> str:
 
 def save_cookie(provider_type: str, cookie: str) -> None:
     """Save cookie to auth file.
-    
+
     Args:
         provider_type: Provider type
         cookie: Cookie string
@@ -68,10 +68,10 @@ def save_cookie(provider_type: str, cookie: str) -> None:
 
 async def test_qwen_api(cookie: str) -> bool:
     """Test Qwen Web API call.
-    
+
     Args:
         cookie: Cookie string
-        
+
     Returns:
         True if successful
     """
@@ -113,6 +113,7 @@ async def test_qwen_api(cookie: str) -> bool:
     except Exception as e:
         console.print(f"[red]✗ API call failed: {e}[/red]")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -142,7 +143,9 @@ async def main():
                 console.print("[bold green]✅ Authentication verified successfully![/bold green]")
                 return
         else:
-            console.print("[yellow]⚠ Existing cookie is placeholder, need to extract real cookie[/yellow]")
+            console.print(
+                "[yellow]⚠ Existing cookie is placeholder, need to extract real cookie[/yellow]"
+            )
 
     # Extract cookie from Firefox
     cookie = extract_cookie_from_firefox()

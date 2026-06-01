@@ -28,6 +28,7 @@ async def test_deepseek():
     finally:
         await client.close()
 
+
 if __name__ == "__main__":
     result = asyncio.run(test_deepseek())
     if result:

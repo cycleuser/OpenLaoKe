@@ -30,11 +30,11 @@ def save_cookie(provider_type: str, cookie: str):
 def extract_cookie_for(provider_type: str, service_name: str, login_url: str, cookie_names: list):
     """Extract cookie for a specific service."""
     console.print()
-    console.print(Panel.fit(
-        f"[bold cyan]{service_name}[/bold cyan]\n"
-        f"[dim]{login_url}[/dim]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]{service_name}[/bold cyan]\n[dim]{login_url}[/dim]", border_style="cyan"
+        )
+    )
     console.print()
     console.print("[bold]Steps to extract cookie:[/bold]")
     console.print()
@@ -50,7 +50,11 @@ def extract_cookie_for(provider_type: str, service_name: str, login_url: str, co
     console.print("  [dim]8. Copy the 'Value' column for each cookie[/dim]")
     console.print()
 
-    if not console.input("  Have you logged in and ready to extract? [y/n]: ").lower().startswith('y'):
+    if (
+        not console.input("  Have you logged in and ready to extract? [y/n]: ")
+        .lower()
+        .startswith("y")
+    ):
         console.print("[yellow]⚠ Skipped[/yellow]")
         return False
 
@@ -89,7 +93,7 @@ def main():
     console.print()
     console.print("[bold]Which service do you want to extract cookie for?[/bold]")
     console.print()
-    for i, (provider, name, url, cookies) in enumerate(services, 1):
+    for i, (_provider, name, _url, _cookies) in enumerate(services, 1):
         console.print(f"  [{i}] {name}")
 
     console.print()

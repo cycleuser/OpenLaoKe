@@ -22,6 +22,7 @@ MODEL_NAME = "huihui_ai/qwen3.5-abliterated:0.8B"
 OLLAMA_API = "http://localhost:11434"
 TIMEOUT = 120
 
+
 # ── test cases ────────────────────────────────────────────
 @dataclass
 class TestCase:
@@ -71,13 +72,12 @@ Expected: {"the": 3, "and": 2, "cat": 1, "dog": 1, "mouse": 1}""",
         description="Binary search tree",
         prompt="""Write a Python class BST with:
 - insert(val) method
-- search(val) method that returns True/False  
+- search(val) method that returns True/False
 - inorder() method that returns sorted list
 Test with: insert 5,3,7,1,4; then search(4) and inorder()""",
         difficulty="hard",
         expected_keywords=["class", "insert", "search", "inorder", "True"],
     ),
-
     # ─── C ─────────────────────────────────────────────
     TestCase(
         id="c_e1",
@@ -95,7 +95,6 @@ Test with: insert 5,3,7,1,4; then search(4) and inorder()""",
         difficulty="medium",
         expected_keywords=["include", "string", "reverse", "strlen", "temp"],
     ),
-
     # ─── Rust ───────────────────────────────────────────
     TestCase(
         id="rs_e1",
@@ -184,10 +183,11 @@ async def test_tooled(test: TestCase) -> TestResult:
         exec_output, analysis_output = _run_rust(code)
 
     # Step 3: If failed, iterative refinement (max 2 more rounds)
-    for round_num in range(1, 3):
-        passed = _check_keywords(
-            code, test.expected_keywords
-        ) and "error" not in exec_output.lower()[:200]
+    for _round_num in range(1, 3):
+        passed = (
+            _check_keywords(code, test.expected_keywords)
+            and "error" not in exec_output.lower()[:200]
+        )
         if passed:
             break
 
@@ -219,7 +219,9 @@ async def test_tooled(test: TestCase) -> TestResult:
                     exec_output, analysis_output = _run_rust(code)
 
     duration = (time.time() - start) * 1000
-    passed = _check_keywords(code, test.expected_keywords) or _check_exec_success(code, test.language)
+    passed = _check_keywords(code, test.expected_keywords) or _check_exec_success(
+        code, test.language
+    )
     return TestResult(
         test_id=test.id,
         passed=passed,
@@ -245,18 +247,20 @@ def _extract_code(text: str, language: str) -> str:
 def _check_exec_success(code: str, language: str) -> bool:
     from openlaoke.core.langs.c_sandbox import CSandbox
     from openlaoke.core.langs.python_sandbox import PythonSandbox
+
     try:
-        if language == 'python':
+        if language == "python":
             sb = PythonSandbox()
             result = sb.run(code=code, timeout_ms=5000)
             return result.success and bool(result.stdout.strip())
-        elif language == 'c':
+        elif language == "c":
             sb = CSandbox()
             result = sb.run(code=code, timeout_ms=5000)
             return result.success
         return False
     except Exception:
         return False
+
 
 def _check_keywords(code: str, keywords: list[str]) -> bool:
     if not keywords:
@@ -369,7 +373,7 @@ async def main() -> None:
             diffs[r.difficulty]["total"] += 1
             diffs[r.difficulty]["passed"] += int(r.passed)
 
-        print(f"\n[{mode.upper()}] Overall: {passed}/{total} ({100*passed//total}%) pass")
+        print(f"\n[{mode.upper()}] Overall: {passed}/{total} ({100 * passed // total}%) pass")
         for lang, stats in langs.items():
             print(f"  {lang}: {stats['passed']}/{stats['total']}")
         for d, stats in diffs.items():

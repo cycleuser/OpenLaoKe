@@ -31,7 +31,7 @@ class PDFGenerator(FPDF):
                 uni=True,
             )
             self.has_unicode_font = True
-        except:
+        except Exception:
             # Fallback to built-in fonts
             self.has_unicode_font = False
 
@@ -109,8 +109,7 @@ class PDFGenerator(FPDF):
             "\u26a1": "[!]",  # lightning
             "\u274c": "[X]",  # cross mark
             "\u2705": "[OK]",  # check mark button
-            "\ud83c\udf89": "[celebrate]",  # party popper
-            "\ud83c\udf8a": "[celebrate]",  # confetti ball
+            "\ud83c\udf89": "[celebrate]",  # confetti ball
             "\ud83c\udf88": "[balloon]",  # balloon
             "\ud83d\ude80": "[rocket]",  # rocket
             "\ud83c\udfaf": "[target]",  # target
@@ -123,93 +122,53 @@ class PDFGenerator(FPDF):
             "\ud83d\udd13": "[unlock]",  # unlock
             "\ud83c\udfb2": "[die]",  # game die
             "\u2b50": "[*]",  # star
-            "\ud83d\udc9a": "[heart]",  # green heart
-            "\ud83d\udc99": "[heart]",  # blue heart
-            "\ud83d\udc9c": "[heart]",  # purple heart
-            "\ud83d\udc9b": "[heart]",  # yellow heart
+            "\ud83d\udc9a": "[heart]",  # yellow heart
             "\u2764": "[heart]",  # heart
             "\u25b6": ">",  # play button
             "\u25b8": ">",  # small play
             "\u25aa": ".",  # small square
             "\u25fc": "#",  # black square
             "\u25aa\ufe0f": ".",  # small square
-            "\ud83d\udce4": "[mail]",  # outbox
-            "\ud83d\udce5": "[mail]",  # inbox
+            "\ud83d\udce4": "[mail]",  # inbox
             "\ud83d\udccb": "[clipboard]",  # clipboard
             "\ud83d\udcbc": "[briefcase]",  # briefcase
-            "\ud83d\udcca": "[chart]",  # chart
-            "\ud83d\udcc8": "[chart]",  # chart up
-            "\ud83d\udcc9": "[chart]",  # chart down
+            "\ud83d\udcca": "[chart]",  # chart down
             "\u270f": "[pencil]",  # pencil
             "\u2712": "[pencil]",  # pencil
             "\ud83d\udd8a": "[pencil]",  # pencil
-            "\ud83d\udd8b": "[pen]",  # pen
-            "\ud83d\udccb": "[clipboard]",  # clipboard
-            "\ud83d\udcc4": "[page]",  # page
-            "\ud83d\udcc3": "[page]",  # page
-            "\ud83d\udcdd": "[memo]",  # memo
-            "\ud83d\udcd6": "[book]",  # open book
-            "\ud83d\udcda": "[books]",  # books
-            "\ud83d\udcd3": "[notebook]",  # notebook
-            "\ud83d\udcd2": "[book]",  # orange book
-            "\ud83d\udcd5": "[book]",  # closed book
-            "\ud83d\udcd9": "[bookmark]",  # bookmark
-            "\ud83d\udcd1": "[bookmark]",  # bookmark tabs
-            "\ud83d\udccc": "[pin]",  # pushpin
-            "\ud83d\udccd": "[pin]",  # round pushpin
-            "\ud83d\udce6": "[package]",  # package
-            "\ud83d\udce7": "[mail]",  # e-mail
-            "\ud83d\udce8": "[mail]",  # incoming envelope
-            "\ud83d\udce9": "[mail]",  # envelope with arrow
-            "\ud83d\udcea": "[mail]",  # closed mailbox
-            "\ud83d\udceb": "[mail]",  # open mailbox
-            "\ud83d\udcec": "[mail]",  # mailbox
-            "\ud83d\udced": "[mail]",  # mailbox with flag
+            "\ud83d\udd8b": "[pen]",  # clipboard
+            "\ud83d\udcc4": "[page]",  # memo
+            "\ud83d\udcd6": "[book]",  # books
+            "\ud83d\udcd3": "[notebook]",  # closed book
+            "\ud83d\udcd9": "[bookmark]",  # bookmark tabs
+            "\ud83d\udccc": "[pin]",  # round pushpin
+            "\ud83d\udce6": "[package]",  # mailbox with flag
             "\ud83d\udcee": "[post]",  # postbox
             "\ud83d\udcef": "[horn]",  # postal horn
-            "\ud83d\udcf0": "[news]",  # newspaper
-            "\ud83d\udcf1": "[phone]",  # mobile phone
-            "\ud83d\udcf2": "[phone]",  # mobile phone with arrow
-            "\ud83d\udcf3": "[phone]",  # vibration mode
-            "\ud83d\udcf4": "[phone]",  # mobile phone off
+            "\ud83d\udcf0": "[news]",  # mobile phone off
             "\ud83d\udcf7": "[camera]",  # camera
             "\ud83d\udcf9": "[video]",  # video camera
             "\ud83d\udcfa": "[tv]",  # television
-            "\ud83d\udcfb": "[radio]",  # radio
-            "\ud83d\udcfc": "[video]",  # video cassette
+            "\ud83d\udcfb": "[radio]",  # video cassette
             "\ud83d\udd0a": "[sound]",  # speaker high
             "\ud83d\udd0b": "[battery]",  # battery
             "\ud83d\udd0c": "[plug]",  # electric plug
-            "\ud83d\udd0d": "[search]",  # left magnifier
-            "\ud83d\udd0e": "[search]",  # right magnifier
-            "\ud83d\udd0f": "[lock]",  # lock with ink pen
-            "\ud83d\udd10": "[lock]",  # closed lock with key
-            "\ud83d\udd11": "[key]",  # key
-            "\ud83d\udd12": "[lock]",  # lock
-            "\ud83d\udd13": "[unlock]",  # open lock
-            "\ud83d\udd14": "[bell]",  # bell
-            "\ud83d\udd15": "[bell]",  # bell with slash
-            "\ud83d\udd16": "[bookmark]",  # bookmark
-            "\ud83d\udd17": "[link]",  # link symbol
-            "\ud83d\udd18": "[radio]",  # radio button
+            "\ud83d\udd0d": "[search]",  # closed lock with key
+            "\ud83d\udd11": "[key]",  # open lock
+            "\ud83d\udd14": "[bell]",  # bookmark
+            "\ud83d\udd17": "[link]",  # radio button
             "\ud83d\udd19": "[back]",  # back arrow
             "\ud83d\udd1a": "[end]",  # end arrow
             "\ud83d\udd1b": "[on]",  # on arrow
             "\ud83d\udd1c": "[soon]",  # soon arrow
             "\ud83d\udd1d": "[top]",  # top arrow
             "\ud83d\udd1e": "[no]",  # no entry
-            "\ud83d\udd1f": "[keycap]",  # keycap ten
-            "\ud83d\udd20": "[keycap]",  # keycap one
-            "\ud83d\udd21": "[keycap]",  # keycap two
-            "\ud83d\udd22": "[keycap]",  # keycap three
-            "\ud83d\udd23": "[keycap]",  # keycap four
-            "\ud83d\udd24": "[keycap]",  # keycap five
+            "\ud83d\udd1f": "[keycap]",  # keycap five
             "\ud83d\udd25": "[fire]",  # fire
             "\ud83d\udd26": "[flash]",  # flashlight
             "\ud83d\udd27": "[wrench]",  # wrench
             "\ud83d\udd28": "[hammer]",  # hammer
-            "\ud83d\udd29": "[pick]",  # pick
-            "\ud83d\udd2a": "[hammer]",  # hammer and pick
+            "\ud83d\udd29": "[pick]",  # hammer and pick
             "\ud83d\udd2b": "[gun]",  # pistol
             "\ud83d\udd2c": "[microscope]",  # microscope
             "\ud83d\udd2d": "[telescope]",  # telescope
@@ -217,10 +176,8 @@ class PDFGenerator(FPDF):
             "\ud83d\udd2f": "[diya]",  # diya lamp
             "\ud83d\udd30": "[bow]",  # bow and arrow
             "\ud83d\udd31": "[trident]",  # trident emblem
-            "\ud83d\udd32": "[arrow]",  # black arrow up
-            "\ud83d\udd33": "[arrow]",  # black arrow down
-            "\ud83d\udd34": "[circle]",  # red circle
-            "\ud83d\udd35": "[circle]",  # blue circle
+            "\ud83d\udd32": "[arrow]",  # black arrow down
+            "\ud83d\udd34": "[circle]",  # blue circle
         }
 
         for char, replacement in replacements.items():

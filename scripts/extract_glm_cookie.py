@@ -39,6 +39,7 @@ def extract_glm_cookies(profile_path: Path) -> str | None:
     # Copy to temp file
     temp_cookie = tempfile.mktemp(suffix=".sqlite")
     import shutil
+
     shutil.copy2(cookies_file, temp_cookie)
 
     try:
@@ -64,6 +65,7 @@ def extract_glm_cookies(profile_path: Path) -> str | None:
 
     finally:
         import os
+
         os.unlink(temp_cookie)
 
 
@@ -79,7 +81,7 @@ def main():
     console.print("  2. If not, please login first, then run this script again")
     console.print()
 
-    if not console.input("  Are you logged in to GLM in Firefox? [y/n]: ").lower().startswith('y'):
+    if not console.input("  Are you logged in to GLM in Firefox? [y/n]: ").lower().startswith("y"):
         console.print("[yellow]Please login first, then run this script again.[/yellow]")
         return
 

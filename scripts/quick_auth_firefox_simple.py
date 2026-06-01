@@ -11,9 +11,11 @@ from rich.console import Console
 
 console = Console()
 
+
 def get_firefox_path():
     """Get Firefox path."""
     import platform
+
     system = platform.system()
 
     if system == "Darwin":
@@ -78,7 +80,8 @@ def main():
     # Launch Firefox directly
     cmd = [
         firefox_path,
-        "-profile", profile_dir,
+        "-profile",
+        profile_dir,
         "-no-remote",
         "-new-instance",
         login_url,
