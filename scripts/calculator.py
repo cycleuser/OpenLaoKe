@@ -17,12 +17,7 @@ class Calculator:
         tk.Label(self.root, text="计算器", font=("Arial", 16, "bold")).pack(pady=10)
 
         # 输入区域
-        self.entry_label = ttk.Label(
-            self.root,
-            text="( )",
-            fg="#333",
-            padding=20
-        ).pack(pady=(0, 5))
+        self.entry_label = ttk.Label(self.root, text="( )", fg="#333", padding=20).pack(pady=(0, 5))
 
         # 创建输入框组
         input_row = ttk.Frame(self.entry_label)
@@ -32,7 +27,7 @@ class Calculator:
             input_row,
             font=("Arial", "24"),
             width=6,
-            background="#333" if hasattr(self.root, 'bg') else "#f5f5f5"
+            background="#333" if hasattr(self.root, "bg") else "#f5f5f5",
         ).pack(side=tk.LEFT, fill="x", padx=(10, 0), pady=(0, 10))
 
         def calculate():
@@ -44,7 +39,7 @@ class Calculator:
                     text=f"结果: {result}",
                     font=("Arial", "24"),
                     fg="white" if not isinstance(result, bool) else "#00ff00",
-                    padding=10
+                    padding=10,
                 ).pack(pady=(50, 20))
                 self.refresh()
             except ValueError as e:
@@ -56,7 +51,7 @@ class Calculator:
             text="= ",
             font=("Arial", "16"),
             command=calculate,
-            bg="#4CAF50" if hasattr(self.root, 'bg') else "#28a745"
+            bg="#4CAF50" if hasattr(self.root, "bg") else "#28a745",
         ).pack(pady=(30, 10))
 
     def calculate_value(self):
@@ -78,12 +73,12 @@ class Calculator:
             text="输入运算结果",
             font=("Arial", "16"),
             padding=20,
-            fg="#333" if hasattr(self.root, 'bg') else "#f5f5f5"
+            fg="#333" if hasattr(self.root, "bg") else "#f5f5f5",
         ).pack(pady=(0, 25))
 
         def run_input():
             try:
-                result = float(self.number_entry.get().strip())
+                float(self.number_entry.get().strip())
                 self.refresh()
             except ValueError as e:
                 messagebox.showerror("错误", str(e))
@@ -93,7 +88,7 @@ class Calculator:
             text="按",
             font=("Arial", "12"),
             command=run_input,
-            bg="#4CAF50" if hasattr(self.root, 'bg') else "#28a745"
+            bg="#4CAF50" if hasattr(self.root, "bg") else "#28a745",
         ).pack(pady=(30, 15))
 
     def start_new_calc(self):
@@ -103,7 +98,7 @@ class Calculator:
 
 def main():
     root = tk.Tk()
-    app = Calculator(root)
+    Calculator(root)
     root.mainloop()
 
 

@@ -35,16 +35,14 @@ def extract_cookies(profile_path: Path, domain: str) -> str:
 
     temp_cookie = tempfile.mktemp(suffix=".sqlite")
     import shutil
+
     shutil.copy2(cookies_file, temp_cookie)
 
     try:
         conn = sqlite3.connect(temp_cookie)
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT name, value FROM moz_cookies WHERE host LIKE ?",
-            (f"%{domain}%",)
-        )
+        cursor.execute("SELECT name, value FROM moz_cookies WHERE host LIKE ?", (f"%{domain}%",))
 
         cookies = [f"{name}={value}" for name, value in cursor.fetchall()]
         conn.close()
@@ -53,6 +51,7 @@ def extract_cookies(profile_path: Path, domain: str) -> str:
 
     finally:
         import os
+
         os.unlink(temp_cookie)
 
 

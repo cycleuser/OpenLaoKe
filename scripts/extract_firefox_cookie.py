@@ -13,7 +13,7 @@ console = Console()
 
 def get_firefox_profile_path() -> Path | None:
     """Find Firefox profile path."""
-    if Path.home().name == 'fred':  # macOS
+    if Path.home().name == "fred":  # macOS
         profiles_path = Path.home() / "Library" / "Application Support" / "Firefox" / "Profiles"
     else:
         profiles_path = Path.home() / ".mozilla" / "firefox" / "Profiles"
@@ -36,11 +36,11 @@ def get_firefox_profile_path() -> Path | None:
 
 def extract_cookies(profile_path: Path, domains: list[str]) -> dict[str, str]:
     """Extract cookies from Firefox profile.
-    
+
     Args:
         profile_path: Firefox profile directory
         domains: List of domains to extract cookies for
-        
+
     Returns:
         Dictionary of cookie name -> value
     """
@@ -53,6 +53,7 @@ def extract_cookies(profile_path: Path, domains: list[str]) -> dict[str, str]:
     # Copy to temp file to avoid locking
     temp_cookie = tempfile.mktemp(suffix=".sqlite")
     import shutil
+
     shutil.copy2(cookies_file, temp_cookie)
 
     try:
@@ -62,8 +63,7 @@ def extract_cookies(profile_path: Path, domains: list[str]) -> dict[str, str]:
         cookies = {}
         for domain in domains:
             cursor.execute(
-                "SELECT name, value FROM moz_cookies WHERE host LIKE ?",
-                (f"%{domain}%",)
+                "SELECT name, value FROM moz_cookies WHERE host LIKE ?", (f"%{domain}%",)
             )
             for name, value in cursor.fetchall():
                 cookies[name] = value
@@ -73,6 +73,7 @@ def extract_cookies(profile_path: Path, domains: list[str]) -> dict[str, str]:
 
     finally:
         import os
+
         os.unlink(temp_cookie)
 
 

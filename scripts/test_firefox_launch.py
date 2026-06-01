@@ -35,6 +35,7 @@ try:
 
     # Keep browser open
     import time
+
     try:
         while True:
             time.sleep(1)
@@ -47,4 +48,5 @@ try:
 except Exception as e:
     print(f"✗ Error: {e}")
     import traceback
+
     traceback.print_exc()
