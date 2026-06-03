@@ -35,7 +35,7 @@ class EarlyStopDetector:
     _last_output: str = ""
 
     def detect_repetition(
-        self, output: str, window_sizes: tuple[int, ...] = (50, 80, 120)
+        self, output: str, window_sizes: tuple[int, ...] = (20, 40, 60, 80, 120)
     ) -> EarlyStopResult:
         if not output:
             return EarlyStopResult()

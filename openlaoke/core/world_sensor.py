@@ -111,6 +111,7 @@ def sense_world(include_location: bool = False) -> SensorData:
 
     try:
         import psutil
+
         sd.cpu_count = psutil.cpu_count() or 0
         mem = psutil.virtual_memory()
         sd.memory_total_gb = round(mem.total / (1024**3), 1)
@@ -126,9 +127,8 @@ def sense_world(include_location: bool = False) -> SensorData:
     except Exception:
         pass
 
-    sd.is_virtual_env = (
-        hasattr(sys, "real_prefix")
-        or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
+    sd.is_virtual_env = hasattr(sys, "real_prefix") or (
+        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
     )
     sd.is_docker = os.path.exists("/.dockerenv")
 

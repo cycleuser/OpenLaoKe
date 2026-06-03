@@ -1,4 +1,5 @@
 """Thinking viewer - Rich Panel-based interactive thinking display."""
+
 from __future__ import annotations
 
 from rich.panel import Panel

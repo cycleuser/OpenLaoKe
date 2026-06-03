@@ -2,6 +2,7 @@
 
 Automated capture of task outcomes for strategy optimization.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,11 +56,7 @@ class EvidenceStore:
         self._save()
 
     def get_failed_strategies(self, task_id: str) -> set[str]:
-        return {
-            e.strategy
-            for e in self._entries
-            if e.task_id == task_id and e.outcome == "failed"
-        }
+        return {e.strategy for e in self._entries if e.task_id == task_id and e.outcome == "failed"}
 
     def get_working_strategies(self, task_id: str) -> list[EvidenceEntry]:
         return [e for e in self._entries if e.task_id == task_id and e.outcome == "worked"]

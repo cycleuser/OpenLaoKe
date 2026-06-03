@@ -117,7 +117,9 @@ class TaskSupervisor:
         requirements = []
         request_lower = request.lower()
 
-        if any(word in request_lower for word in ["research", "研究", "investigate", "调查", "survey"]):
+        if any(
+            word in request_lower for word in ["research", "研究", "investigate", "调查", "survey"]
+        ):
             requirements.extend(
                 [
                     TaskRequirements(

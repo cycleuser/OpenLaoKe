@@ -2,6 +2,7 @@
 
 Analyzes plan steps for file overlaps and produces execution groups.
 """
+
 from __future__ import annotations
 
 import re
@@ -33,7 +34,9 @@ class ExecutionGroup:
 
 
 _FILE_PATTERN = re.compile(r'(?:file|path|module)[\s:=]+["\']?([^\s"\')\],;]+)', re.IGNORECASE)
-_FILE_EXT = re.compile(r'\b(\w+\.(?:py|js|ts|rs|go|java|cpp|c|h|hpp|css|html|json|yaml|yml|toml|md|txt))\b')
+_FILE_EXT = re.compile(
+    r"\b(\w+\.(?:py|js|ts|rs|go|java|cpp|c|h|hpp|css|html|json|yaml|yml|toml|md|txt))\b"
+)
 
 
 def parse_plan(text: str) -> list[PlanStep]:
@@ -54,7 +57,11 @@ def parse_plan(text: str) -> list[PlanStep]:
                 files.append(f)
 
         tools = _detect_tools(description)
-        steps.append(PlanStep(step_id=step_id, description=description, files_touched=files, tools_used=tools))
+        steps.append(
+            PlanStep(
+                step_id=step_id, description=description, files_touched=files, tools_used=tools
+            )
+        )
 
     return steps
 
@@ -62,12 +69,12 @@ def parse_plan(text: str) -> list[PlanStep]:
 def _detect_tools(description: str) -> list[str]:
     tools = []
     tool_patterns = [
-        (r'\b(?:read|view|open)\b', 'read_file'),
-        (r'\b(?:write|create|make|generate)\b', 'write_file'),
-        (r'\b(?:edit|modify|change|update|fix|patch)\b', 'edit_file'),
-        (r'\b(?:run|execute|test|build)\b', 'bash'),
-        (r'\b(?:find|search|locate)\b', 'search'),
-        (r'\b(?:install|setup|configure)\b', 'install'),
+        (r"\b(?:read|view|open)\b", "read_file"),
+        (r"\b(?:write|create|make|generate)\b", "write_file"),
+        (r"\b(?:edit|modify|change|update|fix|patch)\b", "edit_file"),
+        (r"\b(?:run|execute|test|build)\b", "bash"),
+        (r"\b(?:find|search|locate)\b", "search"),
+        (r"\b(?:install|setup|configure)\b", "install"),
     ]
     for pattern, tool in tool_patterns:
         if re.search(pattern, description, re.IGNORECASE) and tool not in tools:

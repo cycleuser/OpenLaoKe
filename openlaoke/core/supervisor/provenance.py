@@ -153,9 +153,7 @@ class ProvenanceRecord:
         if not self.verification_checks:
             return VerificationStatus.UNVERIFIED
 
-        has_blocked = any(
-            c.status == VerificationStatus.BLOCKED for c in self.verification_checks
-        )
+        has_blocked = any(c.status == VerificationStatus.BLOCKED for c in self.verification_checks)
         has_unverified = any(
             c.status in (VerificationStatus.UNVERIFIED, VerificationStatus.INFERRED)
             for c in self.verification_checks
@@ -286,8 +284,12 @@ class ProvenanceRecord:
                                 title=parts[1],
                                 url=parts[2],
                                 key_claim=parts[3],
-                                source_type=SourceType(parts[4]) if parts[4] in SourceType._value2member_map_ else SourceType.SECONDARY,
-                                confidence=ConfidenceLevel(parts[5]) if parts[5] in ConfidenceLevel._value2member_map_ else ConfidenceLevel.MEDIUM,
+                                source_type=SourceType(parts[4])
+                                if parts[4] in SourceType._value2member_map_
+                                else SourceType.SECONDARY,
+                                confidence=ConfidenceLevel(parts[5])
+                                if parts[5] in ConfidenceLevel._value2member_map_
+                                else ConfidenceLevel.MEDIUM,
                             )
                         )
                     except (ValueError, IndexError):
