@@ -117,8 +117,25 @@ class TaskGranularity:
 
 _SIZE_RE = re.compile(r"(\d+\.?\d*)\s*b", re.IGNORECASE)
 
-_TIER1_PREFIXES = ("claude-", "gpt-4o", "gpt-4.5", "gpt-5", "o1", "o3", "o4", "gemini-2.5", "grok-3")
-_TIER2_PREFIXES = ("deepseek", "llama-3.3", "llama-4", "mistral-large", "gemini-2.0", "claude-haiku")
+_TIER1_PREFIXES = (
+    "claude-",
+    "gpt-4o",
+    "gpt-4.5",
+    "gpt-5",
+    "o1",
+    "o3",
+    "o4",
+    "gemini-2.5",
+    "grok-3",
+)
+_TIER2_PREFIXES = (
+    "deepseek",
+    "llama-3.3",
+    "llama-4",
+    "mistral-large",
+    "gemini-2.0",
+    "claude-haiku",
+)
 
 
 def classify_model_tier(model_name: str) -> ModelTier:
@@ -164,28 +181,53 @@ def classify_model_tier(model_name: str) -> ModelTier:
 
 TIER_GRANULARITIES: dict[ModelTier, TaskGranularity] = {
     ModelTier.TIER_1_ADVANCED: TaskGranularity(
-        max_subtasks=20, subtask_complexity_limit="high", verification_frequency="minimal",
-        retry_limit=3, timeout_multiplier=1.0, tool_call_limit=50,
-        requires_explicit_steps=False, min_confidence_threshold=0.6,
+        max_subtasks=20,
+        subtask_complexity_limit="high",
+        verification_frequency="minimal",
+        retry_limit=3,
+        timeout_multiplier=1.0,
+        tool_call_limit=50,
+        requires_explicit_steps=False,
+        min_confidence_threshold=0.6,
     ),
     ModelTier.TIER_2_CAPABLE: TaskGranularity(
-        max_subtasks=15, subtask_complexity_limit="medium", verification_frequency="moderate",
-        retry_limit=4, timeout_multiplier=1.2, tool_call_limit=35,
-        requires_explicit_steps=False, min_confidence_threshold=0.7,
+        max_subtasks=15,
+        subtask_complexity_limit="medium",
+        verification_frequency="moderate",
+        retry_limit=4,
+        timeout_multiplier=1.2,
+        tool_call_limit=35,
+        requires_explicit_steps=False,
+        min_confidence_threshold=0.7,
     ),
     ModelTier.TIER_3_MODERATE: TaskGranularity(
-        max_subtasks=10, subtask_complexity_limit="low", verification_frequency="frequent",
-        retry_limit=5, timeout_multiplier=1.5, tool_call_limit=25,
-        requires_explicit_steps=True, min_confidence_threshold=0.8,
+        max_subtasks=10,
+        subtask_complexity_limit="low",
+        verification_frequency="frequent",
+        retry_limit=5,
+        timeout_multiplier=1.5,
+        tool_call_limit=25,
+        requires_explicit_steps=True,
+        min_confidence_threshold=0.8,
     ),
     ModelTier.TIER_4_BASIC: TaskGranularity(
-        max_subtasks=6, subtask_complexity_limit="minimal", verification_frequency="every_step",
-        retry_limit=6, timeout_multiplier=2.0, tool_call_limit=15,
-        requires_explicit_steps=True, min_confidence_threshold=0.85,
+        max_subtasks=6,
+        subtask_complexity_limit="minimal",
+        verification_frequency="every_step",
+        retry_limit=6,
+        timeout_multiplier=2.0,
+        tool_call_limit=15,
+        requires_explicit_steps=True,
+        min_confidence_threshold=0.85,
     ),
     ModelTier.TIER_5_LIMITED: TaskGranularity(
-        max_subtasks=4, subtask_complexity_limit="atomic", verification_frequency="every_step",
-        retry_limit=8, timeout_multiplier=3.0, tool_call_limit=10,
-        requires_explicit_steps=True, min_confidence_threshold=0.9,
+        max_subtasks=4,
+        subtask_complexity_limit="atomic",
+        verification_frequency="every_step",
+        retry_limit=8,
+        timeout_multiplier=3.0,
+        tool_call_limit=10,
+        requires_explicit_steps=True,
+        min_confidence_threshold=0.9,
     ),
 }

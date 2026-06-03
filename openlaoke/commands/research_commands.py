@@ -137,9 +137,7 @@ class ReviewCommand(SlashCommand):
         paths = get_output_paths(slug)
 
         return CommandResult(
-            message=f"Peer review started for '{args}'\n"
-            f"Slug: {slug}\n"
-            f"Output: {paths['output']}"
+            message=f"Peer review started for '{args}'\nSlug: {slug}\nOutput: {paths['output']}"
         )
 
 

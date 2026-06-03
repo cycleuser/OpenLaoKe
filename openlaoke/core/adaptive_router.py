@@ -2,6 +2,7 @@
 
 When success rate drops below threshold, automatically promotes to a stronger model tier.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -104,10 +105,7 @@ class AdaptiveRouter:
             if stats.total_calls > 0
             else 1.0
         )
-        return (
-            success_rate < tier.min_success_rate
-            and stats.total_failures >= 2
-        )
+        return success_rate < tier.min_success_rate and stats.total_failures >= 2
 
     def demote(self) -> str | None:
         """Demote to next weaker tier. Returns new model name."""
@@ -144,6 +142,10 @@ class AdaptiveRouter:
 
     def get_stats(self) -> dict[str, dict[str, object]]:
         return {
-            name: {"calls": s.total_calls, "failures": s.total_failures, "promoted": s.promoted_count}
+            name: {
+                "calls": s.total_calls,
+                "failures": s.total_failures,
+                "promoted": s.promoted_count,
+            }
             for name, s in self._stats.items()
         }

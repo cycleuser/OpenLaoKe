@@ -1,4 +1,5 @@
 """Message action classifier - determines whether a message needs clarification, action, or is just a response."""
+
 from __future__ import annotations
 
 import re
@@ -22,22 +23,38 @@ class ActionResult:
 
 _CLARIFY_PATTERNS = [
     re.compile(r"\?\s*$", re.IGNORECASE),
-    re.compile(r"^(?:what|how|why|when|where|who|can you explain|explain|tell me about|is it|does it|do you)\b", re.IGNORECASE),
+    re.compile(
+        r"^(?:what|how|why|when|where|who|can you explain|explain|tell me about|is it|does it|do you)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b(?:please|pls)\s+(?:explain|clarify|elaborate|help)\b", re.IGNORECASE),
 ]
 
 _GREETING_PATTERNS = [
-    re.compile(r"^(?:hi|hey|hello|greetings|good morning|good afternoon|good evening)\b", re.IGNORECASE),
+    re.compile(
+        r"^(?:hi|hey|hello|greetings|good morning|good afternoon|good evening)\b", re.IGNORECASE
+    ),
 ]
 
 _PRAISE_PATTERNS = [
-    re.compile(r"^(?:thanks|thank you|good job|great|awesome|nice|appreciate|well done)\b", re.IGNORECASE),
+    re.compile(
+        r"^(?:thanks|thank you|good job|great|awesome|nice|appreciate|well done)\b", re.IGNORECASE
+    ),
 ]
 
 _ACTION_PATTERNS = [
-    re.compile(r"\b(?:fix|add|remove|delete|create|modify|update|change|implement|refactor|write|build|install|setup|configure|deploy|test|debug|optimize|migrate|convert|generate)\b", re.IGNORECASE),
-    re.compile(r"^(?:please|pls|can you|could you|would you)\s+(?:fix|add|remove|create|change|update|write|build|install|implement|refactor|help)\b", re.IGNORECASE),
-    re.compile(r"\b(?:code|file|script|function|class|module|package|project|app|application|server|api|endpoint|database|db)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:fix|add|remove|delete|create|modify|update|change|implement|refactor|write|build|install|setup|configure|deploy|test|debug|optimize|migrate|convert|generate)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:please|pls|can you|could you|would you)\s+(?:fix|add|remove|create|change|update|write|build|install|implement|refactor|help)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:code|file|script|function|class|module|package|project|app|application|server|api|endpoint|database|db)\b",
+        re.IGNORECASE,
+    ),
 ]
 
 
@@ -62,14 +79,18 @@ def classify_action(message: str) -> ActionResult:
         if pattern.search(msg_lower):
             if any(p.search(msg_lower) for p in _ACTION_PATTERNS):
                 break
-            return ActionResult(kind=ActionKind.GREETING, confidence=0.9, reason="greeting detected")
+            return ActionResult(
+                kind=ActionKind.GREETING, confidence=0.9, reason="greeting detected"
+            )
 
     # Check praise
     for pattern in _PRAISE_PATTERNS:
         if pattern.search(msg_lower):
             if any(p.search(msg_lower) for p in _ACTION_PATTERNS):
                 break
-            return ActionResult(kind=ActionKind.PRAISE, confidence=0.7, reason="praise/thanks detected")
+            return ActionResult(
+                kind=ActionKind.PRAISE, confidence=0.7, reason="praise/thanks detected"
+            )
 
     # Check action patterns
     action_score = 0
@@ -80,6 +101,10 @@ def classify_action(message: str) -> ActionResult:
     action_score = min(1.0, action_matches * 0.3)
 
     if action_score >= 0.3:
-        return ActionResult(kind=ActionKind.ACTION, confidence=action_score, reason=f"{action_matches} action keywords")
+        return ActionResult(
+            kind=ActionKind.ACTION,
+            confidence=action_score,
+            reason=f"{action_matches} action keywords",
+        )
 
     return ActionResult(kind=ActionKind.RESPOND, confidence=0.5, reason="default response")

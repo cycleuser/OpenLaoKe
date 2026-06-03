@@ -737,7 +737,9 @@ class REPL:
                     status_text = self._build_streaming_display("", 0, 0.0, 0.0)
 
                     try:
-                        with Live(status_text, console=self.console, refresh_per_second=10, transient=True) as live:
+                        with Live(
+                            status_text, console=self.console, refresh_per_second=10, transient=True
+                        ) as live:
                             async for chunk in self.api.stream_message(
                                 system_prompt=system_prompt,
                                 messages=messages,
@@ -801,9 +803,7 @@ class REPL:
                         break
 
                     if self._guard:
-                        quality_msg = self._guard.check_after_api_call(
-                            content_text, len(tool_uses)
-                        )
+                        quality_msg = self._guard.check_after_api_call(content_text, len(tool_uses))
                         if quality_msg:
                             messages.append({"role": "user", "content": quality_msg})
 
@@ -840,15 +840,15 @@ class REPL:
                                 "Output <tool_call> format immediately. "
                                 "Start with Read or Glob to explore the project."
                             )
-                        messages.append(
-                            {"role": "user", "content": retry_content}
-                        )
+                        messages.append({"role": "user", "content": retry_content})
                         continue
 
                     if reasoning_text:
                         self._last_thinking = reasoning_text
                         self.app_state.last_thinking = reasoning_text
-                        self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        self._thinking_duration = (
+                            (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        )
                         self._display_thinking_inline(reasoning_text)
 
                     if content_text:
@@ -893,9 +893,11 @@ class REPL:
                         messages.append(assistant_msg_dict)
 
                     if not tool_uses:
-                        if content_text.strip().upper().startswith("DONE") or \
-                           "\nDONE" in content_text.upper() or \
-                           content_text.strip().upper() == "DONE":
+                        if (
+                            content_text.strip().upper().startswith("DONE")
+                            or "\nDONE" in content_text.upper()
+                            or content_text.strip().upper() == "DONE"
+                        ):
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                         break
 
@@ -903,8 +905,8 @@ class REPL:
                         if not self._running:
                             break
 
-                        corrected_name, corrected_params, val_hint = (
-                            self._tool_validator.validate(tool_use.name, tool_use.input)
+                        corrected_name, corrected_params, val_hint = self._tool_validator.validate(
+                            tool_use.name, tool_use.input
                         )
                         if corrected_name != tool_use.name or corrected_params != tool_use.input:
                             tool_use.name = corrected_name
@@ -981,7 +983,9 @@ class REPL:
                     if response.thinking:
                         self._last_thinking = response.thinking
                         self.app_state.last_thinking = response.thinking
-                        self._thinking_duration = (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        self._thinking_duration = (
+                            (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        )
                         self._display_thinking_inline(response.thinking)
 
                     if response.content:
@@ -1030,8 +1034,8 @@ class REPL:
                         if not self._running:
                             break
 
-                        corrected_name, corrected_params, val_hint = (
-                            self._tool_validator.validate(tool_use.name, tool_use.input)
+                        corrected_name, corrected_params, val_hint = self._tool_validator.validate(
+                            tool_use.name, tool_use.input
                         )
                         if corrected_name != tool_use.name or corrected_params != tool_use.input:
                             tool_use.name = corrected_name
@@ -1305,6 +1309,7 @@ class REPL:
             return
         try:
             from rich.markdown import Markdown
+
             md = Markdown(content, code_theme="monokai")
             self.console.print(md)
         except Exception:
@@ -1376,10 +1381,25 @@ class REPL:
             return ""
 
         essential_order = [
-            "Bash", "Read", "Write", "Edit", "Glob", "Grep",
-            "ListDirectory", "TodoWrite", "WebSearch", "WebFetch",
-            "TaskKill", "Agent", "Question", "Git", "Batch",
-            "Sleep", "MemoryStore", "MemoryRecall", "Plan",
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "ListDirectory",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "TaskKill",
+            "Agent",
+            "Question",
+            "Git",
+            "Batch",
+            "Sleep",
+            "MemoryStore",
+            "MemoryRecall",
+            "Plan",
         ]
         ordered = []
         for name in essential_order:
@@ -1420,15 +1440,22 @@ class REPL:
         tool_uses: list[ToolUseBlock] = []
 
         _tool_aliases: dict[str, str] = {
-            "write": "Write", "read": "Read", "edit": "Edit", "bash": "Bash",
-            "glob": "Glob", "grep": "Grep", "ls": "ListDirectory",
-            "list": "ListDirectory", "dir": "ListDirectory",
+            "write": "Write",
+            "read": "Read",
+            "edit": "Edit",
+            "bash": "Bash",
+            "glob": "Glob",
+            "grep": "Grep",
+            "ls": "ListDirectory",
+            "list": "ListDirectory",
+            "dir": "ListDirectory",
         }
 
         def _clean(val: str) -> str:
             val = val.strip().rstrip(",").rstrip(";")
-            if (val.startswith('"') and val.endswith('"')) or \
-               (val.startswith("'") and val.endswith("'")):
+            if (val.startswith('"') and val.endswith('"')) or (
+                val.startswith("'") and val.endswith("'")
+            ):
                 val = val[1:-1]
             return val
 
@@ -1447,7 +1474,7 @@ class REPL:
             last_key = None
             for km in kv_pattern.finditer(remaining):
                 if last_key:
-                    params[last_key] = _clean(remaining[pos:km.start()])
+                    params[last_key] = _clean(remaining[pos : km.start()])
                 last_key = km.group(1)
                 pos = km.end()
             if last_key:
@@ -1529,9 +1556,22 @@ class REPL:
             content,
             flags=re.DOTALL,
         )
-        for tool_name in ["Write", "Read", "Edit", "Bash", "Glob", "Grep",
-                          "ListDirectory", "write", "read", "edit", "bash",
-                          "glob", "grep", "ls"]:
+        for tool_name in [
+            "Write",
+            "Read",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "ListDirectory",
+            "write",
+            "read",
+            "edit",
+            "bash",
+            "glob",
+            "grep",
+            "ls",
+        ]:
             content = re.sub(
                 rf"^{tool_name}\s+\w[\w_]*\s*=.*$",
                 "",

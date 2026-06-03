@@ -86,6 +86,7 @@ class WebSearchTool(Tool):
             for mod_name in ("ddgs", "duckduckgo_search"):
                 try:
                     import importlib
+
                     mod = importlib.import_module(mod_name)
                     raw = list(mod.DDGS().text(query, max_results=num))
                     results = [
@@ -167,11 +168,13 @@ class WebSearchTool(Tool):
                     snippet = self._strip_tags(html[snip_a:snip_end]).strip()
 
             if title and url and not url.startswith("javascript:"):
-                results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet or "(No description)",
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet or "(No description)",
+                    }
+                )
 
             i = text_end + 4
 

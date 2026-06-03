@@ -3,6 +3,7 @@
 Each turn records: tool calls, results, timing, model, tokens.
 Traces persist to ~/.openlaoke/traces/ with structured JSON.
 """
+
 from __future__ import annotations
 
 import json
@@ -65,7 +66,9 @@ class TraceRecorder:
     def record_tool_call(
         self, tool_name: str, args: dict[str, object], result_preview: str, is_error: bool
     ) -> None:
-        duration = (time.time() - self._current_call_start) * 1000 if self._current_call_start else 0.0
+        duration = (
+            (time.time() - self._current_call_start) * 1000 if self._current_call_start else 0.0
+        )
         trace = ToolCallTrace(
             tool_name=tool_name,
             args=args,
@@ -140,9 +143,7 @@ class TraceRecorder:
         }
 
     def list_sessions(self) -> list[str]:
-        return sorted(
-            [p.stem for p in self._dir.glob("*.json")], reverse=True
-        )
+        return sorted([p.stem for p in self._dir.glob("*.json")], reverse=True)
 
     def get_session(self, session_id: str) -> list[TurnTrace] | None:
         path = self._dir / f"{session_id}.json"
@@ -181,9 +182,7 @@ class TraceRecorder:
         except (OSError, json.JSONDecodeError):
             return None
 
-    def generate_regression_test(
-        self, session_id: str, turn_index: int = -1
-    ) -> str | None:
+    def generate_regression_test(self, session_id: str, turn_index: int = -1) -> str | None:
         """Generate a pytest test from a recorded turn."""
         turns = self.get_session(session_id)
         if not turns or abs(turn_index) >= len(turns):
@@ -193,7 +192,7 @@ class TraceRecorder:
         lines = [
             '"""Generated regression test from trace."""',
             f"# Session: {session_id}, Turn: {turn.turn_id}",
-            f'# Model: {turn.model}, Duration: {turn.duration_ms:.0f}ms',
+            f"# Model: {turn.model}, Duration: {turn.duration_ms:.0f}ms",
             "",
             "@pytest.mark.asyncio",
             "async def test_regression_from_trace():",

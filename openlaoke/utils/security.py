@@ -1,4 +1,5 @@
 """Security utilities: path sanitization, credential redaction, ANSI stripping."""
+
 from __future__ import annotations
 
 import os
@@ -6,14 +7,17 @@ import re
 
 # Common credential/secret patterns
 _CREDENTIAL_PATTERNS: list[tuple[str, str]] = [
-    (r'(?:api[_-]?key|apikey|secret|token|password|passwd|auth)\s*[=:]\s*["\']?[^\s"\')\]}]+', "[redacted]"),
-    (r'sk-[a-zA-Z0-9]{24,}', "[redacted-key]"),
-    (r'gh[pousr]_[a-zA-Z0-9]{20,}', "[redacted-token]"),
-    (r'AIza[0-9A-Za-z\-_]{20,}', "[redacted-key]"),
-    (r'ya29\.[0-9A-Za-z\-_]{20,}', "[redacted-token]"),
-    (r'Bearer\s+[a-zA-Z0-9\-._~+/]+=*', "Bearer [redacted]"),
-    (r'xox[bpras]-[0-9a-zA-Z\-]{10,}', "[redacted-slack]"),
-    (r'(?:Authorization|X-Api-Key|X-API-Key):\s*[^\s,]+', "[header]: [redacted]"),
+    (r"(?:Authorization|X-Api-Key|X-API-Key):\s*[^\n]+", "[header]: [redacted]"),
+    (r"Bearer\s+[a-zA-Z0-9\-._~+/]+\s*", "Bearer [redacted]"),
+    (
+        r'(?:api[_-]?key|apikey|secret|token|password|passwd|auth)\s*[=:]\s*["\']?[^\s"\')\]}]+',
+        "[redacted]",
+    ),
+    (r"sk-[a-zA-Z0-9]{24,}", "[redacted-key]"),
+    (r"gh[pousr]_[a-zA-Z0-9]{20,}", "[redacted-token]"),
+    (r"AIza[0-9A-Za-z\-_]{20,}", "[redacted-key]"),
+    (r"ya29\.[0-9A-Za-z\-_]{20,}", "[redacted-token]"),
+    (r"xox[bpras]-[0-9a-zA-Z\-]{10,}", "[redacted-slack]"),
 ]
 
 

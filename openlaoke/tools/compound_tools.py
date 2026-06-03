@@ -2,6 +2,7 @@
 
 Reduces sequential tool calls for better efficiency with small models.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -70,7 +71,9 @@ class ReadAndPatchTool(Tool):
         if read_result.is_error:
             return read_result
 
-        edit_result = await edit_tool.call(ctx, file_path=file_path, old_text=old_text, new_text=new_text)
+        edit_result = await edit_tool.call(
+            ctx, file_path=file_path, old_text=old_text, new_text=new_text
+        )
         if edit_result.is_error:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,

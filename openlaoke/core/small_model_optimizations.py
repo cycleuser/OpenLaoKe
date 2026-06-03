@@ -354,7 +354,12 @@ class SmallModelGuard:
     max_task_tool_calls: int = 0
 
     def __post_init__(self) -> None:
-        limits = {"tiny": (12, 4, 15), "small": (20, 6, 25), "medium": (30, 8, 40), "large": (50, 12, 60)}
+        limits = {
+            "tiny": (12, 4, 15),
+            "small": (20, 6, 25),
+            "medium": (30, 8, 40),
+            "large": (50, 12, 60),
+        }
         toks, streak, task = limits.get(self.model_size, (20, 6, 25))
         self.max_tool_calls = toks
         self.max_same_tool_streak = streak
@@ -420,7 +425,7 @@ class SmallModelGuard:
         snippet = raw_content[:150].replace("\n", " ")
         base = (
             f"Your tool call format was incorrect. "
-            f'Use EXACTLY: <tool_call> <function=ToolName> <parameter=param> value </tool_call>\n'
+            f"Use EXACTLY: <tool_call> <function=ToolName> <parameter=param> value </tool_call>\n"
             f"Your output was: {snippet}\n"
         )
         if self.consecutive_parse_failures >= self.max_parse_failures:
@@ -453,19 +458,44 @@ class ToolCallValidator:
     known_names: list[str] = field(default_factory=list)
     name_schemas: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    _param_aliases: dict[str, str] = field(default_factory=lambda: {
-        "file": "file_path", "path": "file_path", "filename": "file_path",
-        "filepath": "file_path", "dest": "file_path", "target": "file_path",
-        "cmd": "command", "shell": "command", "run": "command", "exec": "command",
-        "code": "content", "text": "content", "body": "content", "data": "content",
-        "source": "content", "val": "content",
-        "pattern": "pattern", "glob": "pattern", "regex": "pattern",
-        "query": "query", "search": "query", "find": "query",
-        "old": "old_string", "old_text": "old_string", "before": "old_string",
-        "new": "new_string", "new_text": "new_string", "after": "new_string",
-        "seconds": "seconds", "duration": "seconds", "time": "seconds",
-        "url": "url", "link": "url", "address": "url",
-    })
+    _param_aliases: dict[str, str] = field(
+        default_factory=lambda: {
+            "file": "file_path",
+            "path": "file_path",
+            "filename": "file_path",
+            "filepath": "file_path",
+            "dest": "file_path",
+            "target": "file_path",
+            "cmd": "command",
+            "shell": "command",
+            "run": "command",
+            "exec": "command",
+            "code": "content",
+            "text": "content",
+            "body": "content",
+            "data": "content",
+            "source": "content",
+            "val": "content",
+            "pattern": "pattern",
+            "glob": "pattern",
+            "regex": "pattern",
+            "query": "query",
+            "search": "query",
+            "find": "query",
+            "old": "old_string",
+            "old_text": "old_string",
+            "before": "old_string",
+            "new": "new_string",
+            "new_text": "new_string",
+            "after": "new_string",
+            "seconds": "seconds",
+            "duration": "seconds",
+            "time": "seconds",
+            "url": "url",
+            "link": "url",
+            "address": "url",
+        }
+    )
 
     def set_tools(self, tool_registry: Any) -> None:
         from openlaoke.core.tool import Tool
@@ -487,7 +517,9 @@ class ToolCallValidator:
                 return known
         return None
 
-    def _correct_params(self, tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    def _correct_params(
+        self, tool_name: str, params: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[str]]:
         hints: list[str] = []
         schema = self.name_schemas.get(tool_name, {})
         schema_props = schema.get("properties", {})
@@ -516,7 +548,9 @@ class ToolCallValidator:
 
         return new_params, hints
 
-    def validate(self, tool_name: str, params: dict[str, Any]) -> tuple[str, dict[str, Any], str | None]:
+    def validate(
+        self, tool_name: str, params: dict[str, Any]
+    ) -> tuple[str, dict[str, Any], str | None]:
         corrected_name = self._fuzzy_name(tool_name) or tool_name
         name_hint = None
         if corrected_name != tool_name:

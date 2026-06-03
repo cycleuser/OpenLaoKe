@@ -553,9 +553,7 @@ class TaskCompletionChecker:
 
         has_citations = len(unique_citations) >= 3
 
-        sources_section = re.search(
-            r"##\s+Sources\s*\n(.*?)(?=##|\Z)", content, re.DOTALL
-        )
+        sources_section = re.search(r"##\s+Sources\s*\n(.*?)(?=##|\Z)", content, re.DOTALL)
         has_sources_section = sources_section is not None
 
         orphan_citations = []

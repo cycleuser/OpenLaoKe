@@ -36,7 +36,11 @@ class SnapshotCheckpoint:
     def rollback(self) -> list[str]:
         restored = []
         for entry in self.entries.values():
-            abs_path = os.path.join(self.work_dir, entry.path) if self.work_dir else entry.path
+            abs_path = (
+                os.path.join(self.work_dir, entry.path)
+                if self.work_dir and not os.path.isabs(entry.path)
+                else entry.path
+            )
             if entry.is_new_file or entry.before_content is None:
                 try:
                     if os.path.exists(abs_path):
@@ -45,7 +49,9 @@ class SnapshotCheckpoint:
                 except FileNotFoundError:
                     pass
             else:
-                os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+                parent = os.path.dirname(abs_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
                 with open(abs_path, "w") as f:
                     f.write(entry.before_content)
                 restored.append(entry.path)

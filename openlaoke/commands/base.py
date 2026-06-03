@@ -2535,19 +2535,24 @@ class ThinkingCommand(SlashCommand):
             return CommandResult(message="Thinking display: ON — will show after each response")
         if args in ("off", "disable", "0", "false"):
             ctx.app_state.thinking_enabled = False
-            return CommandResult(message="Thinking display: OFF — Ctrl+G to view, /thinking show to see last")
+            return CommandResult(
+                message="Thinking display: OFF — Ctrl+G to view, /thinking show to see last"
+            )
         if args in ("show", "view"):
             thinking = getattr(ctx.app_state, "last_thinking", "")
             if not thinking:
                 return CommandResult(
                     success=False,
-                    message="No thinking content. The model may not support reasoning output."
+                    message="No thinking content. The model may not support reasoning output.",
                 )
             lines = thinking.strip().split("\n")
             return CommandResult(
-                message="\n" + "─" * 60 + f"\n  Thought ({len(lines)} lines):\n"
+                message="\n"
+                + "─" * 60
+                + f"\n  Thought ({len(lines)} lines):\n"
                 + "\n".join(f"  {line}" for line in lines)
-                + "\n" + "─" * 60
+                + "\n"
+                + "─" * 60
             )
 
         enabled = ctx.app_state.thinking_enabled
