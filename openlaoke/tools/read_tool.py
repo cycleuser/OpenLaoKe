@@ -99,6 +99,9 @@ class ReadTool(Tool):
             selected = lines[start:end]
             total_lines = len(lines)
 
+            if ctx.file_state and hasattr(ctx.file_state, "record_read"):
+                ctx.file_state.record_read(abs_path, content)
+
             header = f"File: {abs_path} ({total_lines} lines)\n"
             if offset or limit:
                 header += f"Showing lines {start + 1}-{min(end, total_lines)} of {total_lines}\n"

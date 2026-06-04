@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +26,11 @@ from openlaoke.types.core_types import (
 from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+_MAX_RETRIES = 3
+_BASE_DELAY = 1.0  # seconds
+_MAX_DELAY = 30.0
 
 
 @dataclass
@@ -123,6 +130,54 @@ class MultiProviderClient:
         if self._builtin_client:
             self._builtin_client.unload()
             self._builtin_client = None
+
+    def _retry_with_backoff(self, status: int) -> tuple[bool, float]:
+        if status not in _RETRYABLE_STATUS:
+            return False, 0
+        delay = min(_BASE_DELAY * (2 ** (0)), _MAX_DELAY)
+        delay += random.uniform(0, delay * 0.3)  # jitter
+        return True, delay
+
+    @staticmethod
+    async def health_check(config: MultiProviderConfig, timeout: float = 5.0) -> dict[str, Any]:
+        """Check reachability of each configured provider.
+
+        Returns a dict ``{provider_name: {"ok": bool, "latency_ms": float}}``.
+        """
+        results: dict[str, Any] = {}
+        import time as _time
+        for name, provider in config.providers.items():
+            if provider.is_local:
+                results[name] = {"ok": True, "latency_ms": 0, "note": "local"}
+                continue
+            if not provider.is_configured():
+                results[name] = {"ok": False, "latency_ms": 0, "note": "not configured"}
+                continue
+            start = _time.time()
+            try:
+                headers: dict[str, str] = {}
+                api_key = provider.api_key
+                if not api_key:
+                    results[name] = {"ok": False, "latency_ms": 0, "note": "no api key"}
+                    continue
+                headers["Authorization"] = f"Bearer {api_key}"
+                headers["Content-Type"] = "application/json"
+                url = provider.base_url or "https://api.openai.com/v1"
+                url = url.rstrip("/") + "/models"
+                async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
+                    resp = await c.get(url, headers=headers)
+                results[name] = {
+                    "ok": resp.status_code < 400,
+                    "latency_ms": (_time.time() - start) * 1000,
+                    "status": resp.status_code,
+                }
+            except Exception as exc:
+                results[name] = {
+                    "ok": False,
+                    "latency_ms": (_time.time() - start) * 1000,
+                    "error": str(exc)[:200],
+                }
+        return results
 
     async def _send_builtin_message(
         self,
@@ -373,6 +428,7 @@ class MultiProviderClient:
         tools: list[dict[str, Any]] | None,
         max_tokens: int,
         temperature: float,
+        thinking_budget: int = 0,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": model,
@@ -383,6 +439,20 @@ class MultiProviderClient:
             body["temperature"] = temperature
         if tools:
             body["tools"] = self._convert_tools_to_openai_format(tools)
+        if thinking_budget > 0:
+            base_url = ""
+            if self.config:
+                provider = self.config.get_active_provider()
+                if provider:
+                    base_url = (provider.base_url or "").lower()
+            if "deepseek" in base_url:
+                body["chat_template_kwargs"] = {"thinking_budget": thinking_budget}
+            elif thinking_budget <= 500:
+                body["reasoning_effort"] = "low"
+            elif thinking_budget <= 2000:
+                body["reasoning_effort"] = "medium"
+            else:
+                body["reasoning_effort"] = "high"
         return body
 
     def _convert_tools_to_openai_format(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -411,10 +481,14 @@ class MultiProviderClient:
         messages: list[dict[str, Any]],
         provider_type: ProviderType,
     ) -> list[dict[str, Any]]:
-        if provider_type == ProviderType.ANTHROPIC:
-            return self._convert_to_anthropic_format(messages)
-        else:
-            return self._convert_to_openai_format(messages)
+        from openlaoke.provider import enforce_role_alternation
+
+        converted = (
+            self._convert_to_anthropic_format(messages)
+            if provider_type == ProviderType.ANTHROPIC
+            else self._convert_to_openai_format(messages)
+        )
+        return enforce_role_alternation(converted)
 
     def _convert_to_anthropic_format(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result = []
@@ -672,7 +746,7 @@ class MultiProviderClient:
                 f"{base_url}/openai/deployments/{model}/chat/completions?api-version={api_version}"
             )
             body = self._build_openai_body(
-                model, converted_messages, tools, max_tokens, temperature
+                model, converted_messages, tools, max_tokens, temperature, thinking_budget
             )
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
@@ -730,6 +804,36 @@ class MultiProviderClient:
                 len(body.get("messages", [])),
                 error_detail,
             )
+
+            # Try fallback provider chain
+            if response.status_code in (429, 500, 502, 503, 504):
+                fb = self.config.get_fallback_provider()
+                if fb:
+                    fb_name, fallback_provider = fb
+                    if fb_name != self.config.active_provider:
+                        logger.info("Falling back to provider %s", fb_name)
+                        fb_model = fallback_provider.get_default_model()
+                        fb_url = self._get_base_url(fallback_provider)
+                        fb_headers = self._build_headers(fallback_provider)
+                        fb_messages = self._convert_messages_for_provider(
+                            messages, fallback_provider.provider_type
+                        )
+                        if fallback_provider.provider_type == ProviderType.ANTHROPIC:
+                            fb_endpoint = f"{fb_url}/v1/messages"
+                            fb_body = self._build_anthropic_body(
+                                fb_model, fb_messages, tools, max_tokens, temperature, thinking_budget
+                            )
+                            fb_body["system"] = system_prompt
+                        else:
+                            fb_endpoint = f"{fb_url}/chat/completions"
+                            fb_body = self._build_openai_body(
+                                fb_model, fb_messages, tools, max_tokens, temperature, thinking_budget
+                            )
+                            fb_body["messages"] = [
+                                {"role": "system", "content": system_prompt},
+                                *fb_body["messages"],
+                            ]
+                        response = await client.post(fb_endpoint, headers=fb_headers, json=fb_body)
 
         response.raise_for_status()
         data = response.json()
@@ -789,7 +893,7 @@ class MultiProviderClient:
         else:
             endpoint = f"{base_url}/chat/completions"
             body = self._build_openai_body(
-                model, converted_messages, tools, max_tokens, temperature
+                model, converted_messages, tools, max_tokens, temperature, thinking_budget
             )
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
@@ -801,42 +905,62 @@ class MultiProviderClient:
         final_usage: TokenUsage | None = None
         final_cost: CostInfo | None = None
 
-        async with client.stream("POST", endpoint, headers=headers, json=body) as response:
-            response.raise_for_status()
-
-            async for line in response.aiter_lines():
-                if not line:
-                    continue
-
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        event = json.loads(data_str)
-                    except json.JSONDecodeError:
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                async with client.stream("POST", endpoint, headers=headers, json=body) as response:
+                    if response.status_code >= 400 and attempt < _MAX_RETRIES:
+                        retry, delay = self._retry_with_backoff(response.status_code)
+                        if retry:
+                            logger.warning("Retry %d/%d after %.1fs for status %d",
+                                           attempt + 1, _MAX_RETRIES, delay, response.status_code)
+                            await asyncio.sleep(delay)
+                            continue
+                    response.raise_for_status()
+                    # Success: stream loop below
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                event = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
+                            if provider.provider_type == ProviderType.ANTHROPIC:
+                                for chunk in self._parse_anthropic_stream_events(event, pending_tool_calls, model):
+                                    if chunk.usage:
+                                        final_usage = chunk.usage
+                                    if chunk.cost:
+                                        final_cost = chunk.cost
+                                    yield chunk
+                            else:
+                                for chunk in self._parse_openai_stream_events(event, pending_tool_calls, model):
+                                    if chunk.usage:
+                                        final_usage = chunk.usage
+                                    if chunk.cost:
+                                        final_cost = chunk.cost
+                                    yield chunk
+                    break  # successful stream, exit retry loop
+            except httpx.HTTPStatusError as exc:
+                if attempt < _MAX_RETRIES:
+                    retry, delay = self._retry_with_backoff(exc.response.status_code)
+                    if retry:
+                        logger.warning("Retry %d/%d after %.1fs: %s",
+                                       attempt + 1, _MAX_RETRIES, delay, exc)
+                        await asyncio.sleep(delay)
                         continue
-
-                    if provider.provider_type == ProviderType.ANTHROPIC:
-                        for stream_chunk in self._parse_anthropic_stream_events(
-                            event, pending_tool_calls, model
-                        ):
-                            if stream_chunk.event_type == StreamEventType.USAGE:
-                                if stream_chunk.usage:
-                                    final_usage = stream_chunk.usage
-                                if stream_chunk.cost:
-                                    final_cost = stream_chunk.cost
-                            yield stream_chunk
-                    else:
-                        for stream_chunk in self._parse_openai_stream_events(
-                            event, pending_tool_calls, model
-                        ):
-                            if stream_chunk.event_type == StreamEventType.USAGE:
-                                if stream_chunk.usage:
-                                    final_usage = stream_chunk.usage
-                                if stream_chunk.cost:
-                                    final_cost = stream_chunk.cost
-                            yield stream_chunk
+                raise
+            except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
+                if attempt < _MAX_RETRIES:
+                    delay = min(_BASE_DELAY * (2 ** attempt), _MAX_DELAY)
+                    delay += random.uniform(0, delay * 0.3)
+                    logger.warning("Network error retry %d/%d after %.1fs: %s",
+                                   attempt + 1, _MAX_RETRIES, delay, exc)
+                    await asyncio.sleep(delay)
+                    continue
+                raise
 
         for tc_idx, tc_data in pending_tool_calls.items():
             args_str = tc_data.get("arguments", "")

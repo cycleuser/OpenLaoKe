@@ -106,8 +106,7 @@ HTML_PAGE = """<!DOCTYPE html>
         .typing-indicator { display: none; padding: 12px 16px; color: var(--text-secondary); font-size: 14px; }
         .typing-indicator.active { display: block; }
         .typing-dots { display: inline-block; }
-        .typing-dots::after { content: ''; animation: dots 1.5s infinite; }
-        @keyframes dots { 0%,20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%,100% { content: '...'; } }
+        .typing-dots::after { content: '...'; }
         .tool-panel { position: fixed; right: 20px; top: 80px; width: 320px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; max-height: calc(100vh - 100px); overflow-y: auto; display: none; }
         .tool-panel.visible { display: block; }
         .tool-panel h3 { font-size: 14px; margin-bottom: 12px; color: var(--text-secondary); }
@@ -214,7 +213,7 @@ HTML_PAGE = """<!DOCTYPE html>
         function renderSessions() {
             const list = document.getElementById('sessions-list');
             list.innerHTML = sessions.map(s => `
-                <div class="session-item ${s.session_id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.session_id}')">
+                <div class="session-item ${s.session_id === currentSessionId ? 'active' : ''}" onclick="loadSession(this.dataset.sid)" data-sid="${s.session_id.replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}">
                     <span class="session-name">${s.message_count > 0 ? `Chat (${s.message_count} msgs)` : 'Empty session'}</span>
                     <span class="session-time">${s.created_at ? new Date(s.created_at * 1000).toLocaleDateString() : ''}</span>
                 </div>
@@ -268,11 +267,12 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         function formatMarkdown(text) {
-            const escaped = escapeHtml(text);
-            return escaped.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-                        .replace(/`([^`]+)`/g, '<code>$1</code>')
-                        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
-                        .replace(/\\n/g, '<br>');
+            let result = text;
+            result = result.replace(/```(\\w*)\\n([\\s\\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+            result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+            result = result.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+            result = result.replace(/\\n/g, '<br>');
+            return result;
         }
 
         function updateStats() {
@@ -447,6 +447,7 @@ class WebUI:
         )
         self.manager = ConnectionManager()
         self.sessions: dict[str, ActiveSession] = {}
+        self.max_sessions = 100
         self.session_manager = SessionManager()
         self._setup_middleware()
         self._setup_routes()
@@ -455,7 +456,7 @@ class WebUI:
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=self.cors_origins,
-            allow_credentials=True,
+            allow_credentials="*" not in self.cors_origins,
             allow_methods=["*"],
             allow_headers=["*"],
         )
@@ -557,6 +558,18 @@ class WebUI:
             api = MultiProviderClient(config.providers, proxy=proxy_url)
 
             session_id = app_state.session_id
+
+            if len(self.sessions) >= self.max_sessions:
+                oldest_id = min(
+                    self.sessions,
+                    key=lambda k: (
+                        self.sessions[k].app_state.messages[0].timestamp
+                        if self.sessions[k].app_state.messages
+                        else 0.0
+                    ),
+                )
+                del self.sessions[oldest_id]
+
             self.sessions[session_id] = ActiveSession(
                 app_state=app_state,
                 registry=registry,
@@ -844,7 +857,9 @@ class WebUI:
         system_prompt = build_system_prompt(
             session.app_state, session.registry.get_all_for_prompt()
         )
-        messages = [{"role": "user", "content": content}]
+        messages = [
+            {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
+        ] + [{"role": "user", "content": content}]
         tools = session.registry.get_all_for_prompt()
 
         response, usage, cost = await session.api.send_message(

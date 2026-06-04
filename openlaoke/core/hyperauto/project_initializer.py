@@ -822,9 +822,7 @@ python_functions = ["test_*"]
                 except Exception as e:
                     warnings.append(f"Could not create tests directory: {e}")
 
-        deps_installed = await asyncio.get_event_loop().run_in_executor(
-            None, self.install_dependencies, project_type
-        )
+        deps_installed = await asyncio.to_thread(self.install_dependencies, project_type)
 
         if not deps_installed:
             warnings.append("Could not install dependencies automatically")

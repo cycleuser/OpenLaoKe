@@ -202,11 +202,16 @@ class TaskCompletionChecker:
     ) -> RequirementCheckResult:
         content = artifacts.get("content", "")
 
-        numbers = re.findall(r"\d+(?:\.\d+)?(?:%)?", content)
+        numbers = re.findall(r"\d+(?:\.\d+)?", content)
         percentages = re.findall(r"\d+(?:\.\d+)?%", content)
+        numbers_excl_pct = [
+            n
+            for n in numbers
+            if n + "%" not in content or content.count(n + "%") < content.count(n)
+        ]
         citations = re.findall(r"\[\d+\]", content)
 
-        has_quantitative = len(numbers) >= 10
+        has_quantitative = len(numbers_excl_pct) >= 10
         has_percentages = len(percentages) >= 3
         has_citations = len(citations) >= 3
 
@@ -341,7 +346,12 @@ class TaskCompletionChecker:
         suggestions = []
 
         if has_files:
+            cwd = os.getcwd()
+            home = os.path.expanduser("~")
             for file_path in output_files:
+                abs_path = os.path.abspath(file_path)
+                if not (abs_path.startswith(cwd) or abs_path.startswith(home)):
+                    continue
                 if file_path.endswith((".py", ".js", ".ts")):
                     try:
                         with open(file_path, encoding="utf-8") as f:

@@ -176,7 +176,7 @@ class TmuxTool(Tool):
 
             elif action == "split":
                 session_name = kwargs.get("session_name")
-                direction = kwargs.get("direction", "h")
+                direction = kwargs.get("direction") or "h"
                 size = kwargs.get("size")
 
                 if not session_name:
@@ -206,7 +206,7 @@ class TmuxTool(Tool):
 
             elif action == "resize":
                 session_name = kwargs.get("session_name")
-                direction = kwargs.get("direction", "h")
+                direction = kwargs.get("direction") or "h"
                 size = kwargs.get("size", 10)
 
                 if not session_name:

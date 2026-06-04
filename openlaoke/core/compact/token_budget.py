@@ -76,7 +76,7 @@ class TokenBudget:
         output_allocated = min(output_tokens, self.max_output_tokens)
 
         remaining_for_messages = total_available - system_reserved - tools_reserved
-        messages_allocated = min(remaining_for_messages, total_available - output_allocated)
+        messages_allocated = max(0, remaining_for_messages)
 
         return Allocation(
             total_available=total_available,

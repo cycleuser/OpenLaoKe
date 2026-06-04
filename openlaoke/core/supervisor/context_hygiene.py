@@ -31,7 +31,9 @@ class WriteBuffer:
         if not self._buffer:
             return
 
-        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        dirname = os.path.dirname(self.file_path)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
 
         mode = "a" if self._flush_count > 0 or os.path.exists(self.file_path) else "w"
         with open(self.file_path, mode, encoding="utf-8") as f:

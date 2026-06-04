@@ -738,8 +738,8 @@ class AutoTestRunner:
 
         output = stdout + stderr
 
-        passed_pattern = re.compile(r"test result: ok\. (\d+) passed")
-        failed_pattern = re.compile(r"test result: FAILED\. (\d+) failed")
+        passed_pattern = re.compile(r"test result:\s+ok\.\s+(\d+)\s+passed")
+        failed_pattern = re.compile(r"test result:\s+FAILED\.\s+(\d+)\s+passed.*?(\d+)\s+failed")
 
         passed_match = passed_pattern.search(output)
         failed_match = failed_pattern.search(output)
@@ -747,7 +747,8 @@ class AutoTestRunner:
         if passed_match:
             results.passed = int(passed_match.group(1))
         if failed_match:
-            results.failed = int(failed_match.group(1))
+            results.passed += int(failed_match.group(1))
+            results.failed = int(failed_match.group(2))
 
         results.total_tests = results.passed + results.failed
 
@@ -1132,13 +1133,11 @@ class AutoTestRunner:
     async def async_run_tests(self, project_path: Path) -> TestResults:
         """Asynchronously run tests."""
         tests = self.discover_tests(project_path)
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.run_tests, tests, project_path)
+        return await asyncio.to_thread(self.run_tests, tests, project_path)
 
     async def async_run_full_cycle(self, project_path: Path) -> TestCycleResult:
         """Asynchronously run full test cycle."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.run_full_test_cycle, project_path)
+        return await asyncio.to_thread(self.run_full_test_cycle, project_path)
 
     def get_test_command(self, framework: TestFramework) -> list[str]:
         """Get the test run command for a framework."""

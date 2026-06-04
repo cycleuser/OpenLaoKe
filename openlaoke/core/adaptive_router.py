@@ -21,7 +21,7 @@ class RouterStats:
 class TierConfig:
     name: str
     model: str
-    min_success_rate: float = 0.3
+    min_success_rate: float = 0.5
     min_calls_before_routing: int = 3
 
 
@@ -44,9 +44,9 @@ class AdaptiveRouter:
         strong_model: str = "claude-sonnet-4-20250514",
     ) -> None:
         self._tiers: list[TierConfig] = [
-            TierConfig(name="fast", model=fast_model, min_success_rate=0.3),
-            TierConfig(name="default", model=default_model, min_success_rate=0.25),
-            TierConfig(name="strong", model=strong_model, min_success_rate=0.2),
+            TierConfig(name="fast", model=fast_model, min_success_rate=0.6),
+            TierConfig(name="default", model=default_model, min_success_rate=0.5),
+            TierConfig(name="strong", model=strong_model, min_success_rate=0.3),
         ]
         self._current_tier: int = 0
         self._stats: defaultdict[str, RouterStats] = defaultdict(RouterStats)

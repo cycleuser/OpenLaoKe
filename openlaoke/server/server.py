@@ -159,7 +159,9 @@ class Server:
         )
         self.manager = ConnectionManager()
         self.sessions: dict[str, ActiveSession] = {}
+        self.max_sessions = 100
         self.session_manager = SessionManager()
+        self._channel_manager: Any | None = None
         self._setup_middleware()
         self._setup_routes()
 
@@ -265,6 +267,18 @@ class Server:
             api = MultiProviderClient(config.providers, proxy=proxy_url)
 
             session_id = app_state.session_id
+
+            if len(self.sessions) >= self.max_sessions:
+                oldest_id = min(
+                    self.sessions,
+                    key=lambda k: (
+                        self.sessions[k].app_state.messages[0].timestamp
+                        if self.sessions[k].app_state.messages
+                        else 0.0
+                    ),
+                )
+                del self.sessions[oldest_id]
+
             self.sessions[session_id] = ActiveSession(
                 app_state=app_state,
                 registry=registry,
@@ -552,7 +566,9 @@ class Server:
         system_prompt = build_system_prompt(
             session.app_state, session.registry.get_all_for_prompt()
         )
-        messages = [{"role": "user", "content": content}]
+        messages = [
+            {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
+        ] + [{"role": "user", "content": content}]
         tools = session.registry.get_all_for_prompt()
 
         response, usage, cost = await session.api.send_message(
@@ -614,6 +630,21 @@ class Server:
         import uvicorn
 
         uvicorn.run(self.app, host=self.host, port=self.port, log_level="info")
+
+    async def start_channels(self) -> None:
+        from openlaoke.bus.queue import MessageBus
+        from openlaoke.channels.manager import ChannelManager
+
+        bus = MessageBus()
+        self._channel_manager = ChannelManager(bus=bus)
+        for name, cls in ChannelManager.discover_builtin_channels().items():
+            self._channel_manager.register_channel(name, cls)
+        await self._channel_manager.start_all()
+
+    async def stop_channels(self) -> None:
+        if self._channel_manager is not None:
+            await self._channel_manager.stop_all()
+            self._channel_manager = None
 
 
 def create_server(

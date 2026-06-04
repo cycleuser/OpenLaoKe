@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
+import time
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.types.core_types import ToolResultBlock
@@ -47,7 +47,7 @@ class ToolExecutor:
 
             ctx = ToolContext(
                 app_state=self.app_state,
-                tool_use_id=f"ha_tool_{asyncio.get_event_loop().time()}",
+                tool_use_id=f"ha_tool_{int(time.time() * 1000)}",
             )
 
             result = await tool.call(ctx, **tool_input)

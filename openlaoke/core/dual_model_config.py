@@ -27,6 +27,7 @@ Example configurations:
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -109,7 +110,8 @@ class DualModelConfig:
                 provider=ModelProvider(p.get("provider", "ollama")),
                 model_name=p.get("model_name", "gemma3:1b"),
                 api_base=p.get("api_base"),
-                api_key=p.get("api_key"),
+                api_key=p.get("api_key")
+                or os.environ.get(f"{p.get('provider', 'ollama').upper()}_API_KEY"),
                 device=ModelDevice(p.get("device", "cpu")),
                 max_tokens=p.get("max_tokens", 500),
             )

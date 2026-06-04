@@ -380,8 +380,10 @@ class TaskSupervisor:
         completed_count = 0
         total_weight = 0.0
 
+        check_results: dict[Any, bool] = {}
         for req in task.requirements:
             is_satisfied = await self.checker.check_requirement(req, artifacts)
+            check_results[req] = is_satisfied
 
             if is_satisfied:
                 completed_count += 1
@@ -392,7 +394,7 @@ class TaskSupervisor:
         critical_missing = [
             req.description
             for req in task.requirements
-            if req.critical and not await self.checker.check_requirement(req, artifacts)
+            if req.critical and not check_results.get(req, False)
         ]
 
         completion = (completed_count / len(task.requirements)) * 100 if task.requirements else 0.0

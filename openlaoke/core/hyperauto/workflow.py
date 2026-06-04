@@ -114,11 +114,11 @@ class DependencyGraph:
                 return
             if node in visited:
                 return
-            visited.add(node)
             path.append(node)
             for neighbor in self.adjacency.get(node, []):
                 dfs(neighbor, path, visited)
             path.pop()
+            visited.add(node)
 
         visited: set[str] = set()
         for node in self.nodes:

@@ -157,6 +157,7 @@ class MemoryConsolidator:
                         best_memory.associations.append(assoc)
                 best_memory.importance = max(best_memory.importance, memory.importance)
                 best_memory.access_count += memory.access_count
+                self.storage.delete(memory.id)
 
         self.storage.update(best_memory)
         return best_memory

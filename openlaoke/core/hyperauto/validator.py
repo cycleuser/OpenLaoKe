@@ -383,32 +383,39 @@ class ResultValidator:
 
     SECURITY_PATTERNS: dict[str, dict[str, Any]] = {
         "hardcoded_password": {
-            "patterns": ["password.*=.*['\"]", "passwd.*=.*['\"]", "pwd.*=.*['\"]"],
+            "patterns": [
+                r"(?:password|passwd|pwd)\s*=\s*['\"][^'\"]{3,}['\"]",
+            ],
             "level": ValidationLevel.CRITICAL,
             "message": "Hardcoded password detected",
         },
         "hardcoded_secret": {
-            "patterns": ["secret.*=.*['\"]", "api_key.*=.*['\"", "token.*=.*['\"]"],
+            "patterns": [
+                r"(?:secret_key|api_key|access_key)\s*=\s*['\"][^'\"]{3,}['\"]",
+            ],
             "level": ValidationLevel.CRITICAL,
             "message": "Hardcoded secret detected",
         },
         "sql_injection": {
-            "patterns": ["execute\\(.*\\+.*\\)", "query\\(.*\\+.*\\)"],
+            "patterns": [r"execute\(.*\+.*\)", r"query\(.*\+.*\)"],
             "level": ValidationLevel.ERROR,
             "message": "Potential SQL injection vulnerability",
         },
         "command_injection": {
-            "patterns": ["exec\\(.*\\+.*\\)", "system\\(.*\\+.*\\)", "eval\\(.*\\+.*\\)"],
+            "patterns": [
+                r"(?:os\.system|subprocess\.(?:call|run|Popen))\(.*\+.*\)",
+                r"eval\(.*\+.*\)",
+            ],
             "level": ValidationLevel.ERROR,
             "message": "Potential command injection vulnerability",
         },
         "unsafe_deserialization": {
-            "patterns": ["pickle\\.loads", "yaml\\.load\\(.*\\)"],
+            "patterns": [r"pickle\.loads", r"yaml\.load\(.*\)"],
             "level": ValidationLevel.WARNING,
             "message": "Unsafe deserialization",
         },
         "debug_code": {
-            "patterns": ["print\\(", "console\\.log\\(", "debugger"],
+            "patterns": [r"console\.log\(", r"debugger"],
             "level": ValidationLevel.INFO,
             "message": "Debug code detected",
         },
@@ -805,12 +812,15 @@ class ResultValidator:
     def _find_function_end(self, lines: list[str], start: int, language: Language) -> int:
         """Find the end line of a function."""
         if language == Language.PYTHON:
+            if start >= len(lines):
+                return len(lines)
             indent = len(lines[start]) - len(lines[start].lstrip())
             for i in range(start + 1, len(lines)):
-                if lines[i].strip() == "":
+                stripped = lines[i].strip()
+                if stripped == "" or stripped.startswith("#") or stripped.startswith("@"):
                     continue
                 current_indent = len(lines[i]) - len(lines[i].lstrip())
-                if current_indent <= indent and not lines[i].strip().startswith("#"):
+                if current_indent <= indent:
                     return i
             return len(lines)
 
@@ -824,15 +834,29 @@ class ResultValidator:
         ):
             brace_count = 0
             started = False
+            in_string = None
             for i in range(start, len(lines)):
-                for char in lines[i]:
-                    if char == "{":
+                j = 0
+                while j < len(lines[i]):
+                    char = lines[i][j]
+                    if in_string:
+                        if char == "\\" and j + 1 < len(lines[i]):
+                            j += 2
+                            continue
+                        if char == in_string:
+                            in_string = None
+                        j += 1
+                        continue
+                    if char in ('"', "'"):
+                        in_string = char
+                    elif char == "{":
                         brace_count += 1
                         started = True
                     elif char == "}":
                         brace_count -= 1
                         if started and brace_count == 0:
                             return i + 1
+                    j += 1
             return len(lines)
 
         return len(lines)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import uuid
@@ -256,10 +257,10 @@ class KnowledgeGraph:
             return None
 
         visited: set[str] = set()
-        queue: list[tuple[str, list[str]]] = [(source, [source])]
+        queue: collections.deque[tuple[str, list[str]]] = collections.deque([(source, [source])])
 
         while queue:
-            current, path = queue.pop(0)
+            current, path = queue.popleft()
             if current == target:
                 return path
             if len(path) > max_depth:

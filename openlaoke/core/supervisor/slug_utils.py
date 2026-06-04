@@ -157,14 +157,17 @@ def generate_slug(topic: str, max_words: int = 5) -> str:
     meaningful_words = [w for w in words if w not in filler_words and len(w) > 1]
 
     if not meaningful_words and has_cjk:
-        meaningful_words = [w for w in words if len(w) > 0]
+        meaningful_words = [
+            w for w in words if len(w) > 0 and not any("\u4e00" <= c <= "\u9fff" for c in w)
+        ]
 
     slug_words = meaningful_words[:max_words]
     slug = "-".join(slug_words)
 
     slug = re.sub(r"-+", "-", slug)
     slug = slug.strip("-")
-    slug = re.sub(r"[^\w\u4e00-\u9fff-]", "", slug)
+    slug = re.sub(r"[^\x00-\x7F-]", "", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
 
     if not slug:
         slug = f"topic-{int(time.time() * 1000) % 100000}"

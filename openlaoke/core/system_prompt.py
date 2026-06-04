@@ -131,6 +131,15 @@ def build_system_prompt(
     if suffix:
         parts.append(f"\n## Additional Instructions\n{suffix}")
 
+    if hasattr(app_state, "knowledge_loader"):
+        try:
+            query = world_context or app_state.session_config.model
+            knowledge = app_state.knowledge_loader.format_for_prompt(query)
+            if knowledge:
+                parts.append(f"\n{knowledge}")
+        except Exception:
+            pass
+
     return "\n".join(parts)
 
 
@@ -166,6 +175,19 @@ def build_compact_system_prompt(
     )
 
     if user_input:
+        try:
+            from openlaoke.agent.context import ContextBuilder
+
+            ctx = ContextBuilder()
+            runtime = ctx.build_runtime_block(
+                user_input=user_input,
+                cwd=app_state.get_cwd(),
+            )
+            if runtime:
+                return f"{base}\n\n{runtime}"
+        except Exception:
+            pass
+
         from openlaoke.core.distilled_templates import DistilledTemplateManager
 
         manager = DistilledTemplateManager()

@@ -33,6 +33,35 @@ class EditTool(Tool):
     is_concurrency_safe = False
     requires_approval = True
 
+    def preview(self, **kwargs: Any) -> PreviewResult:
+        from openlaoke.core.tool import PreviewResult
+
+        file_path = str(kwargs.get("file_path", ""))
+        old_text = str(kwargs.get("old_text", ""))
+        new_text = str(kwargs.get("new_text", ""))
+        if not file_path or not old_text:
+            return PreviewResult(summary="Error: missing file_path or old_text")
+        abs_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_path):
+            return PreviewResult(summary=f"Error: {abs_path} does not exist", path=abs_path, action="noop")
+        try:
+            with open(abs_path, encoding="utf-8", errors="replace") as f:
+                original = f.read()
+        except (OSError, UnicodeDecodeError):
+            return PreviewResult(summary=f"Update {abs_path} (binary file)", path=abs_path, action="update")
+        count = original.count(old_text) if old_text else 0
+        if count == 0:
+            return PreviewResult(summary=f"Warning: old_text not found in {abs_path}", path=abs_path, action="noop")
+        old_lines = old_text.count("\n") + 1
+        new_lines = new_text.count("\n") + 1
+        return PreviewResult(
+            summary=f"Replace {count} occurrence(s) in {abs_path} ({old_lines}→{new_lines} lines)",
+            path=abs_path,
+            action="update",
+            lines_before=old_lines * count,
+            lines_after=new_lines * count,
+        )
+
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         file_path = kwargs.get("file_path", "")
         old_text = kwargs.get("old_text", "")
@@ -78,8 +107,13 @@ class EditTool(Tool):
             if old_text not in original:
                 lines = original.splitlines()
                 similar = []
+                old_lower = old_text.lower()
+                min_len = max(4, len(old_text) // 3)
                 for i, line in enumerate(lines):
-                    if old_text.lower() in line.lower() or line.lower() in old_text.lower():
+                    line_lower = line.lower()
+                    if (len(old_lower) >= 8 and old_lower[:min_len] in line_lower) or (
+                        len(old_lower) >= 4 and old_lower in line_lower
+                    ):
                         similar.append(f"Line {i + 1}: {line.strip()}")
 
                 msg = f"Error: Text not found in {file_path}"

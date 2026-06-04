@@ -722,7 +722,7 @@ class LearningSystem:
         if not sequences:
             return None
 
-        common_sequence = self._find_longest_common_sequence(sequences)
+        common_sequence = self._find_common_elements(sequences)
         if not common_sequence:
             return None
 
@@ -922,22 +922,19 @@ class LearningSystem:
 
         return [s for s, c in sorted(step_counts.items(), key=lambda x: x[1], reverse=True)][:5]
 
-    def _find_longest_common_sequence(self, sequences: list[list[str]]) -> list[str]:
-        """Find longest common sequence among sequences."""
+    def _find_common_elements(self, sequences: list[list[str]]) -> list[str]:
+        """Find common elements among sequences, preserving order from first."""
         if not sequences:
             return []
 
         if len(sequences) == 1:
             return sequences[0]
 
-        common: list[str] = []
         first = sequences[0]
-
-        for i in range(len(first)):
-            if all(len(s) > i and s[i] == first[i] for s in sequences):
-                common.append(first[i])
-            else:
-                break
+        common = []
+        for elem in first:
+            if all(elem in s for s in sequences[1:]):
+                common.append(elem)
 
         return common
 

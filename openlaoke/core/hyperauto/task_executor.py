@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.core.hyperauto.executor import ToolExecutor
@@ -31,7 +32,7 @@ async def execute_task_with_tools(
 
         config = MultiProviderConfig.defaults()
         api_client = MultiProviderClient(config)
-        model = "gemma3:1b"
+        model = config.get_active_model()
 
     executor = ToolExecutor(app_state)
     tool_schemas = await executor.get_tool_schemas()
@@ -178,7 +179,8 @@ IMPORTANT: Your goal is to complete THIS specific sub-task fully, not partially.
                     }
                 )
 
-        except Exception:
+        except Exception as e:
+            logging.getLogger(__name__).warning("Task execution error: %s", e)
             break
 
     return {

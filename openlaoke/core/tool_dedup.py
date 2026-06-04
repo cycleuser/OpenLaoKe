@@ -1,82 +1,56 @@
-"""Tool-call deduplication with sliding window.
+"""Tool call deduplication.
 
-Short-circuits identical consecutive read-only tool calls with cached results.
-Separate per-turn guard for idempotent-write tools (memory_remember/forget).
+Detects repeated identical tool calls across iterations and blocks them
+when the model is stuck in a loop. Caps at 3 identical calls to the same
+tool with the same arguments.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections import deque
-from dataclasses import dataclass, field
+from typing import Any
 
-READ_ONLY_TOOLS = {
-    "Read",
-    "ListDirectory",
-    "Glob",
-    "Grep",
-    "ToolSearch",
-    "WebSearch",
-    "WebFetch",
-    "MemoryRecall",
-    "MemorySearch",
-    "MemoryTimeline",
-    "MemoryStats",
-}
-
-IDEMPOTENT_WRITE_TOOLS = {
-    "MemoryStore",
-    "MemoryForget",
-}
+_MAX_REPEATS = 3
 
 
-@dataclass
-class ToolCallCache:
-    window_size: int = 5
-    _window: deque[tuple[str, str, str]] = field(default_factory=deque)
-    _results: dict[str, str] = field(default_factory=dict)
-    _idempotent_this_turn: set[str] = field(default_factory=set)
+class ToolDedup:
+    """Tracks tool call history and flags repeated calls."""
 
-    def check(self, tool_name: str, args: dict[str, object]) -> str | None:
-        """Check if tool call should be deduplicated. Returns cached result or None."""
-        if tool_name in READ_ONLY_TOOLS:
-            call_key = _make_key(tool_name, args)
-            for cached_name, _cached_args, cached_key in self._window:
-                if cached_name == tool_name and cached_key == call_key:
-                    return self._results.get(call_key)
+    def __init__(self) -> None:
+        self._history: list[str] = []
+        self._blocked: set[str] = set()
+
+    def _fingerprint(self, name: str, args: dict[str, Any]) -> str:
+        canonical = json.dumps(args, sort_keys=True, ensure_ascii=False)
+        return f"{name}:{hashlib.sha256(canonical.encode()).hexdigest()[:12]}"
+
+    def check(self, name: str, args: dict[str, Any]) -> str | None:
+        """Return a block reason if this call should be deduped, else None.
+
+        Tracks the last 20 calls. After ``_MAX_REPEATS`` identical calls,
+        the fingerprint is blocked for the rest of the session.
+        """
+        fp = self._fingerprint(name, args)
+        if fp in self._blocked:
+            return (
+                f"Dedup blocked: '{name}' with these args has been called "
+                f"{_MAX_REPEATS}+ times. Try a different approach."
+            )
+
+        self._history.append(fp)
+        if len(self._history) > 20:
+            self._history.pop(0)
+
+        count = sum(1 for h in self._history if h == fp)
+        if count >= _MAX_REPEATS:
+            self._blocked.add(fp)
+            return (
+                f"Dedup blocked: '{name}' with these args has been called "
+                f"{count} times. Try a different approach."
+            )
         return None
 
-    def record(self, tool_name: str, args: dict[str, object], result: str) -> None:
-        """Record a tool call result (only for read-only tools)."""
-        if tool_name not in READ_ONLY_TOOLS:
-            return
-        call_key = _make_key(tool_name, args)
-        self._window.append((tool_name, json.dumps(args, sort_keys=True), call_key))
-        self._results[call_key] = result
-        while len(self._window) > self.window_size:
-            _, _, old_key = self._window.popleft()
-            if old_key in self._results:
-                del self._results[old_key]
-
-    def check_idempotent_write(self, tool_name: str, args: dict[str, object]) -> str | None:
-        """Check idempotent-write dedup (per-turn)."""
-        if tool_name in IDEMPOTENT_WRITE_TOOLS:
-            call_key = _make_key(tool_name, args)
-            if call_key in self._idempotent_this_turn:
-                return f"[already stored this turn - deduplicated '{tool_name}' call]"
-            self._idempotent_this_turn.add(call_key)
-        return None
-
-    def reset_turn(self) -> None:
-        self._idempotent_this_turn.clear()
-
-    def clear(self) -> None:
-        self._window.clear()
-        self._results.clear()
-        self._idempotent_this_turn.clear()
-
-
-def _make_key(tool_name: str, args: dict[str, object]) -> str:
-    raw = json.dumps({"name": tool_name, "args": args}, sort_keys=True, default=str)
-    return hashlib.md5(raw.encode()).hexdigest()
+    def reset(self) -> None:
+        self._history.clear()
+        self._blocked.clear()

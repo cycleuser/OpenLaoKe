@@ -53,7 +53,7 @@ def _is_safe_url(url: str) -> tuple[bool, str]:
         try:
             addr = ipaddress.ip_address(socket.gethostbyname(hostname))
         except Exception:
-            return True, ""
+            return False, f"Cannot resolve host: {hostname}"
 
     for net in BLOCKED_NETWORKS:
         if addr in net:
@@ -235,7 +235,7 @@ class WebFetchTool(Tool):
                     lines.append("\n")
                     i += 4
                     continue
-                if html[i : i + 2].lower() == "<b" or html[i : i + 3].lower() == "<st":
+                if html[i : i + 3].lower() == "<b>" or html[i : i + 4].lower() == "<st":
                     lines.append("**")
                     i = html.find(">", i) + 1
                     continue
@@ -266,7 +266,9 @@ class WebFetchTool(Tool):
                         lines.append(f"[{text}]({href})")
                         i = text_end + 4
                         continue
-                if html[i : i + 2].lower() == "<b" and html[i : i + 3].lower() != "<br":
+                if html[i : i + 3].lower() == "<b>" and not html[i : i + 5].lower().startswith(
+                    "<br"
+                ):
                     lines.append("\n")
                     i = html.find(">", i) + 1
                     continue
