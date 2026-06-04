@@ -463,15 +463,13 @@ pytest tests/test_tools.py::TestBashTool::test_simple_command
 python -m build
 ```
 
-## 贡献
+## 致谢
 
-欢迎贡献！请：
+OpenLaoKe 的架构设计受以下优秀开源 AI 编程助手项目启发：
 
-1. Fork本仓库
-2. 创建特性分支（`git checkout -b feature/amazing-feature`）
-3. 提交更改（`git commit -m 'Add amazing feature'`）
-4. 推送到分支（`git push origin feature/amazing-feature`）
-5. 创建Pull Request
+- **[nanobot](https://github.com/HKUDS/nanobot)** — 事件驱动 Agent 循环、多渠道会话模型、AutoCompact 自动压缩、Dream 记忆合并模式
+- **[smallcode](https://github.com/Doorman11991/smallcode)** — 多格式工具调用解析、分类评分的工具路由、Thinking Budget 思考预算控制、步骤锚定的 Plan Tracker、先读后写守卫
+- **[DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)** — 传输无关的 Controller 模式、基于前缀缓存的上下文管理、Tool Previewer 预览接口、配置驱动的 Provider/Plugin 注册、MCP 客户端架构
 
 ## 许可证
 
