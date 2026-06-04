@@ -1,8 +1,8 @@
 """GitStore — Git-backed workspace file versioning with commit-rollback.
 
-Inspired by nanobot's dulwich-based GitStore. Uses system git CLI for
-commit/snapshot/revert of workspace files. Every tool operation that
-modifies files is protected by pre-commit snapshots.
+Uses system git CLI for commit/snapshot/revert of workspace files.
+Every tool operation that modifies files is protected by pre-commit
+snapshots.
 
 Key features:
 - auto_commit(): snapshot all tracked changes

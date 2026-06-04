@@ -2,10 +2,11 @@
 
 The loader looks in order, returning the first that exists:
 
-1. ``REASONIX.md`` (recommended)
+1. ``REASONIX.md``
 2. ``REASONIX.local.md`` (machine-local, git-ignored)
-3. ``AGENTS.md`` (fallback)
-4. ``CLAUDE.md`` (fallback)
+3. ``AGENTS.md``
+4. ``CLAUDE.md``
+5. ``OPENLAOKE.md``
 
 In addition, ``USER.md`` and ``SOUL.md`` are loaded if present.
 """

@@ -12,9 +12,9 @@ The :class:`ContextBuilder` produces three pieces:
 
 This module also handles:
 
-* **CompactSummary** — a Reasonix-style structured summary (Goal /
-  Decisions / Files / Commands / Errors / Pending) injected into the
-  prefix after LLM-based compaction.
+* **CompactSummary** — a structured six-section summary (Goal / Decisions /
+  Files / Commands / Errors / Pending) injected into the prefix after
+  LLM-based compaction.
 * **Thinking Budget** — provider-aware thinking-token caps wired into
   the request params to prevent small models from burning context on
   reasoning.
@@ -65,7 +65,7 @@ class GoalState:
 
 @dataclass
 class CompactSummary:
-    """Reasonix-style structured compaction summary.
+    """Structured six-section compaction summary.
 
     Injected into the prefix after LLM-based context compaction.
     The model resumes from this alone; original messages are dropped.

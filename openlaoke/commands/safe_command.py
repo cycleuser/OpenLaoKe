@@ -1,6 +1,5 @@
 """/safe command — workspace checkpoint, undo, diff, and safety status.
 
-Inspired by nanobot's /dream and /dream-restore commands.
 Provides user-facing control over commit-rollback for workspace files.
 """
 
