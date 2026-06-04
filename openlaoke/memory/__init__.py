@@ -1,5 +1,4 @@
-"""Memory system: .md-style hierarchy + auto-memory with Dream
-consolidation.
+"""Memory system: hierarchical doc-based memory with Dream consolidation.
 
 Two layers:
 

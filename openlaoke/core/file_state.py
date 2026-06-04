@@ -1,8 +1,8 @@
 """FileState — read-before-edit safety tracking.
 
-Inspired by nanobot's FileState system. Tracks per-file read/write state
-with mtime and content hash. Enforces that Write/Edit tools only modify
-files that have been read first (stale content detection).
+Tracks per-file read/write state with mtime and content hash. Enforces
+that Write/Edit tools only modify files that have been read first
+(stale content detection).
 
 Key features:
 - record_read(): mark file as read with mtime + SHA-256 hash
