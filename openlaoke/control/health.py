@@ -7,7 +7,6 @@ environment readiness before the agent loop starts.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass, field

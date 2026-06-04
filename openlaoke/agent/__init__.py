@@ -13,9 +13,9 @@ across many turns.
 from __future__ import annotations
 
 from openlaoke.agent.context import (
+    COMPACTION_SYSTEM_PROMPT,
     BuiltContext,
     CompactSummary,
-    COMPACTION_SYSTEM_PROMPT,
     ContextBuilder,
     GoalState,
     compose_runtime_block,

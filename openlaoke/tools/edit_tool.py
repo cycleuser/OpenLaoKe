@@ -33,7 +33,7 @@ class EditTool(Tool):
     is_concurrency_safe = False
     requires_approval = True
 
-    def preview(self, **kwargs: Any) -> PreviewResult:
+    def preview(self, **kwargs: Any):
         from openlaoke.core.tool import PreviewResult
 
         file_path = str(kwargs.get("file_path", ""))

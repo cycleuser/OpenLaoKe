@@ -103,35 +103,35 @@ class CompactSummary:
         for line in text.splitlines():
             stripped = line.strip()
             if stripped.startswith("## Goal"):
-                result.goal = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "goal", []
             elif stripped.startswith("## Decisions"):
-                result.decisions = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "decisions", []
             elif stripped.startswith("## Files"):
-                result.files = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "files", []
             elif stripped.startswith("## Commands"):
-                result.commands = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "commands", []
             elif stripped.startswith("## Errors"):
-                result.errors = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "errors", []
             elif stripped.startswith("## Pending"):
-                result.pending = cls._drain(current_key, current_lines)
+                cls._assign(result, current_key, current_lines)
                 current_key, current_lines = "pending", []
             elif current_key and stripped:
                 current_lines.append(line)
-        if current_key:
-            setattr(result, current_key, cls._drain(current_key, current_lines))
+        cls._assign(result, current_key, current_lines)
         return result
+
+    @staticmethod
+    def _assign(result: CompactSummary, key: str, lines: list[str]) -> None:
+        if key and hasattr(result, key):
+            setattr(result, key, "\n".join(lines).strip())
 
     def has_any(self) -> bool:
         return bool(self.goal or self.decisions or self.files or self.commands or self.errors or self.pending)
-
-    @staticmethod
-    def _drain(key: str, lines: list[str]) -> str:
-        return "\n".join(lines).strip()
 
 
 COMPACTION_SYSTEM_PROMPT = """You are compacting the earlier part of a coding agent's conversation to save context.

@@ -52,6 +52,8 @@ class DreamConsolidator:
         self.interval_hours = interval_hours
         self._cursor_path = self.memory_root / ".dream_cursor"
         self._log_path = self.memory_root / "dream.log"
+        self._last_run: float = 0.0
+        self._last_cursor: int = self.cursor
 
     @property
     def cursor(self) -> int:
@@ -92,6 +94,19 @@ class DreamConsolidator:
     def restricted_tools(self) -> set[str]:
         """Tools available during a dream turn."""
         return {"remember", "forget", "SaveDoc", "read_file"}
+
+    def is_due(self) -> bool:
+        """Return True if enough time has passed since the last dream run."""
+        if self._last_run <= 0:
+            return self.cursor > 0  # Never run, due if there's history
+        elapsed_hours = (time.time() - self._last_run) / 3600.0
+        return elapsed_hours >= self.interval_hours and self.cursor > self._last_cursor
+
+    def mark_run(self, success: bool = True) -> None:
+        """Record that a dream run completed."""
+        self._last_run = time.time()
+        if success:
+            self._last_cursor = self.cursor
 
     def log(self, message: str) -> None:
         ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())

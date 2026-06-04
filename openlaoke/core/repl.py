@@ -902,54 +902,80 @@ class REPL:
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                         break
 
-                    for tool_use in tool_uses:
-                        if not self._running:
-                            break
-
-                        corrected_name, corrected_params, val_hint = self._tool_validator.validate(
-                            tool_use.name, tool_use.input
+                    # Parallel dispatch for read-only tool batches
+                    _all_readonly = all(
+                        self.registry.is_readonly(tu.name) for tu in tool_uses
+                    )
+                    if _all_readonly and len(tool_uses) > 1:
+                        results = await asyncio.gather(
+                            *[self._execute_tool(tu) for tu in tool_uses],
+                            return_exceptions=True,
                         )
-                        if corrected_name != tool_use.name or corrected_params != tool_use.input:
-                            tool_use.name = corrected_name
-                            tool_use.input = corrected_params
-                            if val_hint:
-                                messages.append({"role": "user", "content": val_hint})
+                        for tool_use, result in zip(tool_uses, results, strict=True):
+                            if isinstance(result, BaseException):
+                                result_content = f"Error: {result}"
+                            else:
+                                result_content = (
+                                    result.content
+                                    if isinstance(result.content, str)
+                                    else str(result.content)
+                                )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_use.id,
+                                    "content": result_content,
+                                }
+                            )
+                    else:
+                        for tool_use in tool_uses:
+                            if not self._running:
+                                break
 
-                        tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
-                        failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+                            corrected_name, corrected_params, val_hint = self._tool_validator.validate(
+                                tool_use.name, tool_use.input
+                            )
+                            if corrected_name != tool_use.name or corrected_params != tool_use.input:
+                                tool_use.name = corrected_name
+                                tool_use.input = corrected_params
+                                if val_hint:
+                                    messages.append({"role": "user", "content": val_hint})
 
-                        if self._guard:
-                            loop_msg = self._guard.notify_tool_call(tool_use.name)
-                            if loop_msg:
-                                messages.append({"role": "user", "content": loop_msg})
+                            tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                            failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
 
-                        if failed_tool_calls[tool_key] > 3:
-                            self.console.print(
-                                f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
+                            if self._guard:
+                                loop_msg = self._guard.notify_tool_call(tool_use.name)
+                                if loop_msg:
+                                    messages.append({"role": "user", "content": loop_msg})
+
+                            if failed_tool_calls[tool_key] > 3:
+                                self.console.print(
+                                    f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
+                                )
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_use.id,
+                                        "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
+                                    }
+                                )
+                                continue
+
+                            result = await self._execute_tool(tool_use)
+
+                            result_content = (
+                                result.content
+                                if isinstance(result.content, str)
+                                else str(result.content)
                             )
                             messages.append(
                                 {
                                     "role": "tool",
                                     "tool_call_id": tool_use.id,
-                                    "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
+                                    "content": result_content,
                                 }
                             )
-                            continue
-
-                        result = await self._execute_tool(tool_use)
-
-                        result_content = (
-                            result.content
-                            if isinstance(result.content, str)
-                            else str(result.content)
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_use.id,
-                                "content": result_content,
-                            }
-                        )
 
                     self.app_state._persist()
 
@@ -1207,6 +1233,15 @@ class REPL:
             )
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
+
+        # Hard-cap tool output at 32KB to prevent one large read/grep from
+        # blowing the context window before the next compaction runs.
+        _max_tool_out = 32000
+        if len(result_content) > _max_tool_out:
+            result_content = (
+                result_content[:_max_tool_out]
+                + f"\n\n... (truncated {len(result_content) - _max_tool_out} bytes)"
+            )
 
         if tool_use.name == "Bash":
             compressed = self._output_compressor.compress(result_content)
