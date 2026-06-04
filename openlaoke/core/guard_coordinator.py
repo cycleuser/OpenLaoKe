@@ -1,8 +1,8 @@
 """Unified guard coordinator.
 
-Wraps all SmallCode-inspired guard systems into a single coordinator for
-the agent loop: routing, quality, deduplication, trust decay, early stop,
-read tracker, contract guard, multi-file edit, snapshot manager, and evidence.
+Wraps multiple guard systems into a single coordinator for the agent loop:
+routing, quality, deduplication, trust decay, early stop, read tracker,
+contract guard, multi-file edit, snapshot manager, and evidence.
 """
 
 from __future__ import annotations
