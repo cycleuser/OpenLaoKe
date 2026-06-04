@@ -72,6 +72,7 @@ class BitterLessonTracker:
         self.outcomes: list[StrategyOutcome] = []
         self.lessons: dict[str, Lesson] = {}
         self.disabled_strategies: set[str] = set()
+        self._max_outcomes: int = 1000
         self._data_dir = Path(data_dir) if data_dir else Path.home() / ".openlaoke" / "lessons"
         self._load_lessons()
 
@@ -94,6 +95,8 @@ class BitterLessonTracker:
             error_type=error_type,
         )
         self.outcomes.append(outcome)
+        if len(self.outcomes) > self._max_outcomes:
+            self.outcomes = self.outcomes[-self._max_outcomes :]
         self._update_lessons(strategy_name, model_size)
 
         if self._should_disable_strategy(strategy_name, model_size):

@@ -34,6 +34,35 @@ class ToolContext:
     git_store: Any = None
 
 
+@dataclass
+class PreviewResult:
+    """The result of a tool's dry-run preview.
+
+    ``summary`` is a human-readable one-liner of what the tool *would* do.
+    ``diff_hint`` is a structured description for the permission prompt:
+    ``{type}`` is "create" / "update" / "delete" / "noop".
+    ``path`` is the primary file path affected.
+    ``lines_changed`` is an estimate for display only.
+    """
+
+    summary: str = ""
+    path: str = ""
+    action: str = "noop"
+    lines_before: int = 0
+    lines_after: int = 0
+
+    def one_line(self) -> str:
+        if self.action == "create":
+            return f"Create {self.path} ({self.lines_after} lines)"
+        if self.action == "update":
+            delta = self.lines_after - self.lines_before
+            sign = "+" if delta >= 0 else ""
+            return f"Update {self.path} ({sign}{delta} lines)"
+        if self.action == "delete":
+            return f"Delete {self.path} ({self.lines_before} lines)"
+        return self.summary or "No effect"
+
+
 class Tool(ABC):
     """Base class for all tools. Subclasses implement specific capabilities."""
 
@@ -50,6 +79,15 @@ class Tool(ABC):
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         """Execute the tool with the given input."""
         ...
+
+    def preview(self, **kwargs: Any) -> PreviewResult:
+        """Return a dry-run preview of what the tool *would* do.
+
+        Default returns a noop. Writer tools override this so the
+        permission gate can show the user what will change before
+        asking for approval.
+        """
+        return PreviewResult()
 
     def get_description(self) -> str:
         """Return the tool description for the system prompt."""
@@ -102,7 +140,7 @@ class Tool(ABC):
             field_type = properties[field_name].get("type")
             if field_type and field_type in type_map:
                 expected = type_map[field_type]
-                if not isinstance(value, expected):
+                if not isinstance(value, expected) or (isinstance(value, bool) and expected is int):
                     return ValidationResult(
                         result=False,
                         message=f"Field '{field_name}' must be {field_type}, got {type(value).__name__}",
@@ -196,11 +234,15 @@ class ToolRegistry:
         if name in self._tools:
             return self._tools[name]
         if name in self._deferred_loaders:
-            lock = self._load_locks.setdefault(name, asyncio.Lock())
+            if name not in self._load_locks:
+                self._load_locks[name] = asyncio.Lock()
+            lock = self._load_locks[name]
             async with lock:
                 if name in self._tools:
                     return self._tools[name]
-                loader = self._deferred_loaders[name]
+                loader = self._deferred_loaders.get(name)
+                if loader is None:
+                    return None
                 tool: Tool
                 if asyncio.iscoroutinefunction(loader):
                     async_loader = cast(Callable[[], Awaitable[Tool]], loader)
@@ -212,6 +254,8 @@ class ToolRegistry:
                 del self._deferred_loaders[name]
                 if name in self._deferred_info:
                     del self._deferred_info[name]
+                if name in self._load_locks:
+                    del self._load_locks[name]
                 return tool
         return None
 

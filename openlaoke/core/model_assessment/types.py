@@ -119,7 +119,8 @@ _SIZE_RE = re.compile(r"(\d+\.?\d*)\s*b", re.IGNORECASE)
 
 _TIER1_PREFIXES = (
     "claude-",
-    "gpt-4o",
+    "gpt-4o-",
+    "gpt-4o ",
     "gpt-4.5",
     "gpt-5",
     "o1",
@@ -129,7 +130,9 @@ _TIER1_PREFIXES = (
     "grok-3",
 )
 _TIER2_PREFIXES = (
-    "deepseek",
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "deepseek-coder",
     "llama-3.3",
     "llama-4",
     "mistral-large",

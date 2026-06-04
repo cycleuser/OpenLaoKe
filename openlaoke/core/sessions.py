@@ -141,10 +141,18 @@ class SessionManager:
                     app_state.messages.append(msg)
 
             for task_id, task_data in data.get("tasks", {}).items():
+                try:
+                    task_type = TaskType(task_data.get("type", "local_bash"))
+                except ValueError:
+                    task_type = TaskType.LOCAL_BASH
+                try:
+                    task_status = TaskStatus(task_data.get("status", "pending"))
+                except ValueError:
+                    task_status = TaskStatus.PENDING
                 app_state.tasks[task_id] = TaskState(
                     id=task_id,
-                    type=TaskType(task_data.get("type", "local_bash")),
-                    status=TaskStatus(task_data.get("status", "pending")),
+                    type=task_type,
+                    status=task_status,
                     description=task_data.get("description", ""),
                     start_time=task_data.get("start_time", 0),
                     end_time=task_data.get("end_time"),

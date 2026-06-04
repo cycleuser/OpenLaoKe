@@ -127,6 +127,12 @@ class FileStateStore:
         abs_path = os.path.realpath(path)
         return self._states.get(abs_path)
 
+    def was_read(self, path: str) -> bool:
+        """Return True if the file has been read at least once this session."""
+        abs_path = os.path.realpath(path)
+        state = self._states.get(abs_path)
+        return state is not None and state.read_count > 0
+
     def clear(self) -> None:
         self._states.clear()
 

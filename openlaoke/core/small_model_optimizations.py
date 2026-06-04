@@ -9,6 +9,7 @@ Key optimizations:
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -215,12 +216,14 @@ class ReadLoopTracker:
             "WebFetch",
         }
     )
+    _read_tools_lower: set[str] = field(default_factory=set, repr=False)
     last_tool: str = ""
 
+    def __post_init__(self) -> None:
+        self._read_tools_lower = {t.lower() for t in self.read_tools}
+
     def notify_tool_call(self, tool_name: str) -> None:
-        if tool_name in self.read_tools or tool_name.lower() in {
-            t.lower() for t in self.read_tools
-        }:
+        if tool_name in self.read_tools or tool_name.lower() in self._read_tools_lower:
             self.consecutive_reads += 1
         else:
             self.consecutive_reads = 0
@@ -374,7 +377,7 @@ class SmallModelGuard:
         return None
 
     def check_after_api_call(self, content: str, tool_count: int) -> str | None:
-        content_hash = str(hash((content or "").strip()[:200]))
+        content_hash = hashlib.sha256((content or "").strip()[:200].encode()).hexdigest()
         if content_hash == self.last_response_hash:
             self.response_repeat_count += 1
             if self.response_repeat_count >= self.max_response_repeats:

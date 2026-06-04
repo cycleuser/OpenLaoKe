@@ -747,12 +747,12 @@ class DecisionEngine:
             DecisionCategory.SKILL_CREATION: DecisionType.SKILL_CREATION,
             DecisionCategory.PROJECT_INIT: DecisionType.PROJECT_INIT,
             DecisionCategory.ERROR_HANDLING: DecisionType.ABORT,
-            DecisionCategory.EXECUTION_STRATEGY: DecisionType.TEST_EXECUTION,
+            DecisionCategory.EXECUTION_STRATEGY: DecisionType.CODE_GENERATION,
             DecisionCategory.TOOL_SELECTION: DecisionType.CODE_SEARCH,
             DecisionCategory.RESOURCE_ALLOCATION: DecisionType.DEPENDENCY_INSTALL,
         }
 
-        return mapping.get(category, DecisionType.SKILL_CREATION)
+        return mapping.get(category, DecisionType.CODE_GENERATION)
 
     def _get_historical_confidence(self, action: str) -> float:
         """Get historical confidence for an action."""

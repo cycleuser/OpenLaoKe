@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import fnmatch
 import json
 import logging
 import os
@@ -413,15 +414,17 @@ class CodeSearchEngine:
         """Adapt standalone functions to class methods."""
         lines = code.split("\n")
         adapted_lines = []
+        class_indent = "    "
+        adapted_lines.append(f"{class_indent}class {target_class}:")
+        adapted = False
 
         for line in lines:
-            if line.strip().startswith("def "):
-                if not line.strip().startswith("def __"):
-                    indent = len(line) - len(line.lstrip())
-                    adapted_lines.append(" " * indent + line.lstrip())
-                    adapted_lines.append(" " * (indent + 4) + "self")
-                else:
-                    adapted_lines.append(line)
+            if line.strip().startswith("def ") and not line.strip().startswith("def __"):
+                adapted = re.sub(r"def\s+(\w+)\(", r"def \1(self, ", line)
+                adapted_lines.append(class_indent + adapted)
+                adapted = True
+            elif line.strip():
+                adapted_lines.append(class_indent + line)
             else:
                 adapted_lines.append(line)
 
@@ -499,10 +502,16 @@ class CodeSearchEngine:
             "build",
             ".tox",
             ".eggs",
-            "*.egg-info",
         }
+        ignore_globs = {"*.egg-info"}
 
-        return any(part in ignore_dirs for part in path.parts)
+        for part in path.parts:
+            if part in ignore_dirs:
+                return True
+            for pattern in ignore_globs:
+                if fnmatch.fnmatch(part, pattern):
+                    return True
+        return False
 
     def _extract_relevant_snippets(
         self,

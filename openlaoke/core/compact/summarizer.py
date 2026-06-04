@@ -10,26 +10,32 @@ if TYPE_CHECKING:
     from openlaoke.types.core_types import Message
 
 
-SUMMARY_SYSTEM_PROMPT = """You are a conversation summarizer. Your task is to create concise, informative summaries of conversation history that preserve key information while reducing token count.
+SUMMARY_SYSTEM_PROMPT = """You are compacting the earlier part of a coding agent's conversation to save context.
+The agent will keep ONLY your summary (the original messages are dropped), so it must be able to resume the task from it alone.
+Write a briefing under these exact headings, omitting a heading only if it has no content:
 
-Guidelines:
-- Preserve important decisions, conclusions, and key facts
-- Keep tool use results that are relevant to ongoing work
-- Maintain context needed for understanding subsequent messages
-- Remove redundant or repeated information
-- Focus on actionable outcomes and results
-- Keep file paths, command results, and code references"""
+## Goal
+The user's request and intent, kept close to their own words. Include explicit requirements, constraints, and preferences.
 
-SUMMARY_USER_PROMPT = """Summarize the following conversation messages. Preserve:
-1. Key decisions and conclusions
-2. Important tool results (file reads, command outputs)
-3. Context needed for ongoing work
-4. File paths and code references
+## Decisions & rationale
+Key choices made so far and why — so they are not re-litigated or reversed.
 
-Messages to summarize:
-{messages}
+## Files & code
+Files read or modified, with the specific facts that matter: signatures, line locations, data shapes, and exact edits applied. Be concrete; this is what lets the agent act without re-reading everything.
 
-Create a concise summary that captures the essential information."""
+## Commands & outcomes
+Commands run (builds, tests, git) and their relevant results — what passed, what failed, and the error text that matters.
+
+## Errors & fixes
+Problems hit and how they were resolved (or not), so the same dead ends are not repeated.
+
+## Pending & next step
+What is still in progress or unstarted, and the single most concrete next action to take.
+
+Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing."""
+
+SUMMARY_USER_PROMPT = """Messages to compact:
+{messages}"""
 
 
 @dataclass

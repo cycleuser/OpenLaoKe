@@ -109,6 +109,28 @@ def fast_prune(
             middle_messages.append(msg)
 
     if not middle_messages:
+        if total_tokens > max_tokens + keep_tail_tokens:
+            head_messages = messages[:1]
+            remaining = max_tokens - _estimate_tokens(_extract_content(head_messages[0]))
+            tail_budget = min(keep_tail_tokens, remaining)
+            tail_messages = []
+            tail_tokens = 0
+            for msg in reversed(messages[1:]):
+                t = _estimate_tokens(_extract_content(msg))
+                if tail_tokens + t <= tail_budget:
+                    tail_messages.insert(0, msg)
+                    tail_tokens += t
+                else:
+                    break
+            new_tokens = _estimate_tokens(_extract_content(head_messages[0])) + sum(
+                _estimate_tokens(_extract_content(m)) for m in tail_messages
+            )
+            return PruneResult(
+                messages=head_messages + tail_messages,
+                tokens_before=total_tokens,
+                tokens_after=new_tokens,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
         return PruneResult(
             messages=messages,
             tokens_before=total_tokens,

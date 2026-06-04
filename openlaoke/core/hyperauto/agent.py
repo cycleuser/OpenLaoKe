@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from openlaoke.core.skill_system import Skill, SkillRegistry, get_skill_registry
 
 if TYPE_CHECKING:
     from openlaoke.core.state import AppState
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -738,6 +741,7 @@ JSON only, no other text."""
             if task.id in visited:
                 return
             if task.id in temp_visited:
+                logger.warning("Circular dependency detected involving task: %s", task.id)
                 return
 
             temp_visited.add(task.id)
@@ -747,7 +751,7 @@ JSON only, no other text."""
                     if t.id == dep_id:
                         visit(t)
 
-            temp_visited.remove(task.id)
+            temp_visited.discard(task.id)
             visited.add(task.id)
             sorted_tasks.append(task)
 

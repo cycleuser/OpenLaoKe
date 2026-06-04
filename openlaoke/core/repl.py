@@ -745,6 +745,7 @@ class REPL:
                                 messages=messages,
                                 tools=tools,
                                 model=self.app_state.session_config.model,
+                                thinking_budget=self.app_state.session_config.thinking_budget,
                             ):
                                 if chunk.event_type == StreamEventType.TEXT:
                                     content_text += chunk.text
@@ -965,6 +966,7 @@ class REPL:
                             messages=messages,
                             tools=tools,
                             model=self.app_state.session_config.model,
+                            thinking_budget=self.app_state.session_config.thinking_budget,
                         )
                     finally:
                         spinner.stop()

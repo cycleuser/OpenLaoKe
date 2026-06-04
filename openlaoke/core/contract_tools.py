@@ -6,6 +6,7 @@ contract_assert_skip, contract_status.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -18,6 +19,17 @@ from openlaoke.core.contract import (
 )
 from openlaoke.core.tool import Tool, ToolContext
 from openlaoke.types.core_types import ToolResultBlock
+
+ASSERTION_STATES = {
+    "passed": ("OK", "passed"),
+    "failed": ("FAIL", "failed"),
+    "skipped": ("SKIP", "skipped"),
+}
+
+
+def _get_store(ctx: ToolContext) -> ContractStore:
+    base_dir = os.path.join(ctx.app_state.get_cwd(), ".openlaoke", "contracts")
+    return ContractStore(base_dir=base_dir)
 
 
 class ContractCreateArgs(BaseModel):
@@ -45,7 +57,7 @@ class ContractCreateTool(Tool):
         description = str(kwargs.get("description", ""))
         assertions_raw = kwargs.get("assertions", [])
 
-        store = ContractStore()
+        store = _get_store(ctx)
         contract_id = str(int(time.time() * 1000))
         assertions = []
         for i, a in enumerate(assertions_raw):
@@ -59,6 +71,7 @@ class ContractCreateTool(Tool):
         contract = Contract(
             id=contract_id,
             description=description,
+            work_dir=ctx.app_state.get_cwd(),
             assertions=assertions,
         )
         store.save(contract)
@@ -74,94 +87,60 @@ class ContractCreateTool(Tool):
         return ToolResultBlock(result_for_assistant="\n".join(lines))
 
 
-class ContractAssertPassTool(Tool):
+class _ContractAssertTool(Tool):
+    is_read_only = False
+
+    def _update_assertion(
+        self, ctx: ToolContext, kwargs: dict[str, Any], new_state: str, icon: str
+    ) -> ToolResultBlock:
+        contract_id = str(kwargs.get("contract_id", ""))
+        assertion_id = str(kwargs.get("assertion_id", ""))
+        evidence = str(kwargs.get("evidence", ""))
+
+        store = _get_store(ctx)
+        contract = store.load(contract_id)
+        if not contract:
+            return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
+
+        for a in contract.assertions:
+            if str(a.id) == assertion_id:
+                a.state = new_state
+                a.evidence = evidence
+                store.save(contract)
+                return ToolResultBlock(
+                    result_for_assistant=f"[{icon}] Assertion {assertion_id} marked {new_state}: {a.description}"
+                )
+
+        return ToolResultBlock(
+            result_for_assistant=f"Assertion {assertion_id} not found in contract {contract_id}"
+        )
+
+
+class ContractAssertPassTool(_ContractAssertTool):
     name = "ContractAssertPass"
     description = "Mark an assertion as passed with command-line evidence"
     input_schema = ContractAssertArgs
-    is_read_only = False
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
-        contract_id = str(kwargs.get("contract_id", ""))
-        assertion_id = str(kwargs.get("assertion_id", ""))
-        evidence = str(kwargs.get("evidence", ""))
-
-        store = ContractStore()
-        contract = store.load(contract_id)
-        if not contract:
-            return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
-
-        for a in contract.assertions:
-            if str(a.id) == assertion_id:
-                a.state = "passed"
-                a.evidence = evidence
-                store.save(contract)
-                return ToolResultBlock(
-                    result_for_assistant=f"[OK] Assertion {assertion_id} marked passed: {a.description}"
-                )
-
-        return ToolResultBlock(
-            result_for_assistant=f"Assertion {assertion_id} not found in contract {contract_id}"
-        )
+        return self._update_assertion(ctx, kwargs, "passed", "OK")
 
 
-class ContractAssertFailTool(Tool):
+class ContractAssertFailTool(_ContractAssertTool):
     name = "ContractAssertFail"
     description = "Mark an assertion as failed with evidence"
     input_schema = ContractAssertArgs
-    is_read_only = False
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
-        contract_id = str(kwargs.get("contract_id", ""))
-        assertion_id = str(kwargs.get("assertion_id", ""))
-        evidence = str(kwargs.get("evidence", ""))
-
-        store = ContractStore()
-        contract = store.load(contract_id)
-        if not contract:
-            return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
-
-        for a in contract.assertions:
-            if str(a.id) == assertion_id:
-                a.state = "failed"
-                a.evidence = evidence
-                store.save(contract)
-                return ToolResultBlock(
-                    result_for_assistant=f"[FAIL] Assertion {assertion_id} marked failed: {a.description}"
-                )
-
-        return ToolResultBlock(
-            result_for_assistant=f"Assertion {assertion_id} not found in contract {contract_id}"
-        )
+        return self._update_assertion(ctx, kwargs, "failed", "FAIL")
 
 
-class ContractAssertSkipTool(Tool):
+class ContractAssertSkipTool(_ContractAssertTool):
     name = "ContractAssertSkip"
     description = "Mark an assertion as skipped (out of scope)"
     input_schema = ContractAssertArgs
-    is_read_only = False
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
-        contract_id = str(kwargs.get("contract_id", ""))
-        assertion_id = str(kwargs.get("assertion_id", ""))
-        evidence = str(kwargs.get("evidence", ""))
-
-        store = ContractStore()
-        contract = store.load(contract_id)
-        if not contract:
-            return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
-
-        for a in contract.assertions:
-            if str(a.id) == assertion_id:
-                a.state = "skipped"
-                a.evidence = evidence
-                store.save(contract)
-                return ToolResultBlock(
-                    result_for_assistant=f"[SKIP] Assertion {assertion_id} marked skipped: {a.description}"
-                )
-
-        return ToolResultBlock(
-            result_for_assistant=f"Assertion {assertion_id} not found in contract {contract_id}"
-        )
+        return self._update_assertion(ctx, kwargs, "skipped", "SKIP")
 
 
 class ContractStatusTool(Tool):
@@ -173,7 +152,7 @@ class ContractStatusTool(Tool):
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         contract_id = str(kwargs.get("contract_id", ""))
 
-        store = ContractStore()
+        store = _get_store(ctx)
         if contract_id:
             contract = store.load(contract_id)
             if not contract:

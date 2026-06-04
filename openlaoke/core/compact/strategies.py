@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -191,11 +192,13 @@ class ReactiveCompactStrategy(CompactStrategy):
         new_messages = self._compress_tool_results(messages)
         tokens_after = self.estimate_tokens(new_messages)
 
+        actually_removed = tokens_before - tokens_after
+
         return StrategyResult(
             messages=new_messages,
             tokens_before=tokens_before,
             tokens_after=tokens_after,
-            messages_removed=len(messages) - len(new_messages),
+            messages_removed=len(messages) - len(new_messages) if actually_removed > 0 else 0,
             messages_preserved=len(new_messages),
         )
 
@@ -325,7 +328,7 @@ class MicroCompactStrategy(CompactStrategy):
 
         for msg in messages:
             content = self._extract_content(msg)
-            content_hash = content[: self.dedupe_threshold]
+            content_hash = hashlib.sha256(content.encode()).hexdigest()
 
             if content_hash in seen_content:
                 prev_idx = seen_content[content_hash]

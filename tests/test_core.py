@@ -220,9 +220,7 @@ class TestHookSystem:
 
         hs.register("error_handle", "s1", _s1, priority=10)
         hs.register("error_handle", "s2", _s2, priority=1)
-        asyncio.get_event_loop().run_until_complete(
-            hs.execute_hooks_async("error_handle", HookInput(), HookOutput())
-        )
+        asyncio.run(hs.execute_hooks_async("error_handle", HookInput(), HookOutput()))
         assert order == [1]
 
     def test_disable_and_enable(self):

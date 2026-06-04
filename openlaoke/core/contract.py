@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -39,6 +40,8 @@ class Contract:
 
     @property
     def is_done(self) -> bool:
+        if not self.assertions:
+            return False
         return all(a.state in ("passed", "skipped") for a in self.assertions)
 
     @property
@@ -70,16 +73,16 @@ class Contract:
     @classmethod
     def from_dict(cls, d: dict) -> Contract:
         return cls(
-            id=d["id"],
-            description=d["description"],
+            id=d.get("id", ""),
+            description=d.get("description", ""),
             work_dir=d.get("work_dir", ""),
             state=d.get("state", "active"),
             created_at=d.get("created_at", ""),
             updated_at=d.get("updated_at", ""),
             assertions=[
                 Assertion(
-                    id=a["id"],
-                    description=a["description"],
+                    id=a.get("id", ""),
+                    description=a.get("description", ""),
                     state=a.get("state", "pending"),
                     evidence=a.get("evidence", ""),
                 )
@@ -103,16 +106,24 @@ class ContractStore:
         os.makedirs(d, exist_ok=True)
         fp = os.path.join(d, f"{contract.id}.json")
         tmp = fp + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(contract.to_dict(), f, indent=2)
-        os.replace(tmp, fp)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(contract.to_dict(), f, indent=2)
+            os.replace(tmp, fp)
+        except OSError:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
 
     def load(self, contract_id: str) -> Contract | None:
         fp = os.path.join(self.get_dir(), f"{contract_id}.json")
         if not os.path.exists(fp):
             return None
-        with open(fp) as f:
-            return Contract.from_dict(json.load(f))
+        try:
+            with open(fp, encoding="utf-8") as f:
+                return Contract.from_dict(json.load(f))
+        except (json.JSONDecodeError, OSError):
+            return None
 
     def load_active(self) -> list[Contract]:
         d = self.get_dir()
@@ -162,8 +173,6 @@ class ContractGuard:
             r"(?i)\b(i'?m done|i('?ve| have) finished|task completed|all done)\b",
             r"(?i)\b(everything is done|completed successfully|work is done)\b",
         ]
-        import re
-
         is_done_claim = any(re.search(p, output) for p in done_patterns)
         if not is_done_claim:
             return None

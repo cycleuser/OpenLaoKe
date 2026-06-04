@@ -98,6 +98,17 @@ class MultiProviderConfig:
     local_temperature: float = 0.3
     _builtin_client: Any = None
 
+    # Fallback chain: provider names tried in order when the active one fails.
+    # e.g. fallback_models = ["deepseek-flash", "openai-gpt4o-mini"]
+    fallback_models: list[str] = field(default_factory=list)
+
+    # Optional planner model for dual-model mode (executor + planner).
+    # Set to a provider name that has a different (cheaper) model.
+    planner_model: str = ""
+
+    # Sub-agent model overrides per skill name.
+    subagent_models: dict[str, str] = field(default_factory=dict)
+
     @staticmethod
     def _get_local_builtin_models() -> list[str]:
         """Get builtin + custom local model IDs."""
@@ -138,6 +149,30 @@ class MultiProviderConfig:
 
     def list_available_providers(self) -> list[str]:
         return [name for name, p in self.providers.items() if p.is_configured()]
+
+    def get_fallback_provider(self) -> tuple[str, ProviderConfig] | None:
+        """Return the first configured fallback provider as (name, config), or None."""
+        for name in self.fallback_models:
+            p = self.providers.get(name)
+            if p and p.is_configured():
+                return name, p
+        for name, p in self.providers.items():
+            if name != self.active_provider and p.is_configured() and not p.is_local:
+                return name, p
+        return None
+
+    def get_planner_provider(self) -> tuple[str, ProviderConfig] | None:
+        """Return the planner model provider as (name, config), or None."""
+        if not self.planner_model:
+            return None
+        p = self.providers.get(self.planner_model)
+        if p:
+            return self.planner_model, p
+        return None
+
+    def get_subagent_model(self, skill_name: str) -> str:
+        """Return the model override for a given subagent skill, or empty."""
+        return self.subagent_models.get(skill_name, "")
 
     @staticmethod
     def _detect_ollama_models(base_url: str = "http://localhost:11434") -> list[str]:

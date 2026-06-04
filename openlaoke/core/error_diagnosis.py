@@ -81,6 +81,7 @@ class ErrorDiagnosis:
 @dataclass
 class ErrorDiagnoser:
     cache_ttl: int = 300
+    max_cache_size: int = 500
     _cache: dict[str, tuple[ErrorDiagnosis, float]] = field(default_factory=dict)
 
     def diagnose(
@@ -98,6 +99,12 @@ class ErrorDiagnoser:
 
         diag = self._regex_diagnose(command, stderr, exit_code)
         self._cache[cache_key] = (diag, time.time())
+        if len(self._cache) > self.max_cache_size:
+            oldest_keys = sorted(self._cache, key=lambda k: self._cache[k][1])[
+                : len(self._cache) - self.max_cache_size // 2
+            ]
+            for k in oldest_keys:
+                del self._cache[k]
         return diag
 
     def _regex_diagnose(self, command: str, stderr: str, exit_code: int) -> ErrorDiagnosis:
@@ -153,3 +160,37 @@ class ErrorDiagnoser:
 
     def clear_cache(self) -> None:
         self._cache.clear()
+
+    def diagnose_api_error(self, status_code: int, error_body: str = "") -> ErrorDiagnosis:
+        """Diagnose an API-level error from a status code and response body."""
+        if status_code == 401 or status_code == 403:
+            return ErrorDiagnosis(
+                error_type="auth",
+                fix_suggestion="API key invalid or expired. Check credentials.",
+            )
+        if status_code == 429:
+            return ErrorDiagnosis(
+                error_type="rate_limit",
+                fix_suggestion="Rate limited. Wait and retry, or switch to a different provider.",
+            )
+        if status_code == 400:
+            return ErrorDiagnosis(
+                error_type="bad_request",
+                fix_suggestion="Bad request. Check model name, parameters, or message format.",
+            )
+        if status_code in (500, 502, 503, 504):
+            return ErrorDiagnosis(
+                error_type="server",
+                fix_suggestion="Provider server error. Retry in a few seconds, or switch provider.",
+            )
+        if "context_length" in error_body.lower() or "too long" in error_body.lower():
+            return ErrorDiagnosis(
+                error_type="context_overflow",
+                fix_suggestion="Context too long. Compact the conversation or use a larger model.",
+            )
+        if "invalid_api_key" in error_body.lower():
+            return ErrorDiagnosis(
+                error_type="auth",
+                fix_suggestion="API key rejected. Verify it is correct and not expired.",
+            )
+        return ErrorDiagnosis(error_type="api_error", fix_suggestion="Check logs for details.")

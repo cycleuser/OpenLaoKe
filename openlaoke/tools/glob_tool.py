@@ -102,6 +102,10 @@ class GlobTool(Tool):
         )
 
     def _match_pattern(self, path: str, pattern: str) -> bool:
+        if "**" in pattern:
+            import pathlib
+
+            return bool(pathlib.PurePosixPath(path).match(pattern))
         from fnmatch import fnmatch
 
         return fnmatch(path, pattern) or fnmatch(os.path.basename(path), pattern)

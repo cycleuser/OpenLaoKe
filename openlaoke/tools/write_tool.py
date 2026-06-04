@@ -1,4 +1,10 @@
-"""Write tool - write file contents."""
+"""Write tool - write file contents.
+
+Includes:
+- Preview (dry-run diff) for permission prompts
+- Read-before-write guard: first attempt to write a file that hasn't been
+  read this session is refused with a hint; second attempt is allowed.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +13,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
+from openlaoke.core.tool import PreviewResult, Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
 from openlaoke.utils.file_history import track_file_edit
+
+_WRITE_GUARD_ATTEMPTS: dict[str, int] = {}
 
 
 class WriteInput(BaseModel):
@@ -33,6 +41,38 @@ class WriteTool(Tool):
     is_concurrency_safe = False
     requires_approval = True
 
+    def preview(self, **kwargs: Any) -> PreviewResult:
+        file_path = str(kwargs.get("file_path", ""))
+        content = str(kwargs.get("content", ""))
+        if not file_path:
+            return PreviewResult(summary="Error: missing file_path")
+        abs_path = os.path.abspath(file_path)
+        new_lines = content.count("\n") + 1 if content else 0
+        if os.path.exists(abs_path):
+            try:
+                with open(abs_path, encoding="utf-8", errors="replace") as f:
+                    old = f.read()
+                old_lines = old.count("\n") + 1 if old else 0
+                return PreviewResult(
+                    summary=f"Update {abs_path} ({old_lines}→{new_lines} lines)",
+                    path=abs_path,
+                    action="update",
+                    lines_before=old_lines,
+                    lines_after=new_lines,
+                )
+            except (OSError, UnicodeDecodeError):
+                return PreviewResult(
+                    summary=f"Update {abs_path} (binary file)",
+                    path=abs_path,
+                    action="update",
+                )
+        return PreviewResult(
+            summary=f"Create {abs_path} ({new_lines} lines)",
+            path=abs_path,
+            action="create",
+            lines_after=new_lines,
+        )
+
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         file_path = kwargs.get("file_path", "")
         content = kwargs.get("content", "")
@@ -53,6 +93,26 @@ class WriteTool(Tool):
                 content=path_error,
                 is_error=True,
             )
+
+        # --- read-before-write guard ---
+        if ctx.file_state is not None and hasattr(ctx.file_state, "was_read"):
+            if not ctx.file_state.was_read(abs_path):
+                key = f"{ctx.app_state.session_id}:{abs_path}"
+                attempts = _WRITE_GUARD_ATTEMPTS.get(key, 0)
+                if attempts < 1:
+                    _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
+                    return ToolResultBlock(
+                        tool_use_id=ctx.tool_use_id,
+                        content=(
+                            f"Guard: '{abs_path}' has not been read this session. "
+                            "Small models often overwrite files with incorrect content "
+                            "when they haven't seen what's already there. "
+                            "Read the file first, then write again. "
+                            "(This guard will be bypassed on your next write attempt.)"
+                        ),
+                        is_error=False,
+                    )
+                _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
 
         try:
             os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
@@ -105,7 +165,6 @@ class WriteTool(Tool):
 
 
 def _contains(parent: str, child: str) -> bool:
-    """Check if child path is inside parent."""
     try:
         rel = os.path.relpath(child, parent)
         return not rel.startswith("..")
@@ -114,7 +173,6 @@ def _contains(parent: str, child: str) -> bool:
 
 
 def _is_user_home_path(path: str) -> bool:
-    """Check if path is under user home directory, allowing truncated usernames."""
     home = os.path.realpath(os.path.expanduser("~"))
     home_parent = os.path.dirname(home)
     if path.startswith(home_parent + "/"):

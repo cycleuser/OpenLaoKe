@@ -120,6 +120,16 @@ class HookSystem:
             hook_type: [] for hook_type in self.HOOK_TYPES
         }
         self._hook_stats: dict[str, dict[str, Any]] = {}
+        self._v2: Any | None = None
+
+    @property
+    def v2(self) -> Any:
+        """Access the lifecycle-focused v2 hook registry."""
+        if self._v2 is None:
+            from openlaoke.hooks.lifecycle import HookRegistryV2
+
+            self._v2 = HookRegistryV2()
+        return self._v2
 
     def register(
         self,

@@ -88,9 +88,17 @@ class ApplyPatchTool(Tool):
             )
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        resolved = (
+            os.path.normpath(os.path.join(cwd, path))
+            if not os.path.isabs(path)
+            else os.path.normpath(path)
+        )
+        real_cwd = os.path.realpath(cwd)
+        home = os.path.realpath(os.path.expanduser("~"))
+        real_resolved = os.path.realpath(resolved)
+        if not (real_resolved.startswith(real_cwd) or real_resolved.startswith(home)):
+            raise ValueError(f"Path '{path}' is outside workspace and home directory")
+        return resolved
 
     def _parse_patch(self, patch_content: str) -> list[dict[str, Any]]:
         patches = []
