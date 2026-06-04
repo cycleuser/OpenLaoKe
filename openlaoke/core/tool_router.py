@@ -1,7 +1,7 @@
-"""2-Stage Tool Routing System - Category scoring and dynamic schema injection.
+"""2-Stage Tool Routing System — Category scoring and dynamic schema injection.
 
-Inspired by SmallCode's tool routing system. Reduces token overhead by only
-sending relevant tool schemas based on message classification.
+Reduces token overhead by only sending relevant tool schemas based on
+message classification.
 """
 
 from __future__ import annotations
