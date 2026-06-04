@@ -470,6 +470,7 @@ OpenLaoKe 的架构设计受以下优秀开源 AI 编程助手项目启发：
 - **[nanobot](https://github.com/HKUDS/nanobot)** — 事件驱动 Agent 循环、多渠道会话模型、AutoCompact 自动压缩、Dream 记忆合并模式
 - **[smallcode](https://github.com/Doorman11991/smallcode)** — 多格式工具调用解析、分类评分的工具路由、Thinking Budget 思考预算控制、步骤锚定的 Plan Tracker、先读后写守卫
 - **[DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)** — 传输无关的 Controller 模式、基于前缀缓存的上下文管理、Tool Previewer 预览接口、配置驱动的 Provider/Plugin 注册、MCP 客户端架构
+- **[OpenCode](https://github.com/opencode-ai/opencode)** — 全屏 TUI 设计、Git 原生工作流、会话分支/检查点模型、零配置多模型路由
 
 ## 许可证
 

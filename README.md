@@ -305,6 +305,7 @@ OpenLaoKe's architecture draws inspiration from several excellent open-source pr
 - **[nanobot](https://github.com/HKUDS/nanobot)** — for the event-driven agent loop, multi-channel session model, AutoCompact, and Dream memory consolidation patterns
 - **[smallcode](https://github.com/Doorman11991/smallcode)** — for the liquid tool-call parser, tool routing with category scoring, thinking budget control, plan-tracker with step anchoring, and read-before-write guard
 - **[DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)** — for the transport-agnostic Controller pattern, cache-stable prefix with structured compaction, Previewer/PreviewChange tool interface, Config-driven provider/plugin registry, and plugin-based MCP client architecture
+- **[OpenCode](https://github.com/opencode-ai/opencode)** — for the full-screen TUI design, git-native workflow, session fork/branch checkpoint model, and the pragmatic approach to zero-config multi-model routing
 
 ## License
 
