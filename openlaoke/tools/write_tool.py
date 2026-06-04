@@ -95,24 +95,23 @@ class WriteTool(Tool):
             )
 
         # --- read-before-write guard ---
-        if ctx.file_state is not None and hasattr(ctx.file_state, "was_read"):
-            if not ctx.file_state.was_read(abs_path):
-                key = f"{ctx.app_state.session_id}:{abs_path}"
-                attempts = _WRITE_GUARD_ATTEMPTS.get(key, 0)
-                if attempts < 1:
-                    _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
-                    return ToolResultBlock(
-                        tool_use_id=ctx.tool_use_id,
-                        content=(
-                            f"Guard: '{abs_path}' has not been read this session. "
-                            "Small models often overwrite files with incorrect content "
-                            "when they haven't seen what's already there. "
-                            "Read the file first, then write again. "
-                            "(This guard will be bypassed on your next write attempt.)"
-                        ),
-                        is_error=False,
-                    )
+        if ctx.file_state is not None and hasattr(ctx.file_state, "was_read") and not ctx.file_state.was_read(abs_path):
+            key = f"{ctx.app_state.session_id}:{abs_path}"
+            attempts = _WRITE_GUARD_ATTEMPTS.get(key, 0)
+            if attempts < 1:
                 _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id,
+                    content=(
+                        f"Guard: '{abs_path}' has not been read this session. "
+                        "Small models often overwrite files with incorrect content "
+                        "when they haven't seen what's already there. "
+                        "Read the file first, then write again. "
+                        "(This guard will be bypassed on your next write attempt.)"
+                    ),
+                    is_error=False,
+                )
+            _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
 
         try:
             os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)

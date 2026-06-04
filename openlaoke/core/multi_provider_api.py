@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import random
-import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -351,6 +351,34 @@ class MultiProviderClient:
             env_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
         return provider.base_url or env_url
+
+    @staticmethod
+    def detect_provider_type(base_url: str) -> ProviderType:
+        """Detect the provider kind from the base URL.
+
+        Used to auto-tune parameters like thinking budget format without
+        requiring explicit provider config.
+        """
+        url = base_url.lower()
+        if "api.deepseek.com" in url:
+            return ProviderType.OPENAI_COMPATIBLE  # DeepSeek supports OpenAI API
+        if "api.anthropic.com" in url or "claude" in url:
+            return ProviderType.ANTHROPIC
+        if "api.openai.com" in url or "openrouter.ai" in url:
+            return ProviderType.OPENAI
+        if ":11434" in url or "ollama" in url:
+            return ProviderType.OLLAMA
+        if ":1234" in url or "lm-studio" in url:
+            return ProviderType.LM_STUDIO
+        if "api.mistral.ai" in url:
+            return ProviderType.MISTRAL
+        if "api.groq.com" in url:
+            return ProviderType.GROQ
+        if "generativelanguage.googleapis.com" in url:
+            return ProviderType.GOOGLE
+        if "api.x.ai" in url:
+            return ProviderType.XAI
+        return ProviderType.OPENAI_COMPATIBLE
 
     def _build_headers(self, provider: ProviderConfig) -> dict[str, str]:
         api_key = self._get_api_key(provider)

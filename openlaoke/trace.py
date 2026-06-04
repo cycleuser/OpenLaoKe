@@ -12,8 +12,8 @@
 
 from __future__ import annotations
 
-from openlaoke.core.trace_recorder import TraceRecorder as CoreTraceRecorder
 from openlaoke.control.health import HealthReport, run_health_checks
+from openlaoke.core.trace_recorder import TraceRecorder as CoreTraceRecorder
 
 __all__ = [
     "CoreTraceRecorder",

@@ -16,9 +16,9 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable, AsyncIterator
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openlaoke.bus.progress import ProgressBus
 from openlaoke.bus.queue import MessageBus
@@ -38,12 +38,11 @@ from openlaoke.control.commands import (
 )
 from openlaoke.control.controller import ApprovalTicket, SessionState, TurnHandle
 from openlaoke.control.phase import RunResult, TurnPhase, can_transition
-from openlaoke.permission.policy import Decision
 from openlaoke.core.tool_dedup import ToolDedup
+from openlaoke.permission.policy import Decision
 from openlaoke.types.core_types import (
     AssistantMessage,
     MessageRole,
-    StreamChunk,
     StreamEventType,
     TokenUsage,
     ToolUseBlock,
@@ -51,10 +50,7 @@ from openlaoke.types.core_types import (
 )
 
 if TYPE_CHECKING:
-    from openlaoke.core.multi_provider_api import MultiProviderClient
-    from openlaoke.core.tool import ToolRegistry
-    from openlaoke.core.state import AppState
-    from openlaoke.permission.gate import Gate
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -332,9 +328,8 @@ class Orchestrator:
                                 input=args,
                             )
                         )
-                    elif chunk.event_type == StreamEventType.USAGE:
-                        if chunk.usage:
-                            usage = chunk.usage
+                    elif chunk.event_type == StreamEventType.USAGE and chunk.usage:
+                        usage = chunk.usage
 
                     if self.cfg.on_stream_chunk:
                         await self.cfg.on_stream_chunk(chunk, session_id)
@@ -408,7 +403,7 @@ class Orchestrator:
                         future = self.request_approval(session_id, tu.name, _safe_dict(tu.input))
                         try:
                             decision = await asyncio.wait_for(future, timeout=300)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             decision = "deny"
                         if decision == "deny":
                             messages.append(

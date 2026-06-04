@@ -190,6 +190,16 @@ class DeferredToolInfo:
 class ToolRegistry:
     """Registry for all available tools with lazy loading support."""
 
+    _DEFAULT_READONLY_TOOLS: frozenset[str] = frozenset({
+        "Read", "ReadFile", "Glob", "Grep", "LSP", "ListDirectory",
+        "WebSearch", "WebFetch", "ToolSearch", "Brief", "Plan", "Lsp",
+        "NotebookRead", "ReadTracker",
+    })
+    _DEFAULT_WRITER_TOOLS: frozenset[str] = frozenset({
+        "Write", "Edit", "Bash", "ApplyPatch", "Batch", "Git",
+        "CodeRunner", "Agent", "NotebookWrite", "MultiEdit",
+    })
+
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
         self._deferred_loaders: dict[str, Callable[[], Tool] | Callable[[], Awaitable[Tool]]] = {}
@@ -323,6 +333,17 @@ class ToolRegistry:
             if query_lower in tool.name.lower() or query_lower in tool.description.lower():
                 results.append(tool)
         return results
+
+    def is_readonly(self, name: str) -> bool:
+        """Check if a tool is read-only. Used for parallel dispatch decisions."""
+        tool = self._tools.get(name)
+        if tool is not None:
+            return tool.is_read_only
+        if name in ToolRegistry._DEFAULT_READONLY_TOOLS:
+            return True
+        if name in ToolRegistry._DEFAULT_WRITER_TOOLS:
+            return False
+        return False
 
     def search_deferred(self, query: str) -> list[DeferredToolInfo]:
         query_lower = query.lower()

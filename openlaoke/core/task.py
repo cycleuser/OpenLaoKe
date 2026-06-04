@@ -47,7 +47,17 @@ class TaskManager:
         self._id_generator = TaskId()
         self._handles: dict[str, TaskHandle] = {}
         self._output_dir = os.path.join(os.path.expanduser("~/.openlaoke"), "task_outputs")
-        os.makedirs(self._output_dir, exist_ok=True)
+        try:
+            os.makedirs(self._output_dir, exist_ok=True)
+            # Verify write access
+            _test = os.path.join(self._output_dir, ".write_test")
+            with open(_test, "w") as _f:
+                _f.write("ok")
+            os.remove(_test)
+        except (PermissionError, OSError):
+            import tempfile as _tempfile
+            self._output_dir = os.path.join(_tempfile.gettempdir(), "openlaoke_task_outputs")
+            os.makedirs(self._output_dir, exist_ok=True)
 
     def _get_output_path(self, task_id: str) -> str:
         return os.path.join(self._output_dir, f"{task_id}.log")

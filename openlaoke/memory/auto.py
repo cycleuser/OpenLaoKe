@@ -133,6 +133,11 @@ class AutoMemoryStore:
         type: FactType = FactType.PROJECT,
         references: list[str] | None = None,
     ) -> Fact:
+        if isinstance(type, str):
+            try:
+                type = FactType(type)
+            except ValueError:
+                type = FactType.PROJECT
         fact = Fact(
             fact_id=_new_id(),
             name=name,
