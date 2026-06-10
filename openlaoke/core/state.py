@@ -87,6 +87,8 @@ class AppState:
     insomnia_log_path: str | None = None
     last_thinking: str = ""
     thinking_enabled: bool = True
+    guard_state: dict[str, Any] = field(default_factory=dict)
+    compact_state: dict[str, Any] = field(default_factory=dict)
 
     _bus: MessageBus | None = field(default=None, repr=False)
     _orchestrator: Orchestrator | None = field(default=None, repr=False)
@@ -233,6 +235,8 @@ class AppState:
                 "insomnia_max_iterations": self.insomnia_max_iterations,
                 "insomnia_auto_accept": self.insomnia_auto_accept,
                 "insomnia_log_path": self.insomnia_log_path,
+                "guard_state": getattr(self, "_guard_state", {}),
+                "compact_state": getattr(self, "_compact_state", {}),
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

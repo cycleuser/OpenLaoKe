@@ -236,6 +236,12 @@ _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
         "Search code with regex and read matching files in one operation",
         "grep search read code regex",
     ),
+    "InvokeSkill": (
+        "openlaoke.tools.invoke_skill_tool",
+        "InvokeSkillTool",
+        "Invoke an installed skill by name — skills loaded at runtime",
+        "skill invoke plugin extension capability",
+    ),
 }
 
 

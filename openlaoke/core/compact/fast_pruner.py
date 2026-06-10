@@ -170,3 +170,104 @@ def fast_prune(
         elapsed_ms=elapsed,
         keywords_extracted=len(all_keywords),
     )
+
+
+def fast_prune_aggressive(
+    messages: list[Message],
+    max_tokens: int = 4096,
+) -> PruneResult:
+    """Aggressive pruning for local/small models where prefill dominates.
+
+    In agent workloads, input:output is typically ≈ 13:1, and prefill time
+    dominates decode time on low-compute GPUs.  This variant:
+
+    - Keeps only the first message as head (not first 3)
+    - Caps tail budget at 25% of max_tokens
+    - Truncates long tool results to head 20 + tail 10 lines
+    - Strips non-essential system messages entirely
+    """
+    from openlaoke.types.core_types import MessageRole, SystemMessage
+
+    start = time.monotonic()
+
+    if not messages:
+        return PruneResult(messages=[], tokens_before=0, tokens_after=0)
+
+    total_tokens = sum(_estimate_tokens(_extract_content(m)) for m in messages)
+    if total_tokens <= max_tokens:
+        return PruneResult(
+            messages=messages,
+            tokens_before=total_tokens,
+            tokens_after=total_tokens,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+        )
+
+    # Apply tool-result truncation BEFORE splitting head/middle/tail
+    truncated_messages: list[Message] = []
+    for msg in messages:
+        if isinstance(msg, SystemMessage) and msg.subtype not in ("error", "warning"):
+            content = _extract_content(msg)
+            if len(content) > 3000:
+                lines = content.split("\n")
+                if len(lines) > 40:
+                    truncated = "\n".join(lines[:20]) + "\n... [truncated " + str(len(lines) - 30) + " lines] ...\n" + "\n".join(lines[-10:])
+                    truncated_messages.append(SystemMessage(
+                        role=msg.role,
+                        content=truncated,
+                        subtype=msg.subtype,
+                    ))
+                    continue
+        truncated_messages.append(msg)
+    messages = truncated_messages
+
+    # Keep only first message as head
+    head_messages = messages[:1]
+    head_tokens = _estimate_tokens(_extract_content(messages[0]))
+
+    # Aggressive tail budget: 25% of max_tokens
+    tail_budget = max(512, max_tokens // 4)
+    tail_messages: list[Message] = []
+    tail_tokens = 0
+
+    for msg in reversed(messages[1:]):
+        t = _estimate_tokens(_extract_content(msg))
+        if tail_tokens + t <= tail_budget:
+            tail_messages.insert(0, msg)
+            tail_tokens += t
+        else:
+            break
+
+    # Keyword extraction from skipped middle
+    middle_start = len(head_messages)
+    middle_end = len(messages) - len(tail_messages)
+    middle = messages[middle_start:middle_end]
+
+    all_keywords: list[str] = []
+    for msg in middle:
+        content = _extract_content(msg)
+        keywords = extract_keywords(content, max_keywords=30)
+        all_keywords.extend(keywords)
+
+    keyword_lines = "\n".join(f"- {kw}" for kw in all_keywords[:50])
+    summary_content = (
+        f"[Compressed: {len(middle)} messages skipped. "
+        f"Key info:]\n{keyword_lines}"
+    ) if keyword_lines else f"[Compressed: {len(middle)} messages skipped.]"
+
+    summary_msg = SystemMessage(
+        role=MessageRole.SYSTEM,
+        content=summary_content,
+        subtype="compact",
+    )
+
+    new_messages = head_messages + [summary_msg] + tail_messages
+    new_tokens = sum(_estimate_tokens(_extract_content(m)) for m in new_messages)
+    elapsed = (time.monotonic() - start) * 1000
+
+    return PruneResult(
+        messages=new_messages,
+        tokens_before=total_tokens,
+        tokens_after=new_tokens,
+        elapsed_ms=elapsed,
+        keywords_extracted=len(all_keywords),
+    )

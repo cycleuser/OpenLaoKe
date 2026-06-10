@@ -26,13 +26,13 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
+from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.prompt_input import PromptSessionManager, run_model_picker_async
 from openlaoke.core.state import AppState
 from openlaoke.core.supervisor import TaskSupervisor
-from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.core.world_sensor import SensorData, sense_world
 from openlaoke.tools.register import register_all_tools
@@ -78,6 +78,7 @@ class REPL:
         from openlaoke.core.gitstore import GitStore
         from openlaoke.core.hook_system import HookRegistry
         from openlaoke.core.memory import get_memory_manager
+        from openlaoke.core.prompt_cache_split import PromptCacheSplit
         from openlaoke.core.small_model_optimizations import (
             ReadLoopTracker,
             SmallModelGuard,
@@ -96,11 +97,14 @@ class REPL:
         self._file_state = FileStateStore()
         self._git_store: GitStore | None = None
         self._world_sensor: SensorData | None = None
+        self._cache_guard = CacheGuard(app_state)
+        self._cache_split = PromptCacheSplit()
 
         self._register_memory_hooks()
 
         register_all()
         register_all_tools(self.registry)
+        self.registry.freeze()  # Byte-stable tool schemas for the session
         self._tool_validator.set_tools(self.registry)
 
         self._sense_world()
@@ -572,7 +576,7 @@ class REPL:
         while iteration < max_iterations and self._running:
             iteration += 1
 
-            from openlaoke.core.compact.fast_pruner import fast_prune
+            from openlaoke.core.compact.fast_pruner import fast_prune, fast_prune_aggressive
             from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
 
             model_size = estimate_model_size_from_name(self.app_state.session_config.model)
@@ -589,7 +593,10 @@ class REPL:
             max_ctx = max_tokens_map.get(model_size, 8192)
 
             if len(messages) > 10:
-                prune_result = fast_prune(messages, max_tokens=max_ctx)
+                if model_size in ("tiny", "small"):
+                    prune_result = fast_prune_aggressive(messages, max_tokens=max_ctx)
+                else:
+                    prune_result = fast_prune(messages, max_tokens=max_ctx)
                 if prune_result.tokens_after < prune_result.tokens_before:
                     messages = prune_result.messages
                     if self.app_state.verbose:
@@ -617,24 +624,39 @@ class REPL:
                 system_prompt = build_compact_system_prompt(
                     self.app_state, user_input, world_context=world_ctx
                 )
+
+                tool_list = self._build_tool_list_for_small_model()
+                if tool_list:
+                    system_prompt = system_prompt.rstrip() + tool_list
             else:
+                # Cache-stable path: use CacheGuard for byte-stable system prompt
+                system_prompt = self._cache_guard.system_prompt
+
+                # Inject session context block into user message stream
+                session_ctx = self._cache_guard.ensure_session_context(
+                    model=self.app_state.session_config.model,
+                )
+                if session_ctx:
+                    messages.append({
+                        "role": "user",
+                        "content": session_ctx,
+                        "system_injected": True,
+                    })
+
+                # Merge world_context into the last user message (not system prompt)
                 world_ctx = ""
                 if self._world_sensor:
                     world_ctx = self._world_sensor.to_context_block()
-                system_prompt = build_system_prompt(
-                    self.app_state,
-                    self.registry.get_all_for_prompt(),
-                    world_context=world_ctx,
-                )
+                if world_ctx and messages:
+                    for i in range(len(messages) - 1, -1, -1):
+                        if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
+                            messages[i]["content"] = (
+                                messages[i]["content"] + "\n\n<sc:context>" + world_ctx + "</sc:context>"
+                            )
+                            break
 
-            tool_list = self._build_tool_list_for_small_model()
-            if tool_list:
-                system_prompt = system_prompt.rstrip() + tool_list
-
-            memory_prompt = self._memory.inject_into_system_prompt()
-            if memory_prompt:
-                system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
-
+            # Small-model guidance and memory — inject into user message stream
+            # (not system prompt) to keep system prompt byte-stable
             from openlaoke.core.small_model_optimizations import (
                 apply_structured_thinking_prefix,
                 estimate_model_size_from_name,
@@ -643,19 +665,52 @@ class REPL:
 
             model_size = estimate_model_size_from_name(self.app_state.session_config.model)
             small_model_guidance = get_small_model_guidance(model_size)
-            if small_model_guidance:
-                system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
+            memory_prompt = self._memory.inject_into_system_prompt()
 
+            # For non-local providers, inject guidance into last user message
+            if not is_local_builtin and (small_model_guidance or memory_prompt):
+                extra_parts = []
+                if small_model_guidance:
+                    extra_parts.append(small_model_guidance)
+                if memory_prompt:
+                    extra_parts.append(memory_prompt)
+                extra = "\n\n".join(extra_parts)
+                if extra and messages:
+                    for i in range(len(messages) - 1, -1, -1):
+                        if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
+                            messages[i]["content"] = extra + "\n" + messages[i]["content"]
+                            break
+            elif is_local_builtin:
+                if memory_prompt:
+                    system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
+                if small_model_guidance:
+                    system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
+
+            # Structured thinking prefix for small/local models
             user_input_for_thinking = ""
             for msg in reversed(messages):
-                if msg.get("role") == "user":
+                if msg.get("role") == "user" and not msg.get("system_injected"):
                     user_input_for_thinking = msg.get("content", "")
                     break
             thinking_prefix = apply_structured_thinking_prefix("code")
-            if thinking_prefix and user_input_for_thinking:
+            if thinking_prefix and user_input_for_thinking and is_local_builtin:
                 system_prompt = thinking_prefix + "\n" + system_prompt
+            elif thinking_prefix and user_input_for_thinking and not is_local_builtin:
+                # Inject into user message for cloud providers
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
+                        messages[i]["content"] = thinking_prefix + "\n" + messages[i]["content"]
+                        break
 
             tools = self.registry.get_all_for_prompt()
+
+            # Apply cache_control markers for Anthropic providers
+            if not is_local_builtin and self.api:
+                provider = self.api.config.get_active_provider() if self.api.config else None
+                if provider and getattr(provider, "provider_type", None):
+                    from openlaoke.types.providers import ProviderType
+                    if provider.provider_type == ProviderType.ANTHROPIC:
+                        messages = CacheGuard.apply_cache_markers(messages)
 
             needs_tool_hint = is_local_builtin or self._is_ollama_provider()
             if needs_tool_hint:
