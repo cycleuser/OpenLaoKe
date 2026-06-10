@@ -247,7 +247,6 @@ wechat.md
 /.reasonix
 /.codegraph
 
-# Local model benchmark test reports (large JSON files)
-tests/test_reports/*_202*.json
-tests/test_reports/_summary_*.json
-tests/test_reports/_final_summary.json
+# Local model benchmark test reports (generated data, not source)
+tests/test_reports/*.json
+tests/test_reports/*_report*.md
