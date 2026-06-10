@@ -246,3 +246,8 @@ wechat.md
 /data/chroma
 /.reasonix
 /.codegraph
+
+# Local model benchmark test reports (large JSON files)
+tests/test_reports/*_202*.json
+tests/test_reports/_summary_*.json
+tests/test_reports/_final_summary.json

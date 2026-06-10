@@ -205,6 +205,8 @@ class ToolRegistry:
         self._deferred_loaders: dict[str, Callable[[], Tool] | Callable[[], Awaitable[Tool]]] = {}
         self._deferred_info: dict[str, DeferredToolInfo] = {}
         self._load_locks: dict[str, asyncio.Lock] = {}
+        self._frozen_schemas: list[dict[str, Any]] | None = None
+        self._frozen: bool = False
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -302,8 +304,10 @@ class ToolRegistry:
         return list(self._tools.values())
 
     def get_all_for_prompt(self) -> list[dict[str, Any]]:
+        if self._frozen and self._frozen_schemas is not None:
+            return self._frozen_schemas
         tools = self.get_all()
-        return [
+        schemas = [
             {
                 "name": tool.name,
                 "description": tool.get_description(),
@@ -311,6 +315,30 @@ class ToolRegistry:
             }
             for tool in tools
         ]
+        if self._frozen:
+            self._frozen_schemas = schemas
+        return schemas
+
+    def freeze(self) -> None:
+        """Freeze the tool set for the session.
+
+        After freezing, get_all_for_prompt() returns cached schemas.
+        New tool registrations are still tracked but don't affect the
+        prompt schemas (they're communicated via invoke_skill or
+        [session context] instead).
+        """
+        if not self._frozen_schemas:
+            self._frozen_schemas = self.get_all_for_prompt()
+        self._frozen = True
+
+    def thaw(self) -> None:
+        """Unfreeze — tool schemas will be rebuilt on next get_all_for_prompt()."""
+        self._frozen = False
+        self._frozen_schemas = None
+
+    @property
+    def is_frozen(self) -> bool:
+        return self._frozen
 
     def get_deferred_for_prompt(self) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []

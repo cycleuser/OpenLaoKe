@@ -170,6 +170,11 @@ class SessionManager:
                     cache_creation_tokens=token_data.get("cache_creation_tokens", 0),
                 )
 
+            if data.get("guard_state"):
+                app_state.guard_state = data["guard_state"]
+            if data.get("compact_state"):
+                app_state.compact_state = data["compact_state"]
+
             return app_state
 
         except Exception:

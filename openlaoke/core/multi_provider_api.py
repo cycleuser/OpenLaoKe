@@ -524,7 +524,14 @@ class MultiProviderClient:
             role = msg.get("role", "user")
             content = msg.get("content", "")
 
-            if role == "system":
+            # Skip system role and system_injected messages — those travel
+            # separately via the "system" body parameter or [session context]
+            if role == "system" or msg.get("system_injected"):
+                continue
+
+            # Content is already in Anthropic content-block format with cache_control
+            if isinstance(content, list):
+                result.append({"role": role, "content": content})
                 continue
 
             # Handle OpenAI native tool format
@@ -600,6 +607,10 @@ class MultiProviderClient:
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+
+            # Skip system_injected messages — those are [session context] blocks
+            if msg.get("system_injected"):
+                continue
 
             # Handle OpenAI native tool format
             if role == "tool":
@@ -684,6 +695,14 @@ class MultiProviderClient:
             choice = choices[0]
             message = choice.get("message", {})
             content = message.get("content", "") or ""
+
+            # Small reasoning models (Qwen3 etc.) output reasoning first;
+            # content may be empty if the token budget was consumed by
+            # the thinking phase.  Fall back to reasoning as visible text.
+            if not content.strip():
+                reasoning = message.get("reasoning", "")
+                if reasoning and reasoning.strip():
+                    content = reasoning.strip()
 
             for tool_call in message.get("tool_calls", []):
                 func = tool_call.get("function", {})

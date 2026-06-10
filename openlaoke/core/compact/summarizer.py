@@ -37,6 +37,77 @@ Rules: be terse — bullet points and fragments, not prose. Preserve identifiers
 SUMMARY_USER_PROMPT = """Messages to compact:
 {messages}"""
 
+# Inline compaction prompt — injected into the main conversation flow
+# so the compression happens as part of the next normal API call,
+# reusing the existing prompt cache (Insert-then-Compress pattern).
+INLINE_COMPACTION_PREFIX = """[SYSTEM INSTRUCTION — COMPACT CONTEXT]
+The conversation above has grown large. Before continuing, you MUST:
+
+1. Review the conversation from the beginning
+2. Extract the key information into a compact summary under these headings:
+## Goal — user's request and intent
+## Decisions & rationale — key choices made and why
+## Files & code — files read/modified, with specific paths and facts
+## Commands & outcomes — what was run, what succeeded/failed
+## Errors & fixes — problems and resolutions
+## Pending & next step — what remains to do
+
+3. Output ONLY the summary. Do NOT continue the conversation until the
+   summary is complete. After the summary, the original old messages will
+   be dropped and you will resume from the summary alone.
+
+--- BEGIN COMPACTION ---"""
+
+INLINE_COMPACTION_CLOSING = """--- END COMPACTION ---
+
+[The conversation history has been compacted. Continue from the summary above.]"""
+
+
+def build_inline_compaction_messages(
+    messages: list[dict[str, Any]],
+    target_compact_count: int = 0,
+) -> list[dict[str, Any]]:
+    """Insert compaction instruction into the message flow.
+
+    Instead of making a separate LLM call (which always cache-misses),
+    we inject the compaction prompt as a user message into the main
+    conversation stream. The next normal request will include the
+    compaction step, reusing the existing prompt cache.
+
+    Returns modified message list with compaction instruction injected.
+    The caller should then:
+    1. Send this to the model (cache hit on everything before the injection)
+    2. Parse the compaction output from the model's response
+    3. Replace old messages with the compacted summary
+    """
+    if not messages:
+        return messages
+
+    result = list(messages)
+
+    # Determine which messages to keep (recent) vs compact (old)
+    keep_count = max(4, len(messages) // 4)
+    if target_compact_count > 0:
+        compact_count = min(target_compact_count, len(messages) - keep_count)
+    else:
+        compact_count = max(0, len(messages) - keep_count)
+
+    if compact_count <= 0:
+        return result
+
+    # Inject compaction instruction
+    result.insert(
+        -keep_count if keep_count < len(result) else len(result),
+        {
+            "role": "user",
+            "content": INLINE_COMPACTION_PREFIX,
+            "system_injected": True,
+        },
+    )
+
+    return result
+
+
 
 @dataclass
 class SummaryConfig:

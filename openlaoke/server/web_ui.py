@@ -17,12 +17,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.insomnia_engine import InsomniaEngine
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.sessions import SessionManager
 from openlaoke.core.state import AppState, create_app_state
-from openlaoke.core.system_prompt import build_system_prompt
 from openlaoke.core.tool import ToolContext, ToolRegistry
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
@@ -401,6 +401,7 @@ class ActiveSession:
     api: MultiProviderClient
     config: AppConfig
     insomnia_engine: InsomniaEngine | None = None
+    cache_guard: CacheGuard | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -575,7 +576,10 @@ class WebUI:
                 registry=registry,
                 api=api,
                 config=config,
+                cache_guard=CacheGuard(app_state),
             )
+
+            registry.freeze()
 
             self.session_manager.save_session(app_state)
 
@@ -847,19 +851,26 @@ class WebUI:
             api=api,
             config=config,
             insomnia_engine=insomnia_engine,
+            cache_guard=CacheGuard(app_state),
         )
+        registry.freeze()
         self.sessions[new_session_id] = session
         return session
 
     async def _send_message(
         self, session: ActiveSession, content: str
     ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
-        system_prompt = build_system_prompt(
-            session.app_state, session.registry.get_all_for_prompt()
+        guard = session.cache_guard or CacheGuard(session.app_state)
+        system_prompt = guard.system_prompt
+
+        session_ctx = guard.ensure_session_context(
+            model=session.app_state.session_config.model,
         )
         messages = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ] + [{"role": "user", "content": content}]
+        if session_ctx:
+            messages.append({"role": "user", "content": session_ctx, "system_injected": True})
         tools = session.registry.get_all_for_prompt()
 
         response, usage, cost = await session.api.send_message(
@@ -888,12 +899,17 @@ class WebUI:
         return response, usage, cost
 
     async def _stream_chat(self, session: ActiveSession, content: str) -> AsyncIterator[str]:
-        system_prompt = build_system_prompt(
-            session.app_state, session.registry.get_all_for_prompt()
+        guard = session.cache_guard or CacheGuard(session.app_state)
+        system_prompt = guard.system_prompt
+
+        session_ctx = guard.ensure_session_context(
+            model=session.app_state.session_config.model,
         )
         messages = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ]
+        if session_ctx:
+            messages.append({"role": "user", "content": session_ctx, "system_injected": True})
         tools = session.registry.get_all_for_prompt()
 
         try:
