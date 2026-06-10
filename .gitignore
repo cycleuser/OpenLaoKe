@@ -244,3 +244,5 @@ IMPROVEMENTS_SUMMARY.md
 docs/ARCHITECTURE_DESIGN.md
 wechat.md
 /data/chroma
+/.reasonix
+/.codegraph
