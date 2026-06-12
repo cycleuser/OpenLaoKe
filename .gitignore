@@ -250,3 +250,5 @@ wechat.md
 # Local model benchmark test reports (generated data, not source)
 tests/test_reports/*.json
 tests/test_reports/*_report*.md
+reasonix.toml
+.codegraph/daemon.pid
