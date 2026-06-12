@@ -297,42 +297,7 @@ Notebook支持（Read/Write）、Cron计划任务、Memory存储、Hook配置、
 
 ## 架构
 
-```
-openlaoke/
-├── core/                      # 核心系统
-│   ├── state.py              # 集中式状态管理
-│   ├── tool.py               # 工具基类和注册表
-│   ├── multi_provider_api.py # 多提供商API客户端
-│   ├── repl.py               # REPL交互循环
-│   ├── config_wizard.py      # 配置向导
-│   ├── prompt_input.py       # 带Ctrl+P选择器的提示输入
-│   ├── system_prompt.py      # 系统提示词构建器（本地模型精简版）
-│   ├── local_model_manager.py # 本地GGUF模型注册表和下载
-│   ├── builtin_model_provider.py # llama-cpp-python推理提供者
-│   ├── model_cli.py          # CLI模型管理命令
-│   ├── distilled_templates.py # 蒸馏提示词模板
-│   ├── small_model_optimizations.py # 小模型优化（类型强制、schema清理、输出压缩）
-│   ├── hook_system.py        # 15钩子扩展系统
-│   ├── bitter_lesson_tracker.py # 自我反思与策略追踪
-│   ├── cross_project_lessons.py # 跨项目经验教训数据库
-│   ├── compact/              # 上下文压缩系统
-│   │   ├── fast_pruner.py    # 纯算法上下文修剪（<5ms）
-│   │   ├── strategies.py     # 压缩策略
-│   │   └── summarizer.py     # 基于LLM的摘要
-│   ├── supervisor/           # 任务监督系统
-│   ├── model_assessment/     # 模型能力评估
-│   ├── hyperauto/            # HyperAuto模式
-│   ├── skill_system.py       # 技能管理
-│   └── memory/               # 持久化内存
-├── tools/                    # 工具实现（30+）
-├── commands/                 # 斜杠命令（20+）
-├── types/                    # 类型定义
-├── services/mcp/             # MCP服务
-├── server/                   # Web API和UI
-├── utils/                    # 工具函数
-├── hooks/                    # 钩子实现
-└── entrypoints/cli.py        # CLI入口点
-```
+![OpenLaoKe 架构图](docs/architecture_zh.svg)
 
 ## 运行模式
 
