@@ -29,6 +29,33 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
     )
     console.print()
 
+    # Step 0: Language selection
+    from openlaoke.core.i18n import SUPPORTED_LANGUAGES
+
+    console.print("[bold]Step 0: Select display language / 选择显示语言[/bold]")
+    console.print()
+    for i, (code, name) in enumerate(SUPPORTED_LANGUAGES.items(), 1):
+        marker = " (current)" if code == config.language else ""
+        console.print(f"  [{i}] {name} ({code}){marker}")
+    console.print()
+
+    lang_choices = [str(i) for i in range(1, len(SUPPORTED_LANGUAGES) + 1)]
+    lang_default = (
+        str(list(SUPPORTED_LANGUAGES.keys()).index(config.language) + 1)
+        if config.language in SUPPORTED_LANGUAGES
+        else "1"
+    )
+    lang_choice = Prompt.ask(
+        "Select language / 选择语言",
+        choices=lang_choices,
+        default=lang_default,
+    )
+    lang_keys = list(SUPPORTED_LANGUAGES.keys())
+    config.language = lang_keys[int(lang_choice) - 1]
+    lang_name = SUPPORTED_LANGUAGES[config.language]
+    console.print(f"[green]✓[/green] Language: {lang_name} ({config.language})")
+    console.print()
+
     # Step 1: Configure provider
     while True:
         console.print("[bold]Step 1: Choose your AI provider[/bold]")

@@ -30,7 +30,7 @@ from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
-from openlaoke.core.prompt_input import PromptSessionManager, run_model_picker_async
+from openlaoke.core.prompt_input import PromptSessionManager, run_model_picker_async, run_lang_picker_async
 from openlaoke.core.state import AppState
 from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
@@ -145,6 +145,11 @@ class REPL:
     def _s(self, text: str, style_name: str) -> Text:
         return self._theme.format_text(text, style_name)
 
+    def _t(self, key: str) -> str:
+        from openlaoke.core.i18n import get_tui_text
+
+        return get_tui_text(key, getattr(self.app_state, "language", "en"))
+
     def _register_memory_hooks(self) -> None:
         from openlaoke.core.memory.memory_hooks import (
             session_start_memory_hook,
@@ -185,10 +190,13 @@ class REPL:
         self._print_banner()
         self._print_welcome()
 
+        if self.app_config:
+            self.app_state.language = getattr(self.app_config, "language", "en")
+
         config = self.multi_provider_config or self.app_state.multi_provider_config
         if not config:
-            self.console.print(f"[bold {self._c('error')}]Error: No provider configured.[/]")
-            self.console.print("Run 'openlaoke --config' to set up a provider.")
+            self.console.print(f"[bold {self._c('error')}]{self._t('no_provider_error')}[/]")
+            self.console.print(self._t("run_config_hint"))
             return
 
         if self.app_config:
@@ -203,7 +211,7 @@ class REPL:
 
         if self.app_state.insomnia_mode:
             self.console.print(
-                f"[bold {self._c('primary')}]Insomnia mode: Resuming background tasks...[/]"
+                f"[bold {self._c('primary')}]{self._t('insomnia_resuming')}[/]"
             )
             await self._insomnia_engine.start()
             if self.app_state.insomnia_task_queue:
@@ -215,7 +223,7 @@ class REPL:
             while self._running:
                 await self._handle_input()
         except (KeyboardInterrupt, EOFError):
-            self.console.print(f"\n[{self._c('warning')}]Goodbye![/]")
+            self.console.print(f"\n[{self._c('warning')}]{self._t('goodbye')}[/]")
         finally:
             for task in self._active_tasks:
                 task.cancel()
@@ -237,6 +245,12 @@ class REPL:
             selection = await run_model_picker_async()
             if selection:
                 self._handle_model_switch(selection)
+            return
+
+        if result.is_lang_picker:
+            lang = await run_lang_picker_async(self.app_state.language)
+            if lang:
+                self._handle_lang_switch(lang)
             return
 
         if result.is_toggle_thinking:
@@ -266,7 +280,7 @@ class REPL:
                 ):
                     self.app_state.active_skills.append(potential_name)
 
-                self.console.print(f"[{self._c('success')}]Skill activated: {skill.name}[/]")
+                self.console.print(f"[{self._c('success')}]{self._t('skill_activated')} {skill.name}[/]")
                 if skill.description:
                     desc = skill.description[:100]
                     if len(skill.description) > 100:
@@ -292,8 +306,10 @@ class REPL:
 
         command = get_command(name)
         if not command:
-            self.console.print(f"[{self._c('error')}]Unknown command: /{name}[/]")
-            self.console.print(f"Type [bold {self._c('primary')}]/help[/] for available commands.")
+            self.console.print(
+                f"[{self._c('error')}]{self._t('unknown_command')} /{name}[/]"
+            )
+            self.console.print(self._t("type_help"))
             return
 
         ctx = CommandContext(app_state=self.app_state, args=args)
@@ -322,7 +338,9 @@ class REPL:
 
         provider = config.providers.get(provider_name)
         if not provider:
-            self.console.print(f"[{self._c('error')}]Provider not found: {provider_name}[/]")
+            self.console.print(
+                f"[{self._c('error')}]{self._t('provider_not_found')} {provider_name}[/]"
+            )
             return
 
         config.active_provider = provider_name
@@ -340,7 +358,31 @@ class REPL:
         app_config.providers.active_model = model_name
         save_config(app_config)
 
-        self.console.print(f"[{self._c('success')}]Switched to: {provider_name}/{model_name}[/]")
+        self.console.print(
+            f"[{self._c('success')}]{self._t('switched_to')} {provider_name}/{model_name}[/]"
+        )
+
+    def _handle_lang_switch(self, lang: str) -> None:
+        from openlaoke.core.i18n import SUPPORTED_LANGUAGES, get_tui_text
+        from openlaoke.utils.config import load_config, save_config
+
+        if lang not in SUPPORTED_LANGUAGES:
+            self.console.print(f"[{self._c('error')}]Unsupported language: {lang}[/]")
+            return
+
+        self.app_state.language = lang
+
+        app_config = load_config()
+        app_config.language = lang
+        save_config(app_config)
+
+        if self._cache_guard:
+            self._cache_guard.invalidate()
+
+        lang_name = SUPPORTED_LANGUAGES[lang]
+        self.console.print(
+            f"[{self._c('success')}]{get_tui_text('language_set', lang)} {lang_name} ({lang})[/]"
+        )
 
     async def _handle_chat(self, user_input: str) -> None:
         from openlaoke.core.intent_parser import IntentParser, IntentType
@@ -1409,7 +1451,7 @@ class REPL:
 
     async def _ask_permission(self, tool_name: str, tool_input: dict[str, Any], tool: Tool) -> bool:
         prompt_text = Text()
-        prompt_text.append("  Allow ", style=self._theme.style("warning"))
+        prompt_text.append(f"  {self._t('allow_tool')} ", style=self._theme.style("warning"))
         prompt_text.append(f"{tool_name}", style=self._theme.style("assistant_message"))
         prompt_text.append("?", style=self._theme.style("warning"))
         self.console.print(prompt_text)
@@ -1737,7 +1779,7 @@ class REPL:
         self.console.print(
             Panel.fit(
                 f"[bold {color}]OpenLaoKe[/] v{__version__}\n"
-                f"[{theme.colors.muted}]Open-source AI coding assistant[/]",
+                f"[{theme.colors.muted}]{self._t('app_subtitle')}[/]",
                 border_style=color,
             )
         )
@@ -1763,21 +1805,27 @@ class REPL:
         c_succ = self._c("success")
         c_warn = self._c("warning")
 
-        self.console.print(f"\n[{c_prim} bold]Provider:[/] {provider_name}")
-        self.console.print(f"[{c_prim} bold]Model:[/] {self.app_state.session_config.model}")
-        self.console.print(f"[{c_prim} bold]Working directory:[/] {self.app_state.get_cwd()}")
+        self.console.print(f"\n[{c_prim} bold]{self._t('provider_label')}[/] {provider_name}")
+        self.console.print(f"[{c_prim} bold]{self._t('model_label')}[/] {self.app_state.session_config.model}")
+        self.console.print(f"[{c_prim} bold]{self._t('working_dir_label')}[/] {self.app_state.get_cwd()}")
         if self.app_state.local_mode:
-            self.console.print(f"[{c_prim} bold]Mode:[/] [{c_warn}]Local (atomic decomposition)[/]")
+            self.console.print(
+                f"[{c_prim} bold]{self._t('mode_label')}[/] [{c_warn}]{self._t('mode_local')}[/]"
+            )
         else:
-            self.console.print(f"[{c_prim} bold]Mode:[/] [{c_succ}]Online[/]")
+            self.console.print(
+                f"[{c_prim} bold]{self._t('mode_label')}[/] [{c_succ}]{self._t('mode_online')}[/]"
+            )
 
         self.console.print(
-            f"[{c_prim} bold]Tools:[/] {len(self.registry.get_all())} available{proxy_info}"
+            f"[{c_prim} bold]{self._t('tools_label')}[/] "
+            f"{len(self.registry.get_all())} {self._t('tools_available')}{proxy_info}"
         )
 
         if skills:
             self.console.print(
-                f"[{c_prim} bold]Skills:[/] {len(skills)} available (Tab to complete)"
+                f"[{c_prim} bold]{self._t('skills_label')}[/] "
+                f"{len(skills)} {self._t('skills_available')}"
             )
             example_skills = sorted(skills)[:5]
             skills_str = ", ".join(f"/{s}" for s in example_skills)
@@ -1789,6 +1837,5 @@ class REPL:
             self.console.print(f"[{c_prim} bold]Mode:[/] [bold {c_prim}]Insomnia[/]")
 
         self.console.print(
-            f"\n[{c.muted}]Type [bold {c_prim}]/help[/] for commands, "
-            f"[bold {c_prim}]Tab[/] for completion, or just start chatting.[/]"
+            f"\n[{c.muted}]{self._t('welcome_hint')}[/]"
         )
