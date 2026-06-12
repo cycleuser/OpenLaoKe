@@ -216,27 +216,7 @@ openlaoke --resume                     # Resume last session
 
 ## Architecture
 
-```
-openlaoke/
-├── core/                    # Core systems
-│   ├── repl.py              # TUI interaction loop
-│   ├── state.py             # Centralized state
-│   ├── tool.py              # Tool base + registry
-│   ├── multi_provider_api.py # Provider client
-│   ├── hook_system.py        # 15-hook extension system
-│   ├── small_model_optimizations.py
-│   ├── compact/             # Context compression
-│   ├── supervisor/          # Task supervision
-│   ├── hyperauto/           # Autonomous mode
-│   ├── memory/              # Persistent memory
-│   └── architecture/        # Architecture tools
-├── tools/                   # 30+ tool implementations
-├── commands/               # 20+ slash commands
-├── types/                  # Type definitions
-├── server/                 # Web API + UI
-├── utils/                  # Utilities
-└── entrypoints/cli.py      # CLI entry
-```
+![OpenLaoKe Architecture](docs/architecture_en.svg)
 
 ## Configuration
 

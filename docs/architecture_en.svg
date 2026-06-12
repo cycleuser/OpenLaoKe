@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 820" font-family="sans-serif">
+  <rect width="1100" height="820" fill="white"/>
+
+  <!-- Title -->
+  <text x="550" y="36" text-anchor="middle" font-size="22" font-weight="bold" fill="black">OpenLaoKe Architecture</text>
+  <text x="550" y="56" text-anchor="middle" font-size="13" fill="#555">Architecture Diagram</text>
+
+  <!-- ====== Layer 1: Entrypoints ====== -->
+  <rect x="40" y="72" width="1020" height="76" rx="6" fill="none" stroke="black" stroke-width="2"/>
+  <text x="56" y="96" font-size="13" font-weight="bold" fill="black">Entrypoints</text>
+
+  <rect x="80" y="104" width="280" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="220" y="125" text-anchor="middle" font-size="13" fill="black">CLI (cli.py)</text>
+
+  <rect x="410" y="104" width="280" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="550" y="125" text-anchor="middle" font-size="13" fill="black">Server API (server.py)</text>
+
+  <rect x="740" y="104" width="280" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="880" y="125" text-anchor="middle" font-size="13" fill="black">Web UI (web_ui.py)</text>
+
+  <!-- Arrow L1→L2 -->
+  <line x1="550" y1="148" x2="550" y2="178" stroke="black" stroke-width="1.5" marker-end="url(#arrowBlack)"/>
+
+  <!-- ====== Layer 2: REPL/Interaction ====== -->
+  <rect x="40" y="180" width="1020" height="120" rx="6" fill="none" stroke="black" stroke-width="2"/>
+  <text x="56" y="204" font-size="13" font-weight="bold" fill="black">Interaction Layer — REPL</text>
+
+  <!-- REPL core -->
+  <rect x="80" y="214" width="200" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="180" y="235" text-anchor="middle" font-size="12" fill="black">REPL Loop (repl.py)</text>
+
+  <!-- Prompt Input -->
+  <rect x="310" y="214" width="200" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="410" y="235" text-anchor="middle" font-size="12" fill="black">Prompt Input (Ctrl+P/L)</text>
+
+  <!-- Commands -->
+  <rect x="540" y="214" width="200" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="640" y="235" text-anchor="middle" font-size="12" fill="black">Slash Commands</text>
+
+  <!-- Skills -->
+  <rect x="770" y="214" width="250" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="895" y="235" text-anchor="middle" font-size="12" fill="black">Skill System</text>
+
+  <!-- Sub-components -->
+  <rect x="80" y="256" width="200" height="28" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="180" y="275" text-anchor="middle" font-size="11" fill="#555">Message flow · Streaming · Permissions</text>
+
+  <rect x="310" y="256" width="200" height="28" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="410" y="275" text-anchor="middle" font-size="11" fill="#555">Tab completion · History · Model picker</text>
+
+  <rect x="540" y="256" width="450" height="28" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="765" y="275" text-anchor="middle" font-size="11" fill="#555">/model /provider /theme /lang /atomic /compact /memory /help ... (20+)</text>
+
+  <!-- Arrow L2→L3 -->
+  <line x1="550" y1="300" x2="550" y2="330" stroke="black" stroke-width="1.5" marker-end="url(#arrowBlack)"/>
+
+  <!-- ====== Layer 3: AI / API ====== -->
+  <rect x="40" y="332" width="1020" height="110" rx="6" fill="none" stroke="black" stroke-width="2"/>
+  <text x="56" y="356" font-size="13" font-weight="bold" fill="black">AI Layer — Multi-Provider API</text>
+
+  <!-- MultiProviderClient -->
+  <rect x="80" y="366" width="240" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="200" y="387" text-anchor="middle" font-size="12" fill="black">MultiProviderClient</text>
+
+  <!-- Providers row -->
+  <rect x="360" y="366" width="130" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="425" y="387" text-anchor="middle" font-size="11" fill="black">Anthropic</text>
+
+  <rect x="500" y="366" width="110" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="555" y="387" text-anchor="middle" font-size="11" fill="black">OpenAI</text>
+
+  <rect x="620" y="366" width="100" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="670" y="387" text-anchor="middle" font-size="11" fill="black">Ollama</text>
+
+  <rect x="730" y="366" width="110" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="785" y="387" text-anchor="middle" font-size="11" fill="black">Local GGUF</text>
+
+  <rect x="850" y="366" width="170" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="935" y="387" text-anchor="middle" font-size="11" fill="black">MiniMax · Aliyun · ...</text>
+
+  <!-- Sub row -->
+  <rect x="80" y="408" width="240" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="200" y="424" text-anchor="middle" font-size="11" fill="#555">CacheGuard · SystemPrompt · Thinking</text>
+
+  <rect x="360" y="408" width="660" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="690" y="424" text-anchor="middle" font-size="11" fill="#555">Config-driven routing · Proxy support · Local/Cloud auto-switch</text>
+
+  <!-- Arrow L3→L4 -->
+  <line x1="550" y1="442" x2="550" y2="472" stroke="black" stroke-width="1.5" marker-end="url(#arrowBlack)"/>
+
+  <!-- ====== Layer 4: Tools ====== -->
+  <rect x="40" y="474" width="1020" height="110" rx="6" fill="none" stroke="black" stroke-width="2"/>
+  <text x="56" y="498" font-size="13" font-weight="bold" fill="black">Execution Layer — Tool System</text>
+
+  <!-- ToolRegistry -->
+  <rect x="80" y="508" width="180" height="32" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="170" y="529" text-anchor="middle" font-size="12" fill="black">ToolRegistry</text>
+
+  <!-- Tool icons row -->
+  <rect x="290" y="508" width="72" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="326" y="529" text-anchor="middle" font-size="11" fill="black">Bash</text>
+
+  <rect x="370" y="508" width="68" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="404" y="529" text-anchor="middle" font-size="11" fill="black">Write</text>
+
+  <rect x="446" y="508" width="62" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="477" y="529" text-anchor="middle" font-size="11" fill="black">Read</text>
+
+  <rect x="516" y="508" width="60" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="546" y="529" text-anchor="middle" font-size="11" fill="black">Edit</text>
+
+  <rect x="584" y="508" width="68" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="618" y="529" text-anchor="middle" font-size="11" fill="black">Grep</text>
+
+  <rect x="660" y="508" width="64" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="692" y="529" text-anchor="middle" font-size="11" fill="black">Glob</text>
+
+  <rect x="732" y="508" width="74" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="769" y="529" text-anchor="middle" font-size="11" fill="black">Agent</text>
+
+  <rect x="814" y="508" width="70" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="849" y="529" text-anchor="middle" font-size="11" fill="black">Batch</text>
+
+  <rect x="892" y="508" width="128" height="32" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="956" y="529" text-anchor="middle" font-size="11" fill="black">WebSearch/ Fetch</text>
+
+  <!-- Second row -->
+  <rect x="290" y="548" width="98" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="339" y="564" text-anchor="middle" font-size="10" fill="#555">Git · Todo · LSP</text>
+
+  <rect x="400" y="548" width="110" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="455" y="564" text-anchor="middle" font-size="10" fill="#555">Plan · Question · Sleep</text>
+
+  <rect x="522" y="548" width="130" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="587" y="564" text-anchor="middle" font-size="10" fill="#555">InvokeSkill · Notebook</text>
+
+  <rect x="664" y="548" width="120" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="724" y="564" text-anchor="middle" font-size="10" fill="#555">TaskKill · Tmux · Cron</text>
+
+  <rect x="796" y="548" width="224" height="24" rx="4" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="908" y="564" text-anchor="middle" font-size="10" fill="#555">30+ tools · Unified registry · Permission · Hooks</text>
+
+  <!-- Arrow L4→L5 -->
+  <line x1="550" y1="584" x2="550" y2="614" stroke="black" stroke-width="1.5" marker-end="url(#arrowBlack)"/>
+
+  <!-- ====== Layer 5: Infrastructure ====== -->
+  <rect x="40" y="616" width="1020" height="130" rx="6" fill="none" stroke="black" stroke-width="2"/>
+  <text x="56" y="640" font-size="13" font-weight="bold" fill="black">Infrastructure Layer</text>
+
+  <!-- Row 1 -->
+  <rect x="80" y="650" width="150" height="40" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="155" y="667" text-anchor="middle" font-size="11" fill="black">AppState</text>
+  <text x="155" y="681" text-anchor="middle" font-size="10" fill="#555">Session State</text>
+
+  <rect x="248" y="650" width="150" height="40" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="323" y="667" text-anchor="middle" font-size="11" fill="black">Config</text>
+  <text x="323" y="681" text-anchor="middle" font-size="10" fill="#555">~/.openlaoke/config.json</text>
+
+  <rect x="416" y="650" width="150" height="40" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="491" y="667" text-anchor="middle" font-size="11" fill="black">HookSystem</text>
+  <text x="491" y="681" text-anchor="middle" font-size="10" fill="#555">15 Extension Hooks</text>
+
+  <rect x="584" y="650" width="150" height="40" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="659" y="667" text-anchor="middle" font-size="11" fill="black">Supervisor</text>
+  <text x="659" y="681" text-anchor="middle" font-size="10" fill="#555">Task Check · Anti-AI</text>
+
+  <rect x="752" y="650" width="150" height="40" rx="4" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <text x="827" y="667" text-anchor="middle" font-size="11" fill="black">Memory</text>
+  <text x="827" y="681" text-anchor="middle" font-size="10" fill="#555">Session Memory</text>
+
+  <!-- Row 2 -->
+  <rect x="80" y="700" width="150" height="36" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="155" y="715" text-anchor="middle" font-size="11" fill="black">i18n</text>
+  <text x="155" y="729" text-anchor="middle" font-size="10" fill="#555">Language Switch Ctrl+L</text>
+
+  <rect x="248" y="700" width="150" height="36" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="323" y="715" text-anchor="middle" font-size="11" fill="black">Theme</text>
+  <text x="323" y="729" text-anchor="middle" font-size="10" fill="#555">dark / light themes</text>
+
+  <rect x="416" y="700" width="150" height="36" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="491" y="715" text-anchor="middle" font-size="11" fill="black">BitterLesson</text>
+  <text x="491" y="729" text-anchor="middle" font-size="10" fill="#555">Self-reflection Tracker</text>
+
+  <rect x="584" y="700" width="150" height="36" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="659" y="715" text-anchor="middle" font-size="11" fill="black">HyperAuto</text>
+  <text x="659" y="729" text-anchor="middle" font-size="10" fill="#555">Autonomous Mode Engine</text>
+
+  <rect x="752" y="700" width="150" height="36" rx="4" fill="none" stroke="black" stroke-width="1"/>
+  <text x="827" y="715" text-anchor="middle" font-size="11" fill="black">MCP Client</text>
+  <text x="827" y="729" text-anchor="middle" font-size="10" fill="#555">External Tool Protocol</text>
+
+  <!-- Side elements -->
+  <rect x="920" y="650" width="120" height="86" rx="4" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,4"/>
+  <text x="980" y="672" text-anchor="middle" font-size="11" fill="#555">Small Model</text>
+  <text x="980" y="688" text-anchor="middle" font-size="11" fill="#555">Optimizations</text>
+  <text x="980" y="704" text-anchor="middle" font-size="10" fill="#999">Type coercion · Schema cleaning</text>
+  <text x="980" y="718" text-anchor="middle" font-size="10" fill="#999">Output compression · Read-loop guard</text>
+  <text x="980" y="732" text-anchor="middle" font-size="10" fill="#999">Local model adaptive</text>
+
+  <!-- Arrow definitions -->
+  <defs>
+    <marker id="arrowBlack" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="black"/>
+    </marker>
+    <marker id="arrowGray" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#777"/>
+    </marker>
+  </defs>
+
+  <!-- Right-side flow annotations -->
+  <text x="1070" y="115" font-size="10" fill="#777" transform="rotate(90,1070,115)">User Entry</text>
+  <text x="1070" y="240" font-size="10" fill="#777" transform="rotate(90,1070,240)">Interaction Loop</text>
+  <text x="1070" y="387" font-size="10" fill="#777" transform="rotate(90,1070,387)">Model Routing</text>
+  <text x="1070" y="529" font-size="10" fill="#777" transform="rotate(90,1070,529)">Tool Execution</text>
+  <text x="1070" y="681" font-size="10" fill="#777" transform="rotate(90,1070,681)">Infrastructure</text>
+
+  <!-- Bottom note -->
+  <text x="550" y="775" text-anchor="middle" font-size="11" fill="#999">Python 3.11+ · Rich TUI · prompt_toolkit · llama-cpp-python · 30+ Tools · Multi-model · Open Source GPLv3</text>
+</svg>
