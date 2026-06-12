@@ -1076,6 +1076,49 @@ class ThemeCommand(SlashCommand):
         return CommandResult(message=f"Theme set to: {args}")
 
 
+class LangCommand(SlashCommand):
+    name = "lang"
+    description = "Set or show display language (en/zh)"
+    aliases = ["language"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.i18n import SUPPORTED_LANGUAGES, get_tui_text
+        from openlaoke.utils.config import load_config, save_config
+
+        args = ctx.args.strip().lower()
+        current = getattr(ctx.app_state, "language", "en")
+
+        if not args:
+            lang_name = SUPPORTED_LANGUAGES.get(current, current)
+            lines = [
+                f"{get_tui_text('current_language', current)} {lang_name} ({current})",
+                "",
+                f"{get_tui_text('available_languages', current)}",
+            ]
+            for code, name in SUPPORTED_LANGUAGES.items():
+                marker = " (current)" if code == current else ""
+                lines.append(f"  {code} - {name}{marker}")
+            return CommandResult(message="\n".join(lines))
+
+        if args not in SUPPORTED_LANGUAGES:
+            langs = ", ".join(SUPPORTED_LANGUAGES.keys())
+            return CommandResult(
+                success=False,
+                message=f"Unsupported language '{args}'. Available: {langs}",
+            )
+
+        ctx.app_state.language = args
+
+        app_config = load_config()
+        app_config.language = args
+        save_config(app_config)
+
+        lang_name = SUPPORTED_LANGUAGES[args]
+        return CommandResult(
+            message=f"{get_tui_text('language_set', args)} {lang_name} ({args})"
+        )
+
+
 class VimCommand(SlashCommand):
     name = "vim"
     description = "Toggle Vim input mode"

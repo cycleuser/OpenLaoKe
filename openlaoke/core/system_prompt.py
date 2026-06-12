@@ -65,6 +65,13 @@ def build_system_prompt(
         except Exception:
             pass
 
+    if hasattr(app_state, "language") and app_state.language != "en":
+        from openlaoke.core.i18n import get_language_instruction
+
+        lang_inst = get_language_instruction(app_state.language)
+        if lang_inst:
+            parts.append(lang_inst)
+
     return "\n".join(parts)
 
 

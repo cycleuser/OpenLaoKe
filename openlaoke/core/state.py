@@ -89,6 +89,7 @@ class AppState:
     thinking_enabled: bool = True
     guard_state: dict[str, Any] = field(default_factory=dict)
     compact_state: dict[str, Any] = field(default_factory=dict)
+    language: str = "en"
 
     _bus: MessageBus | None = field(default=None, repr=False)
     _orchestrator: Orchestrator | None = field(default=None, repr=False)

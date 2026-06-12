@@ -24,6 +24,7 @@ class PromptAction(Enum):
     PICKER = "picker"
     EXIT = "exit"
     TOGGLE_THINKING = "toggle_thinking"
+    LANG_PICKER = "lang_picker"
 
 
 @dataclass
@@ -46,6 +47,10 @@ class PromptResult:
     @property
     def is_toggle_thinking(self) -> bool:
         return self.action == PromptAction.TOGGLE_THINKING
+
+    @property
+    def is_lang_picker(self) -> bool:
+        return self.action == PromptAction.LANG_PICKER
 
 
 def _get_skill_source(path: Any) -> str:
@@ -280,11 +285,57 @@ async def run_model_picker_async() -> str | None:
         return None
 
 
+async def run_lang_picker_async(current_lang: str = "en") -> str | None:
+    """Show language picker and return selected language code."""
+    from openlaoke.core.i18n import SUPPORTED_LANGUAGES, get_tui_text
+
+    languages = [(code, name) for code, name in SUPPORTED_LANGUAGES.items()]
+    if not languages:
+        return None
+
+    try:
+        from rich.console import Console
+
+        console = Console()
+        console.print()
+        console.rule(
+            f"[bold cyan]{get_tui_text('lang_picker_title', current_lang)}[/] "
+            f"({get_tui_text('lang_picker_hint', current_lang)})"
+        )
+        for i, (code, name) in enumerate(languages, 1):
+            marker = "*" if code == current_lang else " "
+            console.print(f"  [{marker}] [{i:2d}] {name} ({code})")
+        console.print()
+
+        choice = input(f"  {get_tui_text('select_language', current_lang)} > ").strip()
+
+        if not choice:
+            return None
+
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(languages):
+                return languages[idx][0]
+            return None
+
+        for code, name in languages:
+            if choice.lower() == code.lower() or choice.lower() in name.lower():
+                return code
+
+        return None
+
+    except (EOFError, KeyboardInterrupt):
+        return None
+    except Exception:
+        return None
+
+
 class PromptSessionManager:
     def __init__(self, *, multiline: bool = False) -> None:
         self._multiline = multiline
         self._picker_requested = False
         self._toggle_thinking_requested = False
+        self._lang_picker_requested = False
         self._session: PromptSession | None = None
 
     def _build_keybindings(self) -> KeyBindings:
@@ -299,6 +350,11 @@ class PromptSessionManager:
         @kb.add("c-g")
         def _ctrl_g(event: Any) -> None:
             manager._toggle_thinking_requested = True
+            event.app.exit(exception=EOFError())
+
+        @kb.add("c-l")
+        def _ctrl_l(event: Any) -> None:
+            manager._lang_picker_requested = True
             event.app.exit(exception=EOFError())
 
         return kb
@@ -333,6 +389,7 @@ class PromptSessionManager:
     async def get_user_input(self) -> PromptResult:
         self._picker_requested = False
         self._toggle_thinking_requested = False
+        self._lang_picker_requested = False
         session = self.get_session()
 
         prompt_text = "OpenLaoKe: "
@@ -340,6 +397,8 @@ class PromptSessionManager:
             result = await session.prompt_async(prompt_text)
             if self._picker_requested:
                 return PromptResult(action=PromptAction.PICKER)
+            if self._lang_picker_requested:
+                return PromptResult(action=PromptAction.LANG_PICKER)
             text = result.strip() if result else ""
             if not text:
                 return PromptResult(action=PromptAction.TEXT, text="")
@@ -351,6 +410,8 @@ class PromptSessionManager:
                 return PromptResult(action=PromptAction.PICKER)
             if self._toggle_thinking_requested:
                 return PromptResult(action=PromptAction.TOGGLE_THINKING)
+            if self._lang_picker_requested:
+                return PromptResult(action=PromptAction.LANG_PICKER)
             return PromptResult(action=PromptAction.EXIT)
 
 

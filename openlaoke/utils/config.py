@@ -69,6 +69,7 @@ class AppConfig:
     proxy_mode: str = "none"
     proxy_url: str = ""
     first_run: bool = True
+    language: str = "en"
 
     def is_configured(self) -> bool:
         return self.providers.is_configured()
@@ -165,6 +166,7 @@ def load_config() -> AppConfig:
                 proxy_mode=data.get("proxy_mode", "none"),
                 proxy_url=data.get("proxy_url", ""),
                 first_run=data.get("first_run", True),
+                language=data.get("language", "en"),
             )
             return config
         except Exception:
@@ -225,6 +227,7 @@ def save_config(config: AppConfig) -> None:
         "proxy_mode": config.proxy_mode,
         "proxy_url": config.proxy_url,
         "first_run": config.first_run,
+        "language": config.language,
     }
 
     with tempfile.NamedTemporaryFile(
