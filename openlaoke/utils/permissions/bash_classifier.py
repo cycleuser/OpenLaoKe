@@ -250,6 +250,36 @@ DANGEROUS_PATTERNS = [
     (r"exec\s+", "exec - replaces process"),
     (r"source\s+.*http", "source from remote URL"),
     (r"\.\s+.*http", "source from remote URL"),
+    # Network access patterns (from sekrun)
+    (r"git\s+push", "git push - pushes changes to remote"),
+    (r"git\s+pull", "git pull - pulls from remote"),
+    (r"git\s+fetch", "git fetch - fetches from remote"),
+    (r"npm\s+(install|i)\s", "npm install - installs packages"),
+    (r"pnpm\s+(install|add)\s", "pnpm install - installs packages"),
+    (r"yarn\s+add\s", "yarn add - installs packages"),
+    (r"pip\s+install\s", "pip install - installs packages"),
+    (r"pip3\s+install\s", "pip3 install - installs packages"),
+    (r"uv\s+pip\s+install", "uv pip install - installs packages"),
+    (r"cargo\s+install\s", "cargo install - installs packages"),
+    (r"go\s+install\s", "go install - installs packages"),
+    (r"gem\s+install\s", "gem install - installs packages"),
+    # Network connections (from sekrun)
+    (r"nc\s", "nc/netcat - network tool"),
+    (r"ncat\s", "ncat - network tool"),
+    (r"ssh\s", "ssh - remote connection"),
+    (r"scp\s", "scp - remote file copy"),
+    (r"rsync\s+.*:", "rsync to/from remote"),
+    (r"ftp\s", "ftp - file transfer"),
+    (r"sftp\s", "sftp - file transfer"),
+    (r"telnet\s", "telnet - remote connection"),
+    (r"wget\s+(?!.*\|\s*(ba)?sh)", "wget - downloads content"),
+    (r"curl\s+(?!.*\|\s*(ba)?sh)", "curl - downloads content"),
+    # Path traversal
+    (r"\.\.\/", "path traversal (../)"),
+    (r"\.\.\\\\", "path traversal (..\\)"),
+    # Invoke-WebRequest (PowerShell)
+    (r"invoke-webrequest", "Invoke-WebRequest - downloads content"),
+    (r"iwr\s", "iwr (Invoke-WebRequest) - downloads content"),
 ]
 
 SAFE_PATTERNS = [

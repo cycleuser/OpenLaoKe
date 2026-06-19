@@ -385,3 +385,25 @@ class ToolRegistry:
             ):
                 results.append(info)
         return results
+
+def truncate_tool_history(output: str, max_bytes: int = 4096) -> str:
+    """Truncate tool output for LLM history, keeping head 70% + tail 30%.
+
+    Like sekrun's ``truncateToolHistory`` — preserves the most important
+    parts of long tool output while keeping context window lean.
+    """
+    encoded = output.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return output
+
+    head_bytes = int(max_bytes * 0.7)
+    tail_bytes = max_bytes - head_bytes
+
+    head = encoded[:head_bytes].decode("utf-8", errors="replace")
+    tail = encoded[-tail_bytes:].decode("utf-8", errors="replace")
+
+    header = (
+        f"[tool output compacted: original_bytes={len(encoded)} "
+        f"kept_bytes<={max_bytes}]\n"
+    )
+    return f"{header}{head}\n...[middle omitted]...\n{tail}"

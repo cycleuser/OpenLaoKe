@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
+from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
 
 
@@ -116,12 +117,31 @@ class EditTool(Tool):
                     ):
                         similar.append(f"Line {i + 1}: {line.strip()}")
 
+                # Show file preview on not-found (like sekrun)
+                preview = original
+                if len(original) > 500:
+                    preview = original[:250] + "\n...\n" + original[-250:]
+
                 msg = f"Error: Text not found in {file_path}"
                 if similar:
                     msg += "\n\nSimilar lines found:\n" + "\n".join(similar[:5])
+                msg += f"\n\nFile preview:\n{preview}"
                 return ToolResultBlock(
                     tool_use_id=ctx.tool_use_id,
                     content=msg,
+                    is_error=True,
+                )
+
+            # Uniqueness check: count occurrences (like sekrun's replace tool)
+            first_idx = original.index(old_text)
+            second_idx = original.index(old_text, first_idx + len(old_text)) if len(old_text) <= len(original) - first_idx - 1 else -1
+            if second_idx != -1:
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id,
+                    content=(
+                        f"Error: old_text matches multiple locations in {file_path}. "
+                        "Provide more surrounding context to make it unique."
+                    ),
                     is_error=True,
                 )
 
@@ -130,9 +150,15 @@ class EditTool(Tool):
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
+            # Compute and append diff
+            diff_text = diff_lines(abs_path, original, new_content, True)
+            result_content = f"Edited {abs_path}"
+            if diff_text and diff_text != "(no changes)":
+                result_content += f"\n{diff_text}"
+
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=f"Edited {abs_path}",
+                content=result_content,
                 is_error=False,
             )
 

@@ -8,6 +8,12 @@ from collections.abc import Callable
 from openlaoke.core.tool import Tool, ToolRegistry
 
 _DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
+    "AppendFile": (
+        "openlaoke.tools.append_tool",
+        "AppendFileTool",
+        "Append content to end of file, creating if not exists",
+        "append file log",
+    ),
     "CodeRunner": (
         "openlaoke.tools.code_runner",
         "CodeRunnerTool",

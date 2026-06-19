@@ -84,6 +84,25 @@ class TestBashClassifier:
         assert r.safety_level == CommandSafetyLevel.SAFE
         assert hasattr(r, "confidence") and hasattr(r, "reason")
 
+    def test_git_push_dangerous(self):
+        assert classify_bash_command("git push origin main").safety_level == CommandSafetyLevel.DANGEROUS
+
+    def test_npm_install_dangerous(self):
+        assert classify_bash_command("npm install express").safety_level == CommandSafetyLevel.DANGEROUS
+
+    def test_pip_install_dangerous(self):
+        assert classify_bash_command("pip install requests").safety_level == CommandSafetyLevel.DANGEROUS
+
+    def test_nc_dangerous(self):
+        assert classify_bash_command("nc -l 8080").safety_level == CommandSafetyLevel.DANGEROUS
+
+    def test_path_traversal_dangerous(self):
+        assert classify_bash_command("cat ../../../etc/passwd").safety_level == CommandSafetyLevel.DANGEROUS
+
+    def test_safe_git_operations(self):
+        assert classify_bash_command("git status").safety_level == CommandSafetyLevel.SAFE
+        assert classify_bash_command("git log --oneline").safety_level == CommandSafetyLevel.SAFE
+
 
 # ── COMMANDS REGISTRY ──────────────────────────────────────────────────────────
 

@@ -223,6 +223,30 @@ def main() -> None:
         action="store_true",
         help="Enable local mode (for small local models with atomic decomposition, multi-model coordination)",
     )
+    parser.add_argument(
+        "--caveman",
+        action="store_true",
+        default=None,
+        help="Enable caveman mode (concise output, no pleasantries)",
+    )
+    parser.add_argument(
+        "--no-caveman",
+        action="store_true",
+        dest="no_caveman",
+        help="Disable caveman mode",
+    )
+    parser.add_argument(
+        "--max-tool-history",
+        type=int,
+        default=4096,
+        help="Max bytes per tool result in LLM history (default: 4096)",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=100,
+        help="Max agent steps per turn (default: 100)",
+    )
 
     args = parser.parse_args(filtered_argv)
     args.prompt = " ".join(prompt_parts) if prompt_parts else None
@@ -411,6 +435,16 @@ def main() -> None:
     if args.local:
         app_state.local_mode = True
 
+    # Handle --caveman / --no-caveman
+    if args.caveman is True:
+        app_state.caveman_mode = True
+    elif args.no_caveman:
+        app_state.caveman_mode = False
+    if args.max_tool_history:
+        app_state.max_tool_history = args.max_tool_history
+    if args.max_steps:
+        app_state.max_steps = args.max_steps
+
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
 
@@ -469,6 +503,14 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
                 print(response.content)
 
             if not response.tool_uses:
+                from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
+
+                if should_continue_for_promised_tool_use(response.content or ""):
+                    messages.append({
+                        "role": "user",
+                        "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                    })
+                    continue
                 break
 
             for tool_use in response.tool_uses:

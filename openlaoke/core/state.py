@@ -90,6 +90,9 @@ class AppState:
     guard_state: dict[str, Any] = field(default_factory=dict)
     compact_state: dict[str, Any] = field(default_factory=dict)
     language: str = "en"
+    caveman_mode: bool = False
+    max_tool_history: int = 4096
+    max_steps: int = 100
 
     _bus: MessageBus | None = field(default=None, repr=False)
     _orchestrator: Orchestrator | None = field(default=None, repr=False)
@@ -101,6 +104,7 @@ class AppState:
     _listeners: list[Callable[[AppState], None]] = field(default_factory=list, repr=False)
     _persist_path: str | None = None
     _insomnia_engine: Any = None
+    _cache_guard: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:

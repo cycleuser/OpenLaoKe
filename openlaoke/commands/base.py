@@ -2607,3 +2607,22 @@ class ThinkingCommand(SlashCommand):
             f"  /thinking off    — disable auto display\n"
             f"  /thinking show   — view last thinking"
         )
+
+
+class CavemanCommand(SlashCommand):
+    """Toggle caveman (concise) mode on/off."""
+
+    name = "caveman"
+    description = "Toggle concise caveman mode (no pleasantries, minimal output)"
+    aliases = ["concise"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        current = getattr(ctx.app_state, "caveman_mode", False)
+        ctx.app_state.caveman_mode = not current
+        new_state = ctx.app_state.caveman_mode
+        # Invalidate any active CacheGuard so it picks up the change
+        if hasattr(ctx.app_state, "_cache_guard") and ctx.app_state._cache_guard:
+            ctx.app_state._cache_guard.invalidate()
+        return CommandResult(
+            message=f"Caveman mode {'ON' if new_state else 'OFF'}"
+        )

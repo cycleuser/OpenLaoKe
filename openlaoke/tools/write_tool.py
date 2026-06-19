@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from openlaoke.core.tool import PreviewResult, Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
+from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
 
 _WRITE_GUARD_ATTEMPTS: dict[str, int] = {}
@@ -120,16 +121,32 @@ class WriteTool(Tool):
 
             was_new = not os.path.exists(abs_path)
 
+            # Read old content for diff (if file existed)
+            old_content = ""
+            if not was_new:
+                try:
+                    with open(abs_path, encoding="utf-8", errors="replace") as f:
+                        old_content = f.read()
+                except (OSError, UnicodeDecodeError):
+                    old_content = ""
+
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
+
+            # Compute and append diff
+            diff_text = diff_lines(abs_path, old_content, content, not was_new)
 
             action = "Created" if was_new else "Updated"
             lines = content.count("\n") + 1
             chars = len(content)
 
+            result_content = f"{action} {abs_path} ({lines} lines, {chars} chars)"
+            if diff_text and diff_text not in ("(no changes)", "(empty new file)"):
+                result_content += f"\n{diff_text}"
+
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=f"{action} {abs_path} ({lines} lines, {chars} chars)",
+                content=result_content,
                 is_error=False,
             )
 

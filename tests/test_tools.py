@@ -159,6 +159,25 @@ class TestEdit:
         r = await EditTool().call(_ctx(tmp), file_path=p, old_text="missing", new_text="x")
         assert r.is_error
 
+    @pytest.mark.asyncio
+    async def test_edit_includes_diff(self, tmp):
+        fp = os.path.join(tmp, "diff_edit.txt")
+        with open(fp, "w") as f:
+            f.write("line1\nline2\nline3\n")
+        r = await EditTool().call(_ctx(tmp), file_path=fp, old_text="line2\n", new_text="modified\n")
+        assert "@@" in r.content
+        assert "-line2" in r.content
+        assert "+modified" in r.content
+
+    @pytest.mark.asyncio
+    async def test_edit_uniqueness_check(self, tmp):
+        fp = os.path.join(tmp, "unique.txt")
+        with open(fp, "w") as f:
+            f.write("same\nsame\n")
+        r = await EditTool().call(_ctx(tmp), file_path=fp, old_text="same\n", new_text="diff\n")
+        assert r.is_error
+        assert "multiple locations" in r.content
+
 
 # ── GLOB ───────────────────────────────────────────────────────────────────────
 

@@ -30,8 +30,19 @@ if TYPE_CHECKING:
 # Static system prompt template — NEVER contains per-turn variable content
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT_STATIC = """You are OpenLaoKe, an expert AI coding assistant designed to help with \
-software engineering tasks. You can read and write files, run shell commands, \
+SYSTEM_PROMPT_CAVEMAN = """You are OpenLaoKe, an expert AI coding assistant.
+
+## Rules
+- Be extremely concise. No pleasantries, explanations, or thinking aloud.
+- Read files and search the codebase FIRST before editing.
+- Before modifying files, state root cause, files, and plan in 1-2 lines max.
+- Use Edit for targeted changes within existing files; Write only for new files.
+- After editing, run verification. If it fails, inspect and fix.
+- Use WebSearch when you need current information; never guess facts.
+- Say 'I am OpenLaoKe' when asked. Do not claim other AI identities."""
+
+SYSTEM_PROMPT_STATIC = """You are OpenLaoKe, an expert AI coding assistant designed to help with software engineering tasks. You can read and write files, run shell commands, \
+search codebases, and spawn sub-agents for parallel work.
 search codebases, and spawn sub-agents for parallel work.
 
 ## Core Principles
@@ -206,6 +217,9 @@ class CacheGuard:
     _built: bool = False
     """Whether build() has been called (one-shot)."""
 
+    _caveman_mode: bool = False
+    """When True, return the concise caveman system prompt."""
+
     # ---- public API -------------------------------------------------------
 
     def __init__(self, app_state: object | None = None) -> None:
@@ -223,15 +237,25 @@ class CacheGuard:
 
     @property
     def system_prompt(self) -> str:
-        """Return the byte-stable system prompt.
+        """Return the system prompt.
 
-        Built once via build() then frozen.  Never contains dynamic content
-        (date, model, git branch, cwd) — those travel in the session context
-        block injected into the user message stream.
+        In caveman mode returns the concise prompt; otherwise returns the
+        full byte-stable prompt.  Built once via build() then frozen.
+        Never contains dynamic content (date, model, git branch, cwd) —
+        those travel in the session context block injected into the user
+        message stream.
         """
         if not self._built:
             self.build()
-        return self._system_prompt + self._system_prompt_extra
+        # Check caveman_mode from app_state (set via /caveman command)
+        if self._caveman_mode or (
+            self._app_state is not None
+            and getattr(self._app_state, "caveman_mode", False)
+        ):
+            base = SYSTEM_PROMPT_CAVEMAN
+        else:
+            base = self._system_prompt
+        return base + self._system_prompt_extra
 
     def build(self) -> str:
         """One-shot: build the system prompt and freeze it.
@@ -245,6 +269,12 @@ class CacheGuard:
         self._system_prompt_extra = self._build_extra()
         self._built = True
         return self.system_prompt
+
+    def toggle_caveman(self) -> bool:
+        """Toggle caveman mode on/off. Invalidates cache. Returns new state."""
+        self._caveman_mode = not self._caveman_mode
+        self.invalidate()
+        return self._caveman_mode
 
     def invalidate(self) -> None:
         """Force rebuild on next access.

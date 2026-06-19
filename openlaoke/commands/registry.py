@@ -5,6 +5,7 @@ from __future__ import annotations
 from openlaoke.commands.base import (
     AgentsCommand,
     AtomicCommand,
+    CavemanCommand,
     ClearCommand,
     CommandsCommand,
     CompactCommand,
@@ -66,6 +67,7 @@ def register_all() -> None:
         ClearCommand(),
         CommandsCommand(),
         CompactCommand(),
+        CavemanCommand(),
         CostCommand(),
         CwdCommand(),
         DistillCommand(),

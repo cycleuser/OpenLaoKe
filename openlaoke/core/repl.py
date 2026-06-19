@@ -98,6 +98,7 @@ class REPL:
         self._git_store: GitStore | None = None
         self._world_sensor: SensorData | None = None
         self._cache_guard = CacheGuard(app_state)
+        app_state._cache_guard = self._cache_guard
         self._cache_split = PromptCacheSplit()
 
         self._register_memory_hooks()
@@ -622,6 +623,9 @@ class REPL:
             from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
 
             model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+            # Auto-enable caveman mode for tiny/small models (unless explicitly toggled)
+            if model_size in ("tiny", "small"):
+                self.app_state.caveman_mode = True
             if self._guard is None or self._guard.model_size != model_size:
                 from openlaoke.core.small_model_optimizations import SmallModelGuard
 
@@ -888,6 +892,10 @@ class REPL:
                     self.console.print(
                         f"  [{self._c('muted')}]{token_count} tokens · {tps:.0f} t/s · {elapsed:.1f}s[/]"
                     )
+                    if self.app_state.verbose:
+                        self.console.print(
+                            f"  [{self._c('muted')}]{self._format_context_composition(messages)}[/]"
+                        )
 
                     if stream_error:
                         self.console.print(f"  [bold {self._c('error')}]Error:[/] {stream_error}")
@@ -997,6 +1005,19 @@ class REPL:
                             or content_text.strip().upper() == "DONE"
                         ):
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
+                            break
+                        # Anti-stall: check if model wrote plan and intends to use tools
+                        from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
+
+                        if should_continue_for_promised_tool_use(content_text):
+                            self.console.print(
+                                f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
+                            )
+                            messages.append({
+                                "role": "user",
+                                "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                            })
+                            continue
                         break
 
                     # Parallel dispatch for read-only tool batches
@@ -1153,6 +1174,19 @@ class REPL:
                         rc = (response.content or "").strip().upper()
                         if rc.startswith("DONE") or "\nDONE" in rc:
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
+                            break
+                        # Anti-stall: check if model wrote plan and intends to use tools
+                        from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
+
+                        if should_continue_for_promised_tool_use(response.content or ""):
+                            self.console.print(
+                                f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
+                            )
+                            messages.append({
+                                "role": "user",
+                                "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                            })
+                            continue
                         break
 
                     for tool_use in response.tool_uses:
@@ -1331,14 +1365,13 @@ class REPL:
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
 
-        # Hard-cap tool output at 32KB to prevent one large read/grep from
-        # blowing the context window before the next compaction runs.
-        _max_tool_out = 32000
-        if len(result_content) > _max_tool_out:
-            result_content = (
-                result_content[:_max_tool_out]
-                + f"\n\n... (truncated {len(result_content) - _max_tool_out} bytes)"
-            )
+        # Truncate tool output for history: keep head 70% + tail 30%
+        # to preserve both beginning and end of long outputs.
+        _max_tool_out = self.app_state.max_tool_history
+        if len(result_content.encode("utf-8")) > _max_tool_out:
+            from openlaoke.core.tool import truncate_tool_history
+
+            result_content = truncate_tool_history(result_content, _max_tool_out)
 
         if tool_use.name == "Bash":
             compressed = self._output_compressor.compress(result_content)
@@ -1839,3 +1872,40 @@ class REPL:
         self.console.print(
             f"\n[{c.muted}]{self._t('welcome_hint')}[/]"
         )
+
+    @staticmethod
+    def _format_context_composition(messages: list[dict]) -> str:
+        """Estimate context window composition by role (verbose mode).
+
+        Like sekrun's ``formatContextComposition`` — shows what % of the
+        context is system prompt, user messages, assistant replies, and tool
+        results.
+        """
+        import json as _json
+
+        sections: dict[str, int] = {"system": 0, "user": 0, "assistant": 0, "tool": 0}
+        total = 0
+        for msg in messages:
+            role = msg.get("role", "other")
+            text = str(msg.get("content", ""))
+            tokens = max(1, len(text) // 4)
+            if role in sections:
+                sections[role] += tokens
+            elif role != "other":
+                sections[role] = sections.get(role, 0) + tokens
+            if msg.get("tool_calls"):
+                calls_str = _json.dumps(msg["tool_calls"])
+                sections["assistant"] += max(1, len(calls_str) // 4)
+            total += tokens
+
+        if total == 0:
+            return "(empty context)"
+
+        parts: list[str] = []
+        labels = {"system": "sys", "user": "usr", "assistant": "ast", "tool": "tool"}
+        for role, label in labels.items():
+            t = sections.get(role, 0)
+            if t:
+                pct = t * 100.0 / total
+                parts.append(f"{label} {t}t ({pct:.0f}%)")
+        return "ctx: " + " | ".join(parts) + f" | total ~{total}t"
