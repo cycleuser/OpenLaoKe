@@ -85,23 +85,17 @@ def _verify_dependencies(logger) -> None:
     logger.info("Verifying dependencies...")
 
     required_packages = [
-        "anthropic",
         "pydantic",
         "rich",
         "prompt_toolkit",
-        "mcp",
-        "aiofiles",
         "httpx",
         "pyyaml",
-        "watchfiles",
-        "tiktoken",
-        "jsonschema",
         "chardet",
         "pathspec",
-        "setproctitle",
         "websockets",
         "fastapi",
         "uvicorn",
+        "jieba",
     ]
 
     missing = []
