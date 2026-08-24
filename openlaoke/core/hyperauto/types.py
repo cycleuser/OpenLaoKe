@@ -47,6 +47,7 @@ class DecisionType(StrEnum):
     SKILL_CREATION = "skill_creation"
     PROJECT_INIT = "project_init"
     CODE_SEARCH = "code_search"
+    CODE_GENERATION = "code_generation"
     DEPENDENCY_INSTALL = "dependency_install"
     TEST_EXECUTION = "test_execution"
     COMMIT = "commit"

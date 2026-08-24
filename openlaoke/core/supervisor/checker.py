@@ -567,7 +567,7 @@ class TaskCompletionChecker:
         has_sources_section = sources_section is not None
 
         orphan_citations = []
-        if has_sources_section:
+        if has_sources_section and sources_section is not None:
             sources_text = sources_section.group(1)
             source_ids = set(re.findall(r"^(\d+)\.", sources_text, re.MULTILINE))
             orphan_citations = [c for c in unique_citations if c not in source_ids]

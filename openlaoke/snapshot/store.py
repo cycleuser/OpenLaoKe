@@ -81,6 +81,45 @@ class SnapshotStore:
         self.save_turn(session_id, snap)
         return snap.files[file_path]
 
+    def capture_conversation(
+        self, session_id: str, turn_index: int, messages: list[Any]
+    ) -> TurnSnapshot:
+        """Persist the conversation state at a turn boundary.
+
+        ``messages`` items may be message objects with ``to_dict()`` or
+        plain dicts. The recorded conversation is the rewind target for
+        ``rewind_conversation``.
+        """
+        key = (session_id, turn_index)
+        if key not in self._cache:
+            self._cache[key] = self.load_turn(session_id, turn_index)
+        snap = self._cache[key]
+        snap.conversation = self._serialize_messages(messages)
+        self.save_turn(session_id, snap)
+        return snap
+
+    def conversation_before(self, session_id: str, target_turn: int) -> list[dict[str, Any]] | None:
+        """Return the conversation recorded at the last turn before ``target_turn``.
+
+        Returns ``None`` when no turn recorded a conversation strictly
+        before ``target_turn``.
+        """
+        turns = self.all_turns(session_id)
+        before = [t for t in turns if t.turn_index < target_turn]
+        if not before:
+            return None
+        return list(before[-1].conversation)
+
+    @staticmethod
+    def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for m in messages:
+            if hasattr(m, "to_dict"):
+                out.append(m.to_dict())
+            elif isinstance(m, dict):
+                out.append(dict(m))
+        return out
+
     def load_turn(self, session_id: str, turn_index: int) -> TurnSnapshot:
         path = self.path_for(session_id)
         if not os.path.exists(path):
@@ -177,16 +216,31 @@ class SnapshotStore:
         return report
 
     def fork_session(self, session_id: str, target_turn: int) -> tuple[str, str]:
-        """Create a new session that contains the state up to ``target_turn``.
+        """Create a new session that inherits conversation and file
+        snapshots recorded up to ``target_turn``.
+
+        ``target_turn < 0`` means "fork at the tip" (all recorded turns).
 
         Returns ``(new_session_id, sidecar_meta_path)``.
         """
         new_id = f"{session_id}_fork_{uuid.uuid4().hex[:6]}"
+        turns = self.all_turns(session_id)
+        if target_turn is None or target_turn < 0:
+            keep = list(turns)
+            effective = max((t.turn_index for t in turns), default=-1)
+        else:
+            keep = [t for t in turns if t.turn_index <= target_turn]
+            effective = target_turn
+        new_path = self.path_for(new_id)
+        if keep:
+            with open(new_path, "w", encoding="utf-8") as f:
+                for t in keep:
+                    f.write(self._serialize_turn(t) + "\n")
         meta_path = os.path.join(self.base_dir, f"{new_id}.meta")
         meta = {
             "id": new_id,
             "parent": session_id,
-            "fork_turn": target_turn,
+            "fork_turn": effective,
             "created_at": time.time(),
         }
         with open(meta_path, "w", encoding="utf-8") as f:

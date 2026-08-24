@@ -188,8 +188,8 @@ class MCPManager:
             for conn in self._connections.values():
                 tools.extend(conn.tools)
             return tools
-        conn = self._connections.get(server)
-        return list(conn.tools) if conn else []
+        target = self._connections.get(server)
+        return list(target.tools) if target else []
 
     def resolve_tool(self, full_name: str) -> tuple[str, MCPToolInfo] | None:
         """Resolve a ``mcp__<server>__<tool>`` name to a (server, tool) pair."""

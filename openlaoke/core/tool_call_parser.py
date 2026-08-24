@@ -348,7 +348,7 @@ def _convert_args_types(call: dict[str, Any]) -> dict[str, Any]:
     args = call.get("arguments", {})
     if not isinstance(args, dict):
         return call
-    converted = {}
+    converted: dict[str, Any] = {}
     for k, v in args.items():
         if isinstance(v, str):
             if v.lower() == "true":

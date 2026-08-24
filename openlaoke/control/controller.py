@@ -21,6 +21,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from openlaoke.control.phase import TurnPhase
+from openlaoke.plan.state import PlanState
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +48,8 @@ class SessionState:
     bypass: bool = False
     created_at: float = field(default_factory=time.time)
     metadata: dict[str, Any] = field(default_factory=dict)
+    phase: TurnPhase = TurnPhase.RESTORE
+    plan: PlanState = field(default_factory=PlanState)
 
 
 @dataclass

@@ -14,7 +14,6 @@ Design: keep the core tool set stable regardless of how many skills are installe
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -143,7 +142,7 @@ class InvokeSkillTool(Tool):
 {skill_content}
 
 [Task]
-{arguments or description or 'Execute the skill as instructed.'}"""
+{arguments or description or "Execute the skill as instructed."}"""
 
         from openlaoke.core.task import TaskManager
 

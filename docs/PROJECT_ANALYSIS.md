@@ -17,6 +17,7 @@
 **File**: `openlaoke/__main__.py` (Lines 1-7)
 ```python
 """CLI entry point for python -m openlaoke."""
+
 from openlaoke.entrypoints.cli import main
 
 if __name__ == "__main__":
@@ -211,8 +212,8 @@ class ToolRegistry:
 ```python
 class PermissionMode(StrEnum):
     DEFAULT = "default"  # Ask for dangerous operations
-    AUTO = "auto"        # Auto-approve safe operations
-    BYPASS = "bypass"    # No restrictions
+    AUTO = "auto"  # Auto-approve safe operations
+    BYPASS = "bypass"  # No restrictions
 ```
 
 **Bash Safety Classification** (`openlaoke/utils/permissions/bash_classifier.py`):
@@ -295,10 +296,9 @@ class SlashCommand(ABC):
     description: str = ""
     aliases: list[str] = []
     hidden: bool = False
-    
+
     @abstractmethod
-    async def execute(self, ctx: CommandContext) -> CommandResult:
-        ...
+    async def execute(self, ctx: CommandContext) -> CommandResult: ...
 ```
 
 **Available Commands** (25+):
@@ -371,8 +371,7 @@ class ToolRegistry:
 ```python
 class Tool(ABC):
     @abstractmethod
-    async def call(self, ctx: ToolContext, **kwargs) -> ToolResultBlock:
-        ...
+    async def call(self, ctx: ToolContext, **kwargs) -> ToolResultBlock: ...
 ```
 
 ### 3. Lazy Loading Pattern
@@ -442,8 +441,7 @@ class AppState:
 ```python
 class CompactionStrategy(ABC):
     @abstractmethod
-    def compact(self, messages: list[Message]) -> list[Message]:
-        ...
+    def compact(self, messages: list[Message]) -> list[Message]: ...
 ```
 
 ### 8. Middleware/Chain of Responsibility
@@ -497,11 +495,24 @@ def create_app_state(
 
 ### Core Enums
 ```python
-class PermissionMode(StrEnum): DEFAULT, AUTO, BYPASS
-class PermissionResult(StrEnum): ALLOW, DENY, ASK
-class TaskType(StrEnum): LOCAL_BASH, LOCAL_AGENT, REMOTE_AGENT, ...
-class TaskStatus(StrEnum): PENDING, RUNNING, COMPLETED, FAILED, KILLED
-class MessageRole(StrEnum): USER, ASSISTANT, SYSTEM
+class PermissionMode(StrEnum):
+    DEFAULT, AUTO, BYPASS
+
+
+class PermissionResult(StrEnum):
+    ALLOW, DENY, ASK
+
+
+class TaskType(StrEnum):
+    LOCAL_BASH, LOCAL_AGENT, REMOTE_AGENT, ...
+
+
+class TaskStatus(StrEnum):
+    PENDING, RUNNING, COMPLETED, FAILED, KILLED
+
+
+class MessageRole(StrEnum):
+    USER, ASSISTANT, SYSTEM
 ```
 
 ### Core Data Structures

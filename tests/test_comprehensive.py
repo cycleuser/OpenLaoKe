@@ -1153,7 +1153,42 @@ class TestFastPruner:
             UserMessage(role=MessageRole.USER, content=f"Message {i} " * 100) for i in range(50)
         ]
         result = fast_prune(msgs, max_tokens=1000, keep_tail_tokens=500)
-        assert result.elapsed_ms < 50
+        # First call pays the one-time compact import cost; keep headroom.
+        assert result.elapsed_ms < 20, f"fast_prune too slow: {result.elapsed_ms:.2f}ms"
+
+    def test_fast_prune_large_corpus_under_5ms(self):
+        """400-message corpus must stay under the documented 5ms budget."""
+        from openlaoke.core.compact import extract_content
+        from openlaoke.core.compact.fast_pruner import fast_prune
+        from openlaoke.types.core_types import AssistantMessage, MessageRole, UserMessage
+
+        assert extract_content is not None  # warm the import
+
+        msgs: list[Message] = []
+        for i in range(200):
+            msgs.append(UserMessage(role=MessageRole.USER, content=f"msg {i} " + "x" * 500))
+            msgs.append(
+                AssistantMessage(role=MessageRole.ASSISTANT, content=f"resp {i} " + "y" * 500)
+            )
+        result = fast_prune(msgs, max_tokens=8000)
+        assert result.elapsed_ms < 10, f"fast_prune too slow: {result.elapsed_ms:.2f}ms"
+        assert len(result.messages) < len(msgs)
+
+    def test_fast_prune_aggressive_under_5ms(self):
+        from openlaoke.core.compact import extract_content
+        from openlaoke.core.compact.fast_pruner import fast_prune_aggressive
+        from openlaoke.types.core_types import AssistantMessage, MessageRole, UserMessage
+
+        assert extract_content is not None  # warm the import
+
+        msgs: list[Message] = []
+        for i in range(200):
+            msgs.append(UserMessage(role=MessageRole.USER, content=f"msg {i} " + "x" * 500))
+            msgs.append(
+                AssistantMessage(role=MessageRole.ASSISTANT, content=f"resp {i} " + "y" * 500)
+            )
+        result = fast_prune_aggressive(msgs, max_tokens=4096)
+        assert result.elapsed_ms < 10, f"fast_prune_aggressive too slow: {result.elapsed_ms:.2f}ms"
 
 
 # ============================================================================

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from openlaoke.core.multi_provider_api import MultiProviderClient
@@ -106,7 +106,6 @@ def build_inline_compaction_messages(
     )
 
     return result
-
 
 
 @dataclass

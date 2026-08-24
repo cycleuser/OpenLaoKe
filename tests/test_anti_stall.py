@@ -1,4 +1,5 @@
 """Tests for openlaoke.core.anti_stall — ported from sekrun."""
+
 from __future__ import annotations
 
 from openlaoke.core.anti_stall import NUDGE_MESSAGE, should_continue_for_promised_tool_use
@@ -39,13 +40,20 @@ class TestAntiStall:
         assert should_continue_for_promised_tool_use("Here is my plan for the changes.") is True
 
     def test_english_phase1(self):
-        assert should_continue_for_promised_tool_use("Phase 1: read files and understand structure.") is True
+        assert (
+            should_continue_for_promised_tool_use("Phase 1: read files and understand structure.")
+            is True
+        )
 
     def test_english_examine(self):
-        assert should_continue_for_promised_tool_use("I will examine the project structure.") is True
+        assert (
+            should_continue_for_promised_tool_use("I will examine the project structure.") is True
+        )
 
     def test_english_let_me_review(self):
-        assert should_continue_for_promised_tool_use("Let me review the relevant files first.") is True
+        assert (
+            should_continue_for_promised_tool_use("Let me review the relevant files first.") is True
+        )
 
     def test_english_step1(self):
         assert should_continue_for_promised_tool_use("Step 1: Read the main file") is True
@@ -55,9 +63,12 @@ class TestAntiStall:
         assert should_continue_for_promised_tool_use("The answer is 42.") is False
 
     def test_code_output_no_trigger(self):
-        assert should_continue_for_promised_tool_use(
-            "Here is the fixed code:\n```python\nprint('hello')\n```"
-        ) is False
+        assert (
+            should_continue_for_promised_tool_use(
+                "Here is the fixed code:\n```python\nprint('hello')\n```"
+            )
+            is False
+        )
 
     def test_greeting_no_trigger(self):
         assert should_continue_for_promised_tool_use("Hello, how can I help you today?") is False
@@ -74,7 +85,10 @@ class TestAntiStall:
         assert should_continue_for_promised_tool_use(long_text) is True
 
     def test_long_text_ending_continue(self):
-        long_text = "A detailed breakdown of what needs to be done.\n" * 20 + "\nLet's continue with the implementation."
+        long_text = (
+            "A detailed breakdown of what needs to be done.\n" * 20
+            + "\nLet's continue with the implementation."
+        )
         assert should_continue_for_promised_tool_use(long_text) is True
 
     def test_nudge_message_is_string(self):

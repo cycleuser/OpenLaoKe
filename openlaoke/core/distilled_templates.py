@@ -1298,7 +1298,7 @@ def _get_default_templates() -> dict[str, Any]:
             "examples": [
                 {
                     "q": "什么时候使用Edit工具",
-                    "a": "使用Edit工具的场景：\n1. 修改文件的部分内容\n2. 修复bug或更新代码\n3. 添加/删除函数或代码块\n\nEdit工具参数：\n- file_path: 文件路径（必需）\n- old_string: 要替换的内容（必需，必须唯一匹配）\n- new_string: 替换后的内容（必需）\n\n最佳实践：\n- old_string要足够长以确保唯一匹配\n- 先Read确认要修改的内容\n- 小改动优先用Edit而非Write\n- 如果old_string不唯一，提供更多上下文",
+                    "a": "使用Edit工具的场景：\n1. 修改文件的部分内容\n2. 修复bug或更新代码\n3. 添加/删除函数或代码块\n\nEdit工具参数：\n- file_path: 文件路径（必需）\n- old_text: 要替换的内容（必需，必须唯一匹配）\n- new_text: 替换后的内容（必需）\n\n最佳实践：\n- old_text要足够长以确保唯一匹配\n- 先Read确认要修改的内容\n- 小改动优先用Edit而非Write\n- 如果old_text不唯一，提供更多上下文",
                 },
             ],
         },

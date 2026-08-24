@@ -45,16 +45,17 @@ OpenLaoKe 当前已具备基础的 Bash/Read/Write/Edit 等工具，但在**代�
 ```python
 # openlaoke/core/langs/spec.py
 
+
 @dataclass
 class LanguageSpec:
-    name: str                  # "python", "c", "rust"
-    display_name: str          # "Python", "C", "Rust"
-    extensions: list[str]        # [".py", ".pyi"]
-    compiler: str | None      # "python3", "clang", "rustc"
-    interpreter: str | None    # "python3", None, None
+    name: str  # "python", "c", "rust"
+    display_name: str  # "Python", "C", "Rust"
+    extensions: list[str]  # [".py", ".pyi"]
+    compiler: str | None  # "python3", "clang", "rustc"
+    interpreter: str | None  # "python3", None, None
     test_runner: str | None  # "pytest", "ctest", "cargo test"
     static_analyzers: list[str]  # ["mypy", "ruff"], ["clang-tidy"], ["rust-analyzer", "clippy"]
-    sandbox_kind: str         # "subprocess", "container", "seccomp"
+    sandbox_kind: str  # "subprocess", "container", "seccomp"
     allowed_ops: dict[str, bool]  # {"file_read": True, "file_write": True, "network": False}
     default_timeout_ms: int = 30000
     default_mem_mb: int = 256

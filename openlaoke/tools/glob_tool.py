@@ -43,6 +43,16 @@ class GlobTool(Tool):
 
         abs_path = self._resolve_path(search_path, ctx.app_state.get_cwd())
 
+        from openlaoke.utils.path_safety import validate_path
+
+        path_error = validate_path(abs_path, ctx.app_state.get_cwd())
+        if path_error:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=path_error,
+                is_error=True,
+            )
+
         if not os.path.isdir(abs_path):
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
@@ -118,9 +128,9 @@ class GlobTool(Tool):
         return None
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

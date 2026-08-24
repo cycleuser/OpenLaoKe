@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
+from typing import Any
 
 from rich.console import Console
 
@@ -478,7 +480,7 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     app_state.add_message(user_msg)
 
     system_prompt = build_system_prompt(app_state, registry.get_all_for_prompt())
-    messages = [{"role": "user", "content": prompt}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
     tools = registry.get_all_for_prompt()
 
     max_iterations = 50
@@ -506,12 +508,36 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
                 from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
 
                 if should_continue_for_promised_tool_use(response.content or ""):
-                    messages.append({
-                        "role": "user",
-                        "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                        }
+                    )
                     continue
                 break
+
+            # Record the assistant's tool-call turn so the next API request
+            # has a well-formed [assistant(tool_calls), tool(result)] sequence.
+            # Strict OpenAI-compatible providers (DeepSeek) reject a tool-role
+            # message that isn't preceded by an assistant message with tool_calls.
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tu.id,
+                            "type": "function",
+                            "function": {
+                                "name": tu.name,
+                                "arguments": json.dumps(tu.input, ensure_ascii=False),
+                            },
+                        }
+                        for tu in response.tool_uses
+                    ],
+                }
+            )
 
             for tool_use in response.tool_uses:
                 tool = registry.get(tool_use.name)
@@ -540,7 +566,7 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
                     )
                     continue
 
-                result = await tool.call(ctx, **tool_use.input)
+                result = await tool.safe_call(ctx, **tool_use.input)
                 messages.append(
                     {
                         "role": "tool_result",

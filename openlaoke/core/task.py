@@ -56,6 +56,7 @@ class TaskManager:
             os.remove(_test)
         except (PermissionError, OSError):
             import tempfile as _tempfile
+
             self._output_dir = os.path.join(_tempfile.gettempdir(), "openlaoke_task_outputs")
             os.makedirs(self._output_dir, exist_ok=True)
 

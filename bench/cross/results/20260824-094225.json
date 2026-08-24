@@ -1,0 +1,555 @@
+{
+  "run_id": "20260824-094225",
+  "suites": [
+    "smoke",
+    "polyglot"
+  ],
+  "tools": [
+    {
+      "tool": "openlaoke",
+      "total": 24,
+      "passed": 19,
+      "score": 0.9583333333333334,
+      "mean_duration_ms": 10373.138786367539,
+      "outcomes": [
+        {
+          "task_id": "smoke-hello",
+          "suite": "smoke",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5535.554666974349,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nI'll create the hello.py file for you.\nLet me verify it works:\nDone. Created `hello.py` with a single line `print('Hello, World!')`, and verified it outputs `Hello, World!` when run.\n\n--- Session cost: $0.0918 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-counter",
+          "suite": "smoke",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 3823.7275000137743,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `counter.py` with a `get_answer()` function that returns `42`.\n\n--- Session cost: $0.0603 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-readme",
+          "suite": "smoke",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 3677.76483297348,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `README.md` with the title `# Test Project`.\n\n--- Session cost: $0.0601 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-json",
+          "suite": "smoke",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 3188.1293329934124,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `config.json` with the content `{\"version\": \"1.0\"}` in the current working directory.\n\n--- Session cost: $0.0604 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-python-syntax",
+          "suite": "smoke",
+          "tool": "openlaoke",
+          "passed": false,
+          "score": 1.0,
+          "duration_ms": 120025.31029097736,
+          "error": "file_exists: valid.py; executable: python valid.py",
+          "stdout_tail": "<timeout>",
+          "exit_code": 124
+        },
+        {
+          "task_id": "poly-py-function",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 15221.33020797628,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `math.py` with the `add` function. Let me verify it works:\nThe import failed because `math` is a built-in Python module, and Python resolved to that instead of my file. Let me verify by importing it from the correct path:\nThe `math.py` file is created and verified working:\n\n```python\ndef add(a, b):\n    return a + b\n```\n\nTest results:\n- `add(3, 5)` \u2192 `8`\n- `add(-2, 7)` \u2192 `5`\n- `add(1.5, 2.5)` \u2192 `4.0`\n\n**Note:** Naming the file `math.py` shadows Python's built-in `math` module, which can cause `import math` to fail elsewhere in your project. If that's a concern, consider renaming it to something like `calculator.py` or `my_math.py`. Let me know if you'd like me to rename it.\n\n--- Session cost: $0.2316 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-class",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6627.239124994958,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `dog.py` with a `Dog` class whose `bark()` method returns `'woof'`. Let me verify it works:\nDone. The `dog.py` file defines a `Dog` class with a `bark()` method that returns `'woof'`, verified working.\n\n--- Session cost: $0.0930 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-function",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": false,
+          "score": 1.0,
+          "duration_ms": 5259.373792010592,
+          "error": "file_exists: math.js",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `multiply.js` with:\n\n```js\n// math.js - Utility library\nexport function multiply(a, b) {\n  return a * b;\n}\n```\n\nThe function uses the `export` keyword so it can be imported elsewhere in the `math.js` module, e.g. `import { multiply } from './math.js';`. It returns the standard JavaScript numeric product of `a * b`.\n\n--- Session cost: $0.0616 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-arrow",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5058.268624998163,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `square.js` with the arrow function:\n\n```js\nconst square = (n) => n * n;\n\nmodule.exports = square;\n```\n\nThe arrow function takes a number `n` and returns its square. I also added `module.exports = square` so the function can be imported/used elsewhere (e.g., by tests or other modules).\n\n--- Session cost: $0.0613 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-ts-interface",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4105.089416989358,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nI'll create the `types.ts` file with the User interface.\nCreated `types.ts` with the `User` interface containing `name: string` and `age: number`.\n\n--- Session cost: $0.0608 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-bash-script",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6551.636124990182,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nLet me verify it runs correctly:\nCreated `greet.sh` with a shebang (`#!/bin/bash`) and an `echo` command. Made it executable and verified it outputs `Hello from bash`.\n\n--- Session cost: $0.0928 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-md-table",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 3627.413833019091,
+          "error": "contains no file: |Name|Age|",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `table.md` with a header row (`| Name | Age |`) and a proper separator row (`|------|-----|`) so it renders as a valid Markdown table.\n\n--- Session cost: $0.0606 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-json-config",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7079.42108399584,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `settings.json` with `{\"debug\": true, \"port\": 8080}`. Validated it parses correctly as JSON.\n\n--- Session cost: $0.1242 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-listcomp",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7988.428332988406,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `squares.py` with the list comprehension. Let me verify it works:\nDone. `squares.py` contains `squares = [x*x for x in range(10)]`, and running it produces `[0, 1, 4, 9, 16, 25, 36, 49, 64, 81]` \u2014 the squares of 0 through 9.\n\n--- Session cost: $0.1257 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-array",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4002.0824159728363,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `numbers.js` with `const nums = [1,2,3,4,5];`\n\n--- Session cost: $0.0605 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-css-style",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4390.73245797772,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nI'll create the CSS file with the specified styles.\nCreated `style.css` with the body rule `body { margin: 0; padding: 0; }`. The file is ready for use with your HTML pages.\n\n--- Session cost: $0.0609 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-yaml-config",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 4361.335291003343,
+          "error": "file not found: name",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `config.yaml` with the requested content:\n\n```yaml\nname: test\nversion: 1\n```\n\n--- Session cost: $0.0604 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-toml-config",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4186.5494169760495,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `data.toml` with an `[owner]` table containing `name = 'admin'`.\n\n--- Session cost: $0.0605 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-html-page",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4773.757124989061,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `page.html` with `<title>Test</title>`. It includes a basic HTML5 structure with a heading and paragraph.\n\n--- Session cost: $0.0620 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-decorator",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 10950.480041996343,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `timer.py` with the `@timer` decorator. Let me verify it works:\nThe decorator works correctly. The output shows `slow_function took 0.501850 seconds` (matching the ~0.5s sleep) and the original return value `42` is passed through.\n\n**How it works:**\n- `timer.py` uses `time.perf_counter()` for high-resolution timing (nanosecond-level precision on most platforms)\n- `@functools.wraps(func)` preserves the wrapped function's `__name__`, docstring, and metadata\n- The decorator accepts any args/kwargs and forwards them to the function\n- Prints the function name and elapsed time in seconds with 6 decimal places\n\nUsage:\n```python\n@timer\ndef my_function():\n    ...\n```\n\n--- Session cost: $0.1308 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-class",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4546.629541990114,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `car.js` with a `Car` class that takes `make` and `model` in its constructor, storing them as instance properties. The class is exported via `module.exports` for CommonJS usage.\n\n--- Session cost: $0.0612 ---\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-import",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 3671.0176660271827,
+          "error": "exit=1",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nAPI Error: 400 Bad Request | Endpoint: https://api.deepseek.com/v1/chat/completions | Model: deepseek-chat | Messages: 4\nError details: {'error': {'message': \"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. (insufficient tool messages following tool_calls message)\", 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}\n\nError: Client error '400 Bad Request' for url \n'https://api.deepseek.com/v1/chat/completions'\nFor more information check: \nhttps://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n",
+          "exit_code": 1
+        },
+        {
+          "task_id": "poly-rust-fn",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": false,
+          "score": 1.0,
+          "duration_ms": 5766.5099169826135,
+          "error": "file_exists: main.rs",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nAPI Error: 400 Bad Request | Endpoint: https://api.deepseek.com/v1/chat/completions | Model: deepseek-chat | Messages: 6\nError details: {'error': {'message': \"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. (insufficient tool messages following tool_calls message)\", 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}\nI'll find/create a Rust project structure and add the main.rs file.\nEmpty directory. I'll create the standard Rust project structure with Cargo.toml and main.rs.\n\nError: Client error '400 Bad Request' for url \n'https://api.deepseek.com/v1/chat/completions'\nFor more information check: \nhttps://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n",
+          "exit_code": 1
+        },
+        {
+          "task_id": "poly-go-fn",
+          "suite": "polyglot",
+          "tool": "openlaoke",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4537.5498330104165,
+          "error": "",
+          "stdout_tail": "/Users/fred/miniconda3/envs/dev/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  import pkg_resources\nCreated `main.go` with package main, a main function that prints \"go\", and ran it to verify.\n\n```\ngo\n```\n\n--- Session cost: $0.0606 ---\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "tool": "opencode",
+      "total": 24,
+      "passed": 19,
+      "score": 0.8958333333333334,
+      "mean_duration_ms": 6624.28091667122,
+      "outcomes": [
+        {
+          "task_id": "smoke-hello",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 8868.963958026143,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite hello.py\nWrote file successfully.\n\u001b[0m\nCreated `hello.py`. Verify with:\n\u001b[0m$ \u001b[0mpython3 hello.py\nHello, World!\n\u001b[0m\nPrints `Hello, World!`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-counter",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6825.158874999033,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite counter.py\nWrote file successfully.\n\u001b[0m\nCreated `counter.py` with `get_answer()` returning 42.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-readme",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6476.513583998894,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite README.md\nWrote file successfully.\n\u001b[0m\nCreated `README.md` with the title `# Test Project`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-json",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7208.960333984578,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite config.json\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-python-syntax",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5781.6800420114305,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite valid.py\nWrote file successfully.\n\u001b[0m\nCreated valid.py with `x = [1, 2, 3]` and `print(sum(x))`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-function",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5988.698000001023,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite math.py\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-class",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 3948.6975419858936,
+          "error": "file_exists: dog.py; contains no file: class Dog",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[93m\u001b[1m! \u001b[0mpermission requested: external_directory (/var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-py-class_m61w110r/*); auto-rejecting\n\u001b[0m\u2717 \u001b[0mWrite /var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-py-class_m61w110r/dog.py failed\n\u001b[91m\u001b[1mError: \u001b[0mThe user rejected permission to use this specific tool call.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-function",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 7478.088583011413,
+          "error": "file_exists: math.js; contains no file: function multiply",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m$ \u001b[0mls\n(no output)\n\u001b[0m\n\u001b[93m\u001b[1m! \u001b[0mpermission requested: external_directory (/var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-js-function_05gu15yu/*); auto-rejecting\n\u001b[0m\u2717 \u001b[0mWrite /var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-js-function_05gu15yu/math.js failed\n\u001b[91m\u001b[1mError: \u001b[0mThe user rejected permission to use this specific tool call.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-arrow",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7102.255250007147,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite square.js\nWrote file successfully.\n\u001b[0m\nDone. `square.js` created with `const square = (n) => n * n;`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-ts-interface",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7532.859666011063,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m$ \u001b[0mls types.ts 2>/dev/null || echo \"not found\"\nnot found\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite types.ts\nWrote file successfully.\n\u001b[0m\nCreated `types.ts` with the `User` interface.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-bash-script",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7758.724458020879,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite greet.sh\nWrote file successfully.\n\u001b[0m\nCreated `greet.sh`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-md-table",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 4871.217250009067,
+          "error": "file_exists: table.md; contains no file: |Name|Age|",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[93m\u001b[1m! \u001b[0mpermission requested: external_directory (/var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-md-table_rg0i6t03/*); auto-rejecting\n\u001b[0m\u2717 \u001b[0mWrite /var/folders/h0/64ycsy616rbb9rsm15zj4tpm0000gn/T/xtool_opencode_poly-md-table_rg0i6t03/table.md failed\n\u001b[91m\u001b[1mError: \u001b[0mThe user rejected permission to use this specific tool call.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-json-config",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 9352.62191601214,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite settings.json\nWrote file successfully.\n\u001b[0m\nCreated `settings.json` with `{\"debug\": true, \"port\": 8080}`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-listcomp",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5454.777875012951,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite squares.py\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-array",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 6243.023542017909,
+          "error": "contains no file: 1,2,3,4,5",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite numbers.js\nWrote file successfully.\n\u001b[0m\nCreated `numbers.js` with `const nums = [1,2,3,4,5]`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-css-style",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6857.493958988925,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite style.css\nWrote file successfully.\n\u001b[0m\nCreated `style.css`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-yaml-config",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": false,
+          "score": 0.5,
+          "duration_ms": 8009.742916998221,
+          "error": "file not found: name",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite config.yaml\nWrote file successfully.\n\u001b[0m\nCreated `config.yaml` with `name: test` and `version: 1`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-toml-config",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7428.5252499976195,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite data.toml\nWrote file successfully.\n\u001b[0m\nCreated `data.toml` with `[owner]` and `name = \"admin\"`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-html-page",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6583.031082991511,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite page.html\nWrote file successfully.\n\u001b[0m\nCreated `page.html` with `<title>Test</title>`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-decorator",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6647.815542004537,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite timer.py\nWrote file successfully.\n\u001b[0m\nCreated `timer.py` with a `@timer` decorator using `time.perf_counter()` for accurate timing and `functools.wraps` to preserve the wrapped function's metadata.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-js-class",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6171.516292000888,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite car.js\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-py-import",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 6412.056291010231,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite utils.py\nWrote file successfully.\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite main.py\nWrote file successfully.\n\u001b[0m\nDone. Created `utils.py` with `helper()` and `main.py` that imports it and prints `done`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-rust-fn",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 4965.32395799295,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite main.rs\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "poly-go-fn",
+          "suite": "polyglot",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 5014.9958330148365,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite main.go\nWrote file successfully.\n\u001b[0m\nCreated `main.go`.\n",
+          "exit_code": 0
+        }
+      ]
+    }
+  ]
+}

@@ -93,7 +93,7 @@ def classify_action(message: str) -> ActionResult:
             )
 
     # Check action patterns
-    action_score = 0
+    action_score = 0.0
     action_matches = 0
     for pattern in _ACTION_PATTERNS:
         matches = pattern.findall(msg_lower)

@@ -168,15 +168,15 @@ int main() {
 from openlaoke.core.hyperauto.verifier import VerificationConfig
 
 config = VerificationConfig(
-    max_iterations=10,           # 最大验证迭代次数
-    min_pass_rate=1.0,           # 最低通过率要求 (1.0 = 100%)
-    required_coverage=80.0,      # 最低覆盖率要求
-    enable_syntax_check=True,    # 启用语法检查
-    enable_type_check=True,      # 启用类型检查
-    enable_unit_tests=True,      # 启用单元测试
-    enable_lint=True,            # 启用 lint 检查
-    auto_fix_enabled=True,       # 启用自动修复
-    retry_on_failure=True,       # 失败时重试
+    max_iterations=10,  # 最大验证迭代次数
+    min_pass_rate=1.0,  # 最低通过率要求 (1.0 = 100%)
+    required_coverage=80.0,  # 最低覆盖率要求
+    enable_syntax_check=True,  # 启用语法检查
+    enable_type_check=True,  # 启用类型检查
+    enable_unit_tests=True,  # 启用单元测试
+    enable_lint=True,  # 启用 lint 检查
+    auto_fix_enabled=True,  # 启用自动修复
+    retry_on_failure=True,  # 失败时重试
 )
 ```
 

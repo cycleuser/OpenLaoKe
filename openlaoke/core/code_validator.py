@@ -192,22 +192,30 @@ class ExecutionValidator:
     """Validate code execution step by step."""
 
     def test_imports(self, code: str) -> ValidationResult:
-        """Test if imports work."""
-        import_code = "\n".join(
-            [line for line in code.split("\n") if line.strip().startswith(("import ", "from "))]
-        )
-
-        if not import_code:
-            return ValidationResult(is_valid=True)
-
+        """Test if imports work without executing untrusted code."""
         try:
-            exec(import_code, {})
-            return ValidationResult(is_valid=True)
-        except Exception as e:
-            return ValidationResult(
-                is_valid=False,
-                errors=[f"Import error: {e}"],
-            )
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            return ValidationResult(is_valid=False, errors=[f"Syntax error: {e}"])
+
+        import importlib.util
+
+        bad: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if importlib.util.find_spec(alias.name) is None:
+                        bad.append(alias.name)
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and importlib.util.find_spec(node.module) is None
+            ):
+                bad.append(node.module)
+
+        if bad:
+            return ValidationResult(is_valid=False, errors=[f"Unimportable: {', '.join(bad)}"])
+        return ValidationResult(is_valid=True)
 
     def test_syntax_with_python(self, code: str) -> ValidationResult:
         """Test syntax using Python interpreter."""

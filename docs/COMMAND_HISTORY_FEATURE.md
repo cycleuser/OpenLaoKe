@@ -25,21 +25,21 @@ def create_prompt_session():
     """Create a PromptSession with autocomplete and history."""
     # 确保历史目录存在
     HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # ... 样式和补全器配置 ...
-    
+
     # 创建基于文件的历史记录
     history = FileHistory(str(HISTORY_FILE))
-    
+
     session = PromptSession(
         completer=completer,
         style=style,
         complete_while_typing=True,
         mouse_support=True,
-        history=history,                    # 添加历史支持
-        enable_history_search=True,         # 启用历史搜索
+        history=history,  # 添加历史支持
+        enable_history_search=True,  # 启用历史搜索
     )
-    
+
     return session
 ```
 
@@ -194,20 +194,20 @@ chmod 600 ~/.openlaoke/command_history.txt
 # 历史管理命令
 class HistoryCommand(SlashCommand):
     name = "history"
-    
+
     async def execute(self, ctx):
         if ctx.args == "clear":
             # 清空历史
             HISTORY_FILE.unlink(missing_ok=True)
             return CommandResult(message="History cleared")
-        
+
         # 显示历史
         with open(HISTORY_FILE) as f:
             lines = f.readlines()[-20:]
-        
+
         return CommandResult(
-            message="Recent commands:\n" + 
-                    "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
+            message="Recent commands:\n"
+            + "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
         )
 ```
 

@@ -23,12 +23,12 @@ ha_config = HAutoConfig(
 
 **修改前（第 719 行）：**
 ```python
-timeout_seconds=hyperauto_config.timeout_seconds,
+timeout_seconds = (hyperauto_config.timeout_seconds,)
 ```
 
 **修改后：**
 ```python
-timeout_per_task=hyperauto_config.timeout_seconds,
+timeout_per_task = (hyperauto_config.timeout_seconds,)
 ```
 
 ## HyperAutoConfig 正确参数列表
@@ -49,7 +49,7 @@ class HyperAutoConfig:
     reflection_enabled: bool = True
     learning_enabled: bool = True
     max_parallel_tasks: int = 5
-    timeout_per_task: float = 300.0        # ✅ 正确的参数名
+    timeout_per_task: float = 300.0  # ✅ 正确的参数名
     rollback_on_failure: bool = True
     dry_run: bool = False
     verbose: bool = False
@@ -62,7 +62,7 @@ class HyperAutoConfig:
 config = HAutoConfig(
     mode="semi_auto",
     max_iterations=50,
-    timeout_per_task=300,      # ✅ 正确
+    timeout_per_task=300,  # ✅ 正确
     learning_enabled=True,
     reflection_enabled=True,
 )

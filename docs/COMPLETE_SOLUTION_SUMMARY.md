@@ -187,10 +187,10 @@ if not adapter.supports_tools():
 builder = IncrementalBuilder()
 
 # 添加代码部分，每步验证
-builder.add_imports(imports)      # ✅ 验证通过
-builder.add_function(func1)       # ✅ 验证通过
-builder.add_function(func2)       # ❌ 验证失败 → 自动修复 → ✅ 通过
-builder.add_main_block(main)      # ✅ 验证通过
+builder.add_imports(imports)  # ✅ 验证通过
+builder.add_function(func1)  # ✅ 验证通过
+builder.add_function(func2)  # ❌ 验证失败 → 自动修复 → ✅ 通过
+builder.add_main_block(main)  # ✅ 验证通过
 
 final_code = builder.get_final_code()  # 语法正确的代码
 ```

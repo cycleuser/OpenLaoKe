@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ async def run_subagent(
 
     system_prompt = _build_system_prompt(app_state)
 
-    messages = [{"role": "user", "content": prompt}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
     tools = registry.get_all_for_prompt()
 
     max_iterations = 50
@@ -81,6 +81,23 @@ async def run_subagent(
                 {
                     "role": "assistant",
                     "content": response.content,
+                    **(
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": tu.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tu.name,
+                                        "arguments": json.dumps(tu.input, ensure_ascii=False),
+                                    },
+                                }
+                                for tu in response.tool_uses
+                            ]
+                        }
+                        if response.tool_uses
+                        else {}
+                    ),
                 }
             )
 
@@ -122,7 +139,7 @@ async def run_subagent(
                     )
                     continue
 
-                result = await tool.call(ctx, **tool_use.input)
+                result = await tool.safe_call(ctx, **tool_use.input)
                 messages.append(
                     {
                         "role": "tool_result",

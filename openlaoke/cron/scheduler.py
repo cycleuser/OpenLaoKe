@@ -28,9 +28,9 @@ def _parse_cron_field(field: str, min_val: int, max_val: int) -> set[int]:
         if part == "*":
             values.update(range(min_val, max_val + 1))
         elif "/" in part:
-            base, _, step = part.partition("/")
+            base, _, step_str = part.partition("/")
             start = min_val if base == "*" else int(base)
-            step = int(step)
+            step = int(step_str)
             for v in range(start, max_val + 1, step):
                 values.add(v)
         elif "-" in part:
@@ -44,13 +44,14 @@ def _parse_cron_field(field: str, min_val: int, max_val: int) -> set[int]:
 def next_cron_time(expression: str, timezone: str, after: float) -> float:
     import datetime as _dt
 
+    tz: _dt.tzinfo
     try:
         try:
             import zoneinfo
 
             tz = zoneinfo.ZoneInfo(timezone)
         except ImportError:
-            import pytz
+            import pytz  # type: ignore[import-untyped]
 
             tz = pytz.timezone(timezone)
     except Exception:

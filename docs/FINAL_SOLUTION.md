@@ -147,30 +147,29 @@ from openlaoke.core.tool_adapter import ToolCallAdapter
 from openlaoke.core.smart_prompt import SmartPromptGenerator
 from openlaoke.core.knowledge_base import KnowledgeBase
 
+
 class REPL:
     def __init__(self):
         # 初始化三个系统
         self.tool_adapter = ToolCallAdapter(model)
         self.smart_prompt = SmartPromptGenerator(model)
         self.knowledge_base = KnowledgeBase()
-    
+
     async def process_request(self, user_input: str):
         # 1. 智能提示词优化
         hints = self.smart_prompt.get_execution_hints(user_input)
-        
+
         # 2. 知识库增强
-        enhanced_prompt = self.knowledge_base.enhance_prompt(
-            user_input, base_prompt
-        )
-        
+        enhanced_prompt = self.knowledge_base.enhance_prompt(user_input, base_prompt)
+
         # 3. 工具适配
         if not self.tool_adapter.supports_tools():
             tools_text = self.tool_adapter.format_tools_as_text(tools)
             enhanced_prompt += tools_text
-        
+
         # 4. 发送给模型
         response = await self.send_to_model(enhanced_prompt)
-        
+
         # 5. 解析工具调用
         if not self.tool_adapter.supports_tools():
             tool_calls = self.tool_adapter.parse_tool_calls(response)
@@ -184,7 +183,6 @@ class REPL:
 MODEL_CONFIG = {
     # 首选：支持工具的模型
     "recommended": ["gemma4:e2b", "gemma4:e4b", "omnicoder-9b"],
-    
     # 可用：小模型（已适配）
     "adapted": ["gemma3:1b", "qwen3.5:0.8B", "llama3.2:1b"],
 }

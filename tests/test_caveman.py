@@ -1,4 +1,5 @@
 """Tests for caveman mode: CacheGuard, system prompt switching."""
+
 from __future__ import annotations
 
 from openlaoke.core.cache_guard import (
@@ -6,7 +7,6 @@ from openlaoke.core.cache_guard import (
     SYSTEM_PROMPT_STATIC,
     CacheGuard,
 )
-from openlaoke.core.state import create_app_state
 
 
 class TestCavemanMode:
@@ -55,7 +55,6 @@ class TestCavemanMode:
 
     def test_system_prompt_extra_appended(self, app_state):
         """Verify _system_prompt_extra is appended in both modes."""
-        import os
 
         app_state.caveman_mode = False
         guard = CacheGuard(app_state)

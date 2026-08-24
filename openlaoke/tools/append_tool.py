@@ -1,4 +1,5 @@
 """Append tool - append content to end of file, creating if not exists."""
+
 from __future__ import annotations
 
 import os

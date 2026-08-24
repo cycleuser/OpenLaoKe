@@ -80,6 +80,23 @@ class Tool(ABC):
         """Execute the tool with the given input."""
         ...
 
+    async def safe_call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
+        """Execute the tool, catching any unhandled exception.
+
+        Per the project convention (AGENTS.md), tools must return
+        ``ToolResultBlock(is_error=True)`` rather than raising. This
+        wrapper enforces that contract so a buggy tool can never crash
+        the agent loop.
+        """
+        try:
+            return await self.call(ctx, **kwargs)
+        except Exception as e:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Error in {self.name}: {e}",
+                is_error=True,
+            )
+
     def preview(self, **kwargs: Any) -> PreviewResult:
         """Return a dry-run preview of what the tool *would* do.
 
@@ -96,10 +113,16 @@ class Tool(ABC):
     def get_input_schema(self) -> dict[str, Any]:
         """Return the JSON schema for tool input validation."""
         if isinstance(self.input_schema, dict):
-            return self.input_schema
-        if self.input_schema is not None and hasattr(self.input_schema, "model_json_schema"):
-            return self.input_schema.model_json_schema()
-        return {}
+            schema = self.input_schema
+        elif self.input_schema is not None and hasattr(self.input_schema, "model_json_schema"):
+            schema = self.input_schema.model_json_schema()
+        else:
+            schema = {}
+        # Strict OpenAI-compatible providers (DeepSeek, etc.) reject empty
+        # parameter schemas; normalize to a valid empty object schema.
+        if not schema:
+            return {"type": "object", "properties": {}}
+        return schema
 
     def validate_input(self, input_data: dict[str, Any]) -> ValidationResult:
         """Validate tool input before execution with full type checking."""
@@ -190,15 +213,38 @@ class DeferredToolInfo:
 class ToolRegistry:
     """Registry for all available tools with lazy loading support."""
 
-    _DEFAULT_READONLY_TOOLS: frozenset[str] = frozenset({
-        "Read", "ReadFile", "Glob", "Grep", "LSP", "ListDirectory",
-        "WebSearch", "WebFetch", "ToolSearch", "Brief", "Plan", "Lsp",
-        "NotebookRead", "ReadTracker",
-    })
-    _DEFAULT_WRITER_TOOLS: frozenset[str] = frozenset({
-        "Write", "Edit", "Bash", "ApplyPatch", "Batch", "Git",
-        "CodeRunner", "Agent", "NotebookWrite", "MultiEdit",
-    })
+    _DEFAULT_READONLY_TOOLS: frozenset[str] = frozenset(
+        {
+            "Read",
+            "ReadFile",
+            "Glob",
+            "Grep",
+            "LSP",
+            "ListDirectory",
+            "WebSearch",
+            "WebFetch",
+            "ToolSearch",
+            "Brief",
+            "Plan",
+            "Lsp",
+            "NotebookRead",
+            "ReadTracker",
+        }
+    )
+    _DEFAULT_WRITER_TOOLS: frozenset[str] = frozenset(
+        {
+            "Write",
+            "Edit",
+            "Bash",
+            "ApplyPatch",
+            "Batch",
+            "Git",
+            "CodeRunner",
+            "Agent",
+            "NotebookWrite",
+            "MultiEdit",
+        }
+    )
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -386,6 +432,7 @@ class ToolRegistry:
                 results.append(info)
         return results
 
+
 def truncate_tool_history(output: str, max_bytes: int = 4096) -> str:
     """Truncate tool output for LLM history, keeping head 70% + tail 30%.
 
@@ -402,8 +449,5 @@ def truncate_tool_history(output: str, max_bytes: int = 4096) -> str:
     head = encoded[:head_bytes].decode("utf-8", errors="replace")
     tail = encoded[-tail_bytes:].decode("utf-8", errors="replace")
 
-    header = (
-        f"[tool output compacted: original_bytes={len(encoded)} "
-        f"kept_bytes<={max_bytes}]\n"
-    )
+    header = f"[tool output compacted: original_bytes={len(encoded)} kept_bytes<={max_bytes}]\n"
     return f"{header}{head}\n...[middle omitted]...\n{tail}"

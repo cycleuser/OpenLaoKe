@@ -160,9 +160,7 @@ supervisor = TaskSupervisor(app_state)
 supervisor.set_model("gemma3:1b", config)
 
 # 解析复杂任务
-task = supervisor.parse_request(
-    "Write a research paper and create diagrams and implement code"
-)
+task = supervisor.parse_request("Write a research paper and create diagrams and implement code")
 
 # 系统自动:
 # 1. 识别为复杂任务
@@ -178,9 +176,7 @@ task = supervisor.parse_request(
 # 使用高级模型
 supervisor.set_model("claude-opus-4", config)
 
-task = supervisor.parse_request(
-    "Write a research paper and create diagrams and implement code"
-)
+task = supervisor.parse_request("Write a research paper and create diagrams and implement code")
 
 # 系统自动:
 # 1. 识别高级模型

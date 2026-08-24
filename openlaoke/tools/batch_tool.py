@@ -139,7 +139,7 @@ class BatchTool(Tool):
             return f"ERROR: Unknown tool: {tool_name}"
 
         try:
-            result = await tool.call(ctx, **args)
+            result = await tool.safe_call(ctx, **args)
 
             if isinstance(result.content, str):
                 return result.content

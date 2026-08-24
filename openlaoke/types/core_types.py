@@ -226,14 +226,18 @@ class SystemMessage(BaseMessage):
 
     content: str = ""
     subtype: str = "info"
+    tool_use_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             **super().to_dict(),
             "type": "system",
             "content": self.content,
             "subtype": self.subtype,
         }
+        if self.tool_use_id:
+            d["tool_use_id"] = self.tool_use_id
+        return d
 
 
 @dataclass
@@ -426,5 +430,6 @@ def message_from_dict(data: dict[str, Any]) -> Message | None:
         role=MessageRole.SYSTEM,
         content=content,
         subtype=data.get("subtype", "info"),
+        tool_use_id=data.get("tool_use_id", ""),
         timestamp=ts,
     )

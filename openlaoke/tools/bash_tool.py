@@ -97,9 +97,11 @@ class BashTool(Tool):
             )
 
             max_output = 30000
-            if len(output) > max_output:
-                truncated = output[:max_output]
-                output = f"{truncated}\n\n... (output truncated, {len(output) - max_output} chars omitted)"
+            original_len = len(output)
+            truncated = False
+            if original_len > max_output:
+                output = f"{output[:max_output]}\n\n... (output truncated, {original_len - max_output} chars omitted)"
+                truncated = True
 
             if exit_code != 0:
                 return ToolResultBlock(
@@ -108,9 +110,12 @@ class BashTool(Tool):
                     is_error=True,
                 )
 
+            content = output if output else "(command completed successfully with no output)"
+            if truncated:
+                content += "\n(note: output was truncated)"
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
-                content=output if output else "(command completed successfully with no output)",
+                content=content,
                 is_error=False,
             )
 

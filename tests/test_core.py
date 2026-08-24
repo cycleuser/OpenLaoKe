@@ -37,6 +37,7 @@ from openlaoke.types.core_types import (
     MessageRole,
     PermissionMode,
     PermissionResult,
+    SystemMessage,
     TaskState,
     TaskStatus,
     TaskType,
@@ -111,6 +112,61 @@ class TestAppState:
             with open(path) as f:
                 data = json.load(f)
             assert data["session_id"] == s.session_id
+
+
+class TestMessageRoundTrip:
+    """SystemMessage(tool_result) must survive serialization and rebuild."""
+
+    def test_system_message_roundtrip_keeps_tool_use_id(self):
+        from openlaoke.types.core_types import message_from_dict
+
+        msg = SystemMessage(
+            role=MessageRole.SYSTEM,
+            content="tool output",
+            subtype="tool_result",
+            tool_use_id="call_42",
+        )
+        restored = message_from_dict(msg.to_dict())
+        assert isinstance(restored, SystemMessage)
+        assert restored.subtype == "tool_result"
+        assert restored.tool_use_id == "call_42"
+        assert restored.content == "tool output"
+
+    def test_system_message_without_tool_use_id_roundtrip(self):
+        from openlaoke.types.core_types import message_from_dict
+
+        msg = SystemMessage(role=MessageRole.SYSTEM, content="info", subtype="info")
+        restored = message_from_dict(msg.to_dict())
+        assert restored.tool_use_id == ""
+        assert "tool_use_id" not in msg.to_dict()
+
+    def test_messages_from_app_state_rebuilds_tool_result(self):
+        from openlaoke.control.orchestrator import _messages_from_app_state
+
+        state = create_app_state(cwd=os.getcwd())
+        state.add_message(UserMessage(role=MessageRole.USER, content="run tool"))
+        state.add_message(
+            SystemMessage(
+                role=MessageRole.SYSTEM,
+                content="done",
+                subtype="tool_result",
+                tool_use_id="call_7",
+            )
+        )
+        rebuilt = _messages_from_app_state(state)
+        tool_msgs = [m for m in rebuilt if m.get("role") == "tool"]
+        assert len(tool_msgs) == 1
+        assert tool_msgs[0]["tool_call_id"] == "call_7"
+        assert tool_msgs[0]["content"] == "done"
+
+    def test_messages_from_app_state_skips_plain_system(self):
+        from openlaoke.control.orchestrator import _messages_from_app_state
+
+        state = create_app_state(cwd=os.getcwd())
+        state.add_message(SystemMessage(role=MessageRole.SYSTEM, content="note", subtype="info"))
+        rebuilt = _messages_from_app_state(state)
+        assert all(m.get("role") != "tool" for m in rebuilt)
+        assert rebuilt == []
 
 
 # ── TOOL REGISTRY ──────────────────────────────────────────────────────────────

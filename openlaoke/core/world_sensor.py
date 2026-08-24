@@ -110,7 +110,7 @@ def sense_world(include_location: bool = False) -> SensorData:
         sd.work_dir = sd.home_dir
 
     try:
-        import psutil
+        import psutil  # type: ignore[import-untyped]
 
         sd.cpu_count = psutil.cpu_count() or 0
         mem = psutil.virtual_memory()

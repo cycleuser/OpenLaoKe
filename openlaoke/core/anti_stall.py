@@ -18,8 +18,12 @@ import re
 _CHINESE_PATTERNS: list[re.Pattern] = [
     re.compile(r"让我先.*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下)"),
     re.compile(r"我先.*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下)"),
-    re.compile(r"先.*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下).*(项目|仓库|代码|文件|结构|实现|测试)"),
-    re.compile(r"先.*(项目|仓库|代码|文件|结构|实现|测试).*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下)"),
+    re.compile(
+        r"先.*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下).*(项目|仓库|代码|文件|结构|实现|测试)"
+    ),
+    re.compile(
+        r"先.*(项目|仓库|代码|文件|结构|实现|测试).*(扫描|查看|检查|搜索|读取|阅读|分析|了解|理解|看一下|读一下)"
+    ),
     re.compile(r"接下来.*(我会|我准备|我将|开始|执行|动手|修改|实现|处理)"),
     re.compile(r"(计划|方案|思路|步骤).*(如下|是|：|:)"),
     re.compile(r"分析.*(完毕|完成).*接下来"),
@@ -36,17 +40,26 @@ _CHINESE_PATTERNS: list[re.Pattern] = [
 # ---------------------------------------------------------------------------
 
 _ENGLISH_PATTERNS: list[re.Pattern] = [
-    re.compile(r"let me (first )?(analyze|plan|think|understand|examine|review|study|outline)", re.IGNORECASE),
-    re.compile(r"i'?ll (first )?(analyze|plan|think|understand|examine|review|study|outline)", re.IGNORECASE),
-    re.compile(r"i(?:'ll| will) (first )?(inspect|scan|search|read|check|examine|review) ", re.IGNORECASE),
+    re.compile(
+        r"let me (first )?(analyze|plan|think|understand|examine|review|study|outline)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"i'?ll (first )?(analyze|plan|think|understand|examine|review|study|outline)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"i(?:'ll| will) (first )?(inspect|scan|search|read|check|examine|review) ", re.IGNORECASE
+    ),
     re.compile(r"here('?s| is) my (plan|analysis|approach|strategy|outline)", re.IGNORECASE),
     re.compile(r"my (plan|analysis|approach) (is|will be|involves)", re.IGNORECASE),
     re.compile(r"let me start by (analyzing|examining|reviewing|checking|reading)", re.IGNORECASE),
-    re.compile(r"first,.*(i'?ll|i will|let me).*(analyze|read|check|examine|review|understand|look)", re.IGNORECASE),
+    re.compile(
+        r"first,.*(i'?ll|i will|let me).*(analyze|read|check|examine|review|understand|look)",
+        re.IGNORECASE,
+    ),
     re.compile(r"i will proceed (in|with|by)", re.IGNORECASE),
     re.compile(r"proposed (plan|approach|solution)", re.IGNORECASE),
-    re.compile(r"step(-| )?1", re.IGNORECASE),
-    re.compile(r"phase 1", re.IGNORECASE),
     re.compile(r"think.*execute", re.IGNORECASE),
     # Task-completion patterns that need more steps
     re.compile(r"task.*complete.*but.*(need|should|must|still)", re.IGNORECASE),
@@ -69,10 +82,7 @@ _END_PATTERNS: list[re.Pattern] = [
     re.compile(r"now .*(can|will|let)", re.IGNORECASE),
 ]
 
-NUDGE_MESSAGE = (
-    "Proceed now by using the appropriate tool calls, "
-    "then provide the answer."
-)
+NUDGE_MESSAGE = "Proceed now by using the appropriate tool calls, then provide the answer."
 
 
 def should_continue_for_promised_tool_use(content: str) -> bool:
@@ -92,6 +102,15 @@ def should_continue_for_promised_tool_use(content: str) -> bool:
         return True
 
     if any(p.search(lower) for p in _ENGLISH_PATTERNS):
+        return True
+
+    # A numbered step-plan ("Step 1:", "1) ", "Phase 1 —") only counts as a
+    # promise when it appears near the START of the response AND uses a
+    # structured plan marker (colon/paren/dash). Bare mentions of "step 1"
+    # anywhere in the body (e.g. explaining an algorithm) are not planning
+    # signals and must not trigger a nudge.
+    head = lower[:150]
+    if re.search(r"(?:step|phase)\s*[-\s]*1\s*[:)—-]", head):
         return True
 
     # Fallback: if content has substantial text and ends with intent to proceed

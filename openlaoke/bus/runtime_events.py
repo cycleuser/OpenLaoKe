@@ -80,7 +80,7 @@ class EventSink:
         for sub in list(self._subscribers):
             try:
                 result = sub(event)
-                if hasattr(result, "__await__"):
+                if result is not None:
                     await result
             except Exception:
                 continue
@@ -95,12 +95,12 @@ class EventSink:
         for sub in list(self._subscribers):
             try:
                 result = sub(event)
-                if hasattr(result, "__await__"):
+                if result is not None:
                     import asyncio
 
                     try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(result)
+                        asyncio.get_running_loop()
+                        asyncio.ensure_future(result)
                     except RuntimeError:
                         pass
             except Exception:
@@ -119,4 +119,5 @@ def make_event(
     **data: Any,
 ) -> AgentEvent:
     """Convenience factory for events."""
-    return AgentEvent(kind=kind, session_id=session_id, data=data)
+    event_kind = kind if isinstance(kind, EventKind) else EventKind(kind)
+    return AgentEvent(kind=event_kind, session_id=session_id, data=data)

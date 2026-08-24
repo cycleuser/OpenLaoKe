@@ -25,6 +25,82 @@ class GrepInput(BaseModel):
     )
     case_sensitive: bool = Field(default=False, description="Case-sensitive search")
     max_results: int = Field(default=100, description="Maximum number of results")
+    context: int = Field(
+        default=0,
+        description="Number of context lines around each match (like rg -C)",
+    )
+    multiline: bool = Field(
+        default=False,
+        description="Allow the pattern to span multiple lines (DOTALL matching)",
+    )
+
+
+def _search_file(
+    file_path: str,
+    rel_path: str,
+    regex: re.Pattern[str],
+    multiline: bool,
+    context: int,
+    remaining: int,
+) -> tuple[list[tuple[str, int, str, str]], int, bool]:
+    """Search one file. Returns (entries, match_count, hit_cap).
+
+    Entries are (rel_path, line_num, text, marker) where marker is ':'
+    for matched lines and '-' for context lines.
+    """
+    if remaining <= 0:
+        return [], 0, True
+    try:
+        with open(file_path, encoding="utf-8", errors="replace") as fh:
+            text_content = fh.read()
+    except (PermissionError, OSError):
+        return [], 0, False
+
+    file_lines = text_content.splitlines()
+    entries: list[tuple[str, int, str, str]] = []
+    match_count = 0
+    hit_cap = False
+
+    if multiline:
+        matched_line_nums: list[int] = []
+        for m in regex.finditer(text_content):
+            line_num = text_content.count("\n", 0, m.start()) + 1
+            if not matched_line_nums or matched_line_nums[-1] != line_num:
+                matched_line_nums.append(line_num)
+                match_count += 1
+                if match_count >= remaining:
+                    hit_cap = True
+                    break
+    else:
+        matched_line_nums = [i + 1 for i, line in enumerate(file_lines) if regex.search(line)]
+        if len(matched_line_nums) > remaining:
+            matched_line_nums = matched_line_nums[:remaining]
+            hit_cap = True
+        match_count = len(matched_line_nums)
+
+    if not matched_line_nums:
+        return [], 0, False
+
+    if context > 0:
+        groups: list[list[int]] = []
+        for n in matched_line_nums:
+            lo = max(1, n - context)
+            hi = min(len(file_lines), n + context)
+            window = list(range(lo, hi + 1))
+            if groups and window[0] <= groups[-1][-1] + 1:
+                groups[-1].extend(x for x in window if x > groups[-1][-1])
+            else:
+                groups.append(window)
+        matched_set = set(matched_line_nums)
+        for group in groups:
+            for n in group:
+                marker = ":" if n in matched_set else "-"
+                entries.append((rel_path, n, file_lines[n - 1].rstrip(), marker))
+    else:
+        for n in matched_line_nums:
+            entries.append((rel_path, n, file_lines[n - 1].rstrip(), ":"))
+
+    return entries, match_count, hit_cap
 
 
 class GrepTool(Tool):
@@ -33,7 +109,8 @@ class GrepTool(Tool):
     name = "Grep"
     description = (
         "Search for a regex pattern in file contents across a directory. "
-        "Supports glob filtering, case sensitivity options, and multiple output modes."
+        "Supports glob filtering, case sensitivity, context lines (like rg -C), "
+        "multiline matching, and multiple output modes."
     )
     input_schema = GrepInput
     is_read_only = True
@@ -47,6 +124,8 @@ class GrepTool(Tool):
         output_mode = kwargs.get("output_mode", "content")
         case_sensitive = kwargs.get("case_sensitive", False)
         max_results = kwargs.get("max_results", 100)
+        context = max(0, int(kwargs.get("context", 0) or 0))
+        multiline = bool(kwargs.get("multiline", False))
 
         if not pattern:
             return ToolResultBlock(
@@ -57,6 +136,8 @@ class GrepTool(Tool):
 
         try:
             flags = 0 if case_sensitive else re.IGNORECASE
+            if multiline:
+                flags |= re.DOTALL
             regex = re.compile(pattern, flags)
         except re.error as e:
             return ToolResultBlock(
@@ -67,6 +148,16 @@ class GrepTool(Tool):
 
         abs_path = self._resolve_path(search_path, ctx.app_state.get_cwd())
 
+        from openlaoke.utils.path_safety import validate_path
+
+        path_error = validate_path(abs_path, ctx.app_state.get_cwd())
+        if path_error:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=path_error,
+                is_error=True,
+            )
+
         if not os.path.isdir(abs_path):
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
@@ -75,7 +166,9 @@ class GrepTool(Tool):
             )
 
         gitignore = self._load_gitignore(abs_path)
-        results: list[tuple[str, int, str]] = []
+        results: list[tuple[str, int, str, str]] = []
+        match_count = 0
+        truncated = False
 
         for root, dirs, files in os.walk(abs_path):
             rel_root = os.path.relpath(root, abs_path)
@@ -102,20 +195,16 @@ class GrepTool(Tool):
                     continue
 
                 file_path = os.path.join(root, f)
-                try:
-                    with open(file_path, encoding="utf-8", errors="replace") as fh:
-                        for line_num, line in enumerate(fh, 1):
-                            if regex.search(line):
-                                results.append((rel_path, line_num, line.rstrip()))
-                                if len(results) >= max_results:
-                                    break
-                except (PermissionError, OSError):
-                    continue
-
-                if len(results) >= max_results:
+                entries, found, hit_cap = _search_file(
+                    file_path, rel_path, regex, multiline, context, max_results - match_count
+                )
+                results.extend(entries)
+                match_count += found
+                if hit_cap:
+                    truncated = True
                     break
 
-            if len(results) >= max_results:
+            if truncated:
                 break
 
         if output_mode == "files_with_matches":
@@ -128,7 +217,9 @@ class GrepTool(Tool):
 
         if output_mode == "count":
             counts: dict[str, int] = {}
-            for path, _, _ in results:
+            for path, _, _, marker in results:
+                if marker != ":":
+                    continue
                 counts[path] = counts.get(path, 0) + 1
             content = "\n".join(f"{path}: {count}" for path, count in sorted(counts.items()))
             return ToolResultBlock(
@@ -144,16 +235,21 @@ class GrepTool(Tool):
             )
 
         lines = []
-        for path, line_num, text in results:
-            lines.append(f"{path}:{line_num}: {text}")
+        prev: tuple[str, int] | None = None
+        for path, line_num, text, marker in results:
+            if prev is not None and (path, line_num) != (prev[0], prev[1] + 1):
+                lines.append("--")
+            sep = ":" if marker == ":" else "-"
+            lines.append(f"{path}{sep}{line_num}{sep} {text}")
+            prev = (path, line_num)
 
         content = "\n".join(lines)
-        if len(results) >= max_results:
+        if truncated:
             content += f"\n\n... (truncated at {max_results} results)"
 
         return ToolResultBlock(
             tool_use_id=ctx.tool_use_id,
-            content=f"Found {len(results)} match(es):\n{content}",
+            content=f"Found {match_count} match(es):\n{content}",
             is_error=False,
         )
 
@@ -165,9 +261,9 @@ class GrepTool(Tool):
         return None
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

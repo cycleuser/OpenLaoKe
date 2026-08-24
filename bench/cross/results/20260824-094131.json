@@ -1,0 +1,72 @@
+{
+  "run_id": "20260824-094131",
+  "suites": [
+    "smoke"
+  ],
+  "tools": [
+    {
+      "tool": "opencode",
+      "total": 5,
+      "passed": 5,
+      "score": 1.0,
+      "mean_duration_ms": 8814.782458398258,
+      "outcomes": [
+        {
+          "task_id": "smoke-hello",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 9938.043375004781,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite hello.py\nWrote file successfully.\n\u001b[0m\nCreated `hello.py`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-counter",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 8469.74041700014,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite counter.py\nWrote file successfully.\n\u001b[0m\nCreated `counter.py` with `the_answer()` returning 42.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-readme",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 8450.044291996164,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite README.md\nWrote file successfully.\n\u001b[0m\nCreated `README.md` with the title `# Test Project`.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-json",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 7539.5278329961,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite config.json\nWrote file successfully.\n\u001b[0m\nDone.\n",
+          "exit_code": 0
+        },
+        {
+          "task_id": "smoke-python-syntax",
+          "suite": "smoke",
+          "tool": "opencode",
+          "passed": true,
+          "score": 1.0,
+          "duration_ms": 9676.556374994107,
+          "error": "",
+          "stdout_tail": "\u001b[0m\n> build \u00b7 glm-5.2\n\u001b[0m\n\u001b[0m\u2190 \u001b[0mWrite valid.py\nWrote file successfully.\n\u001b[0m\nDone. `valid.py` created.\n",
+          "exit_code": 0
+        }
+      ]
+    }
+  ]
+}

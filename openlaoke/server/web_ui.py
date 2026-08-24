@@ -473,7 +473,7 @@ class WebUI:
         async def health_check() -> dict[str, str]:
             return {"status": "ok", "timestamp": str(time.time())}
 
-        @app.post("/api/chat")
+        @app.post("/api/chat", response_model=None)
         async def chat(request: ChatRequest) -> StreamingResponse | ChatResponse:
             session = await self._get_or_create_session(request.session_id)
             session_id = session.app_state.session_id
@@ -513,7 +513,7 @@ class WebUI:
             tool_use_id = f"tool_{uuid.uuid4().hex[:8]}"
             ctx = ToolContext(app_state=session.app_state, tool_use_id=tool_use_id)
 
-            result = await tool.call(ctx, **request.input)
+            result = await tool.safe_call(ctx, **request.input)
             return ToolResponse(
                 tool_use_id=tool_use_id,
                 content=result.content if isinstance(result.content, str) else result.content,
@@ -866,7 +866,7 @@ class WebUI:
         session_ctx = guard.ensure_session_context(
             model=session.app_state.session_config.model,
         )
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ] + [{"role": "user", "content": content}]
         if session_ctx:
@@ -905,7 +905,7 @@ class WebUI:
         session_ctx = guard.ensure_session_context(
             model=session.app_state.session_config.model,
         )
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ]
         if session_ctx:

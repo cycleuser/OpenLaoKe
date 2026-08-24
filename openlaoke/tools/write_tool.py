@@ -96,7 +96,11 @@ class WriteTool(Tool):
             )
 
         # --- read-before-write guard ---
-        if ctx.file_state is not None and hasattr(ctx.file_state, "was_read") and not ctx.file_state.was_read(abs_path):
+        if (
+            ctx.file_state is not None
+            and hasattr(ctx.file_state, "was_read")
+            and not ctx.file_state.was_read(abs_path)
+        ):
             key = f"{ctx.app_state.session_id}:{abs_path}"
             attempts = _WRITE_GUARD_ATTEMPTS.get(key, 0)
             if attempts < 1:
@@ -164,38 +168,14 @@ class WriteTool(Tool):
             )
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
     def _validate_path(self, resolved: str, cwd: str) -> str | None:
-        real_resolved = os.path.realpath(resolved)
-        real_cwd = os.path.realpath(cwd)
-        home = os.path.realpath(os.path.expanduser("~"))
+        from openlaoke.utils.path_safety import validate_path
 
-        if not _contains(real_cwd, real_resolved) and not _contains(home, real_resolved):
-            if _is_user_home_path(resolved):
-                return None
-            return f"Path '{resolved}' is outside workspace and home directory"
-        return None
-
-
-def _contains(parent: str, child: str) -> bool:
-    try:
-        rel = os.path.relpath(child, parent)
-        return not rel.startswith("..")
-    except ValueError:
-        return False
-
-
-def _is_user_home_path(path: str) -> bool:
-    home = os.path.realpath(os.path.expanduser("~"))
-    home_parent = os.path.dirname(home)
-    if path.startswith(home_parent + "/"):
-        parts = path[len(home_parent) + 1 :].split("/", 1)
-        if parts and os.path.basename(home).startswith(parts[0]):
-            return True
-    return False
+        return validate_path(resolved, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

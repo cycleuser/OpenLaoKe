@@ -105,9 +105,7 @@ async def run_health_checks(
                 )
             )
     else:
-        report.checks.append(
-            CheckResult(name="config", ok=False, detail="no config provided")
-        )
+        report.checks.append(CheckResult(name="config", ok=False, detail="no config provided"))
 
     # 4. Provider reachability
     if check_providers and config is not None:
@@ -120,14 +118,16 @@ async def run_health_checks(
                     CheckResult(
                         name=f"reachable_{name}",
                         ok=result.get("ok", False),
-                        detail=str(result.get("note") or result.get("error") or f"status {result.get('status','?')}"),
+                        detail=str(
+                            result.get("note")
+                            or result.get("error")
+                            or f"status {result.get('status', '?')}"
+                        ),
                         latency_ms=result.get("latency_ms", 0),
                     )
                 )
         except Exception as exc:
-            report.checks.append(
-                CheckResult(name="reachability", ok=False, detail=str(exc)[:200])
-            )
+            report.checks.append(CheckResult(name="reachability", ok=False, detail=str(exc)[:200]))
 
     # 5. Git
     import shutil

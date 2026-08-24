@@ -128,12 +128,18 @@ class AppState:
         env.update(self.env_vars)
         return env
 
-    def add_message(self, message: Message) -> None:
-        """Add message to history with timestamp, notify listeners, and persist."""
+    def add_message(self, message: Message, persist: bool = True) -> None:
+        """Add message to history with timestamp, notify listeners, and persist.
+
+        ``persist=False`` defers the synchronous disk write to an explicit
+        ``_persist()`` call — use it in hot agent loops that batch-persist at
+        turn boundaries to avoid blocking I/O on every message.
+        """
         message.timestamp = time.time()
         self.messages.append(message)
         self._notify()
-        self._persist()
+        if persist:
+            self._persist()
 
     def get_messages(self) -> list[Message]:
         """Get a copy of all messages."""

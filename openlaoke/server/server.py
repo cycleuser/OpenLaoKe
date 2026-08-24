@@ -31,6 +31,7 @@ from openlaoke.types.core_types import (
     MessageRole,
     StreamEventType,
     TokenUsage,
+    ToolUseBlock,
     UserMessage,
 )
 from openlaoke.utils.config import AppConfig, load_config, save_config
@@ -182,7 +183,7 @@ class Server:
         async def health_check() -> dict[str, str]:
             return {"status": "ok", "timestamp": str(time.time())}
 
-        @app.post("/api/chat")
+        @app.post("/api/chat", response_model=None)
         async def chat(request: ChatRequest) -> StreamingResponse | ChatResponse:
             session = await self._get_or_create_session(request.session_id)
             session_id = session.app_state.session_id
@@ -222,7 +223,7 @@ class Server:
             tool_use_id = f"tool_{uuid.uuid4().hex[:8]}"
             ctx = ToolContext(app_state=session.app_state, tool_use_id=tool_use_id)
 
-            result = await tool.call(ctx, **request.input)
+            result = await tool.safe_call(ctx, **request.input)
             return ToolResponse(
                 tool_use_id=tool_use_id,
                 content=result.content if isinstance(result.content, str) else result.content,
@@ -575,7 +576,7 @@ class Server:
         session_ctx = guard.ensure_session_context(
             model=session.app_state.session_config.model,
         )
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ] + [{"role": "user", "content": content}]
         if session_ctx:
@@ -614,31 +615,99 @@ class Server:
         session_ctx = guard.ensure_session_context(
             model=session.app_state.session_config.model,
         )
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": msg.role.value, "content": msg.content} for msg in session.app_state.messages
         ]
+        messages.append({"role": "user", "content": content})
         if session_ctx:
             messages.append({"role": "user", "content": session_ctx, "system_injected": True})
         tools = session.registry.get_all_for_prompt()
 
-        try:
-            async for chunk in session.api.stream_message(
-                system_prompt=system_prompt,
-                messages=messages,
-                tools=tools,
-                max_tokens=session.config.max_tokens,
-                temperature=session.config.temperature,
-            ):
-                if chunk.event_type == StreamEventType.TEXT and chunk.text:
-                    yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
+        max_iters = 20
+        for _ in range(max_iters):
+            pending_tools: list[ToolUseBlock] = []
+            try:
+                async for chunk in session.api.stream_message(
+                    system_prompt=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                    max_tokens=session.config.max_tokens,
+                    temperature=session.config.temperature,
+                ):
+                    if chunk.event_type == StreamEventType.TEXT and chunk.text:
+                        yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
 
-                if chunk.event_type == StreamEventType.USAGE and chunk.usage and chunk.cost:
-                    session.app_state.accumulate_tokens(chunk.usage)
-                    session.app_state.accumulate_cost(chunk.cost)
-                    yield f"data: {json.dumps({'type': 'usage', 'usage': {'input_tokens': chunk.usage.input_tokens, 'output_tokens': chunk.usage.output_tokens}, 'cost': chunk.cost.total_cost})}\n\n"
+                    elif chunk.event_type == StreamEventType.TOOL_CALL_START:
+                        try:
+                            args = (
+                                json.loads(chunk.tool_call_arguments)
+                                if chunk.tool_call_arguments
+                                else {}
+                            )
+                        except json.JSONDecodeError:
+                            args = {}
+                        pending_tools.append(
+                            ToolUseBlock(
+                                id=chunk.tool_call_id,
+                                name=chunk.tool_call_name,
+                                input=args,
+                            )
+                        )
+                        yield f"data: {json.dumps({'type': 'tool_call', 'name': chunk.tool_call_name})}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                    elif chunk.event_type == StreamEventType.USAGE:
+                        if chunk.usage:
+                            session.app_state.accumulate_tokens(chunk.usage)
+                        if chunk.cost:
+                            session.app_state.accumulate_cost(chunk.cost)
+                        if chunk.usage and chunk.cost:
+                            yield f"data: {json.dumps({'type': 'usage', 'usage': {'input_tokens': chunk.usage.input_tokens, 'output_tokens': chunk.usage.output_tokens}, 'cost': chunk.cost.total_cost})}\n\n"
+
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                break
+
+            if not pending_tools:
+                break
+
+            # Record the assistant turn then execute each tool and feed results back.
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": tu.id,
+                            "type": "function",
+                            "function": {
+                                "name": tu.name,
+                                "arguments": json.dumps(tu.input, ensure_ascii=False),
+                            },
+                        }
+                        for tu in pending_tools
+                    ],
+                }
+            )
+            for tu in pending_tools:
+                tool = session.registry.get(tu.name)
+                if not tool:
+                    result_content = f"Unknown tool: {tu.name}"
+                else:
+                    from openlaoke.core.tool import ToolContext
+
+                    ctx = ToolContext(app_state=session.app_state, tool_use_id=tu.id)
+                    validation = tool.validate_input(tu.input)
+                    if not validation.result:
+                        result_content = f"Validation error: {validation.message}"
+                    else:
+                        result = await tool.safe_call(ctx, **tu.input)
+                        result_content = (
+                            result.content
+                            if isinstance(result.content, str)
+                            else str(result.content)
+                        )
+                messages.append({"role": "tool", "tool_call_id": tu.id, "content": result_content})
+                yield f"data: {json.dumps({'type': 'tool_result', 'name': tu.name, 'content': result_content[:2000]})}\n\n"
 
         yield "data: [DONE]\n\n"
 
@@ -649,11 +718,11 @@ class Server:
 
     async def start_channels(self) -> None:
         from openlaoke.bus.queue import MessageBus
-        from openlaoke.channels.manager import ChannelManager
+        from openlaoke.channels.manager import ChannelManager, discover_builtin_channels
 
         bus = MessageBus()
         self._channel_manager = ChannelManager(bus=bus)
-        for name, cls in ChannelManager.discover_builtin_channels().items():
+        for name, cls in discover_builtin_channels().items():
             self._channel_manager.register_channel(name, cls)
         await self._channel_manager.start_all()
 

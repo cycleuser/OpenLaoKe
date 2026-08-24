@@ -78,6 +78,26 @@ class TestSnapshotStore:
         assert report[target] == "deleted"
         assert not os.path.exists(target)
 
+    def test_capture_conversation_persists(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "hello"}])
+        turn = store.load_turn("s1", 0)
+        assert turn.conversation == [{"role": "user", "content": "hello"}]
+
+    def test_capture_conversation_serializes_message_objects(self, store: SnapshotStore) -> None:
+        from openlaoke.types.core_types import MessageRole, UserMessage
+
+        store.capture_conversation("s1", 0, [UserMessage(role=MessageRole.USER, content="hi")])
+        turn = store.load_turn("s1", 0)
+        assert turn.conversation[0]["type"] == "user"
+        assert turn.conversation[0]["content"] == "hi"
+
+    def test_conversation_before(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "turn0"}])
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "turn1"}])
+        assert store.conversation_before("s1", 1) == [{"role": "user", "content": "turn0"}]
+        assert store.conversation_before("s1", 0) is None
+        assert store.conversation_before("s1", 99) == [{"role": "user", "content": "turn1"}]
+
     def test_fork_session(self, store: SnapshotStore) -> None:
         new_id, meta_path = store.fork_session("s1", 3)
         assert new_id.startswith("s1_fork_")
@@ -86,6 +106,32 @@ class TestSnapshotStore:
             meta = json.load(f)
         assert meta["parent"] == "s1"
         assert meta["fork_turn"] == 3
+
+    def test_fork_inherits_conversation_and_files(
+        self, store: SnapshotStore, workspace: str
+    ) -> None:
+        target = os.path.join(workspace, "a.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("v0")
+        store.capture_file("s1", 0, target)
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "msg0"}])
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "msg1"}])
+
+        new_id, _ = store.fork_session("s1", 1)
+        turns = store.all_turns(new_id)
+        assert [t.turn_index for t in turns] == [0, 1]
+        assert turns[0].conversation == [{"role": "user", "content": "msg0"}]
+        assert turns[1].conversation == [{"role": "user", "content": "msg1"}]
+        assert target in turns[0].files
+
+    def test_fork_at_tip_inherits_all(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "a"}])
+        store.capture_conversation("s1", 2, [{"role": "user", "content": "c"}])
+        new_id, meta_path = store.fork_session("s1", -1)
+        assert store.all_turns(new_id)[-1].conversation == [{"role": "user", "content": "c"}]
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+        assert meta["fork_turn"] == 2
 
     def test_save_and_load_turn(self, store: SnapshotStore, workspace: str) -> None:
         target = os.path.join(workspace, "a.txt")
@@ -117,14 +163,63 @@ class TestRewindOps:
         assert report.scope == "code"
         assert target in report.files
 
-    def test_rewind_conversation_report(self, store: SnapshotStore) -> None:
-        report = rewind_conversation(store, "s1", 5)
+    def test_rewind_conversation_truncates_messages(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "early"}])
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "late"}])
+        live: list[dict] = [
+            {"role": "user", "content": "early"},
+            {"role": "user", "content": "late"},
+            {"role": "assistant", "content": "answer"},
+        ]
+        report = rewind_conversation(store, "s1", 1, messages=live)
         assert report.scope == "conversation"
-        assert report.turns_dropped == 5
+        assert report.turns_dropped == 1
+        assert len(live) == 1
+        assert live[0].content == "early"
+
+    def test_rewind_conversation_no_recorded_keeps_live(self, store: SnapshotStore) -> None:
+        live: list[dict] = [{"role": "user", "content": "x"}]
+        report = rewind_conversation(store, "s1", 5, messages=live)
+        assert report.turns_dropped == 0
+        assert live == [{"role": "user", "content": "x"}]
+
+    def test_rewind_to_turn_zero_clears_messages(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "first"}])
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "second"}])
+        live: list[dict] = [
+            {"role": "user", "content": "first"},
+            {"role": "user", "content": "second"},
+        ]
+        report = rewind_conversation(store, "s1", 0, messages=live)
+        assert report.turns_dropped == 2
+        assert live == []
+
+    def test_rewind_before_first_turn_clears_messages(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 2, [{"role": "user", "content": "c"}])
+        live: list[dict] = [{"role": "user", "content": "c"}]
+        report = rewind_conversation(store, "s1", 1, messages=live)
+        assert report.turns_dropped == 1
+        assert live == []
 
     def test_rewind_both(self, store: SnapshotStore, workspace: str) -> None:
-        report = rewind_both(store, "s1", 5)
+        target = os.path.join(workspace, "a.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("v0")
+        store.capture_file("s1", 0, target)
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "early"}])
+        store.capture_file("s1", 1, target)
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "late"}])
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("v1")
+        live: list[dict] = [
+            {"role": "user", "content": "early"},
+            {"role": "user", "content": "late"},
+        ]
+        report = rewind_both(store, "s1", 1, messages=live)
         assert report.scope == "code+conversation"
+        assert target in report.files
+        assert len(live) == 1
+        assert live[0].content == "early"
 
     def test_fork_from(self, store: SnapshotStore) -> None:
         info = fork_from(store, "s1", 3, label="test")
@@ -145,3 +240,12 @@ class TestRewindOps:
         store.save_turn("s1", TurnSnapshot(turn_index=1))
         info = summarize_up_to(store, "s1", 1)
         assert info["scope"] == "up_to"
+
+    def test_summarize_conversation_rewind_available(self, store: SnapshotStore) -> None:
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "x"}])
+        assert summarize_from(store, "s1", 0)["conversation_rewind_available"] is True
+        assert summarize_up_to(store, "s1", 0)["conversation_rewind_available"] is True
+
+    def test_summarize_conversation_rewind_unavailable(self, store: SnapshotStore) -> None:
+        store.save_turn("s1", TurnSnapshot(turn_index=0))
+        assert summarize_from(store, "s1", 0)["conversation_rewind_available"] is False

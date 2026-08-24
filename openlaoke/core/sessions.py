@@ -175,6 +175,23 @@ class SessionManager:
             if data.get("compact_state"):
                 app_state.compact_state = data["compact_state"]
 
+            cost_data = data.get("cost_info", {})
+            if cost_data:
+                from openlaoke.types.core_types import CostInfo
+
+                app_state.cost_info = CostInfo(
+                    input_cost=cost_data.get("input_cost", 0.0),
+                    output_cost=cost_data.get("output_cost", 0.0),
+                    cache_read_cost=cost_data.get("cache_read_cost", 0.0),
+                    cache_creation_cost=cost_data.get("cache_creation_cost", 0.0),
+                )
+
+            app_state.insomnia_mode = data.get("insomnia_mode", False)
+            app_state.insomnia_task_queue = data.get("insomnia_task_queue", [])
+            app_state.insomnia_max_iterations = data.get("insomnia_max_iterations", 10)
+            app_state.insomnia_auto_accept = data.get("insomnia_auto_accept", False)
+            app_state.insomnia_log_path = data.get("insomnia_log_path", "")
+
             return app_state
 
         except Exception:

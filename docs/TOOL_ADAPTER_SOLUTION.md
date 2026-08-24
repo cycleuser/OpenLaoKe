@@ -140,9 +140,7 @@ user_request = "写一个单文件的python程序，计算CPU算力"
 model = "qwen3.5:0.8B"
 
 # 生成优化的提示词和执行提示
-optimized_prompt, hints = optimize_for_small_model(
-    model, user_request, base_prompt, tools
-)
+optimized_prompt, hints = optimize_for_small_model(model, user_request, base_prompt, tools)
 
 if hints["skip_context_gathering"]:
     print("⚡ 跳过文件读取，直接创建")

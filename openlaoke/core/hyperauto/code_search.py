@@ -416,13 +416,11 @@ class CodeSearchEngine:
         adapted_lines = []
         class_indent = "    "
         adapted_lines.append(f"{class_indent}class {target_class}:")
-        adapted = False
 
         for line in lines:
             if line.strip().startswith("def ") and not line.strip().startswith("def __"):
-                adapted = re.sub(r"def\s+(\w+)\(", r"def \1(self, ", line)
-                adapted_lines.append(class_indent + adapted)
-                adapted = True
+                adapted_line = re.sub(r"def\s+(\w+)\(", r"def \1(self, ", line)
+                adapted_lines.append(class_indent + adapted_line)
             elif line.strip():
                 adapted_lines.append(class_indent + line)
             else:

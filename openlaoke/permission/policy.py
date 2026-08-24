@@ -104,7 +104,9 @@ class Policy:
             return False
         return fnmatch.fnmatch(subject, rule.subject_glob)
 
-    def _match_rules(self, tool_name: str, tool_args: dict[str, Any], target: Decision) -> Decision | None:
+    def _match_rules(
+        self, tool_name: str, tool_args: dict[str, Any], target: Decision
+    ) -> Decision | None:
         """Check if any rule of the given decision type matches.
 
         Returns the decision if matched, None otherwise.
@@ -112,8 +114,10 @@ class Policy:
         subject = self.subject(tool_name, tool_args)
         short_name = tool_name.split(".")[-1] if "." in tool_name else tool_name
         rules = (
-            self._deny_rules if target == Decision.DENY
-            else self._allow_rules if target == Decision.ALLOW
+            self._deny_rules
+            if target == Decision.DENY
+            else self._allow_rules
+            if target == Decision.ALLOW
             else self._ask_rules
         )
         for rule in rules:

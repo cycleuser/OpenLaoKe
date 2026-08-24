@@ -21,9 +21,7 @@ def _lcs_length(a: list[str], b: list[str]) -> list[int]:
     return prev
 
 
-def _backtrack(
-    a: list[str], b: list[str], i: int, j: int, c: list[int]
-) -> list[dict]:
+def _backtrack(a: list[str], b: list[str], i: int, j: int, c: list[int]) -> list[dict]:
     if i > 0 and j > 0 and a[i - 1] == b[j - 1]:
         ops = _backtrack(a, b, i - 1, j - 1, c)
         ops.append({"op": "eq", "line": a[i - 1]})
@@ -41,9 +39,9 @@ def _backtrack(
 
 def _compute_ops(old_lines: list[str], new_lines: list[str]) -> list[dict]:
     if not old_lines:
-        return [{"op": "ins", "line": l} for l in new_lines]
+        return [{"op": "ins", "line": line} for line in new_lines]
     if not new_lines:
-        return [{"op": "del", "line": l} for l in old_lines]
+        return [{"op": "del", "line": line} for line in old_lines]
     c = _lcs_length(old_lines, new_lines)
     return _backtrack(old_lines, new_lines, len(old_lines), len(new_lines), c)
 
@@ -121,9 +119,7 @@ def _format_hunks(hunks: list[list[dict]]) -> str:
     return "\n".join(out)
 
 
-def diff_lines(
-    file_path: str, old_content: str, new_content: str, file_existed: bool
-) -> str:
+def diff_lines(file_path: str, old_content: str, new_content: str, file_existed: bool) -> str:
     """Generate a unified diff string between old and new file content.
 
     Args:

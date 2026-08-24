@@ -32,30 +32,34 @@ KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("tool_call", re.compile(r"Tool:\s*(\w+)")),
 ]
 
+# Combined alternation pattern: one finditer pass extracts all keyword types.
+_KEYWORD_COMBINED = re.compile("|".join(f"(?:{p.pattern})" for _, p in KEYWORD_PATTERNS))
+
+
+_extract_content_fn = None
+
 
 def _extract_content(message: Message) -> str:
-    from openlaoke.core.compact import extract_content
+    global _extract_content_fn
+    if _extract_content_fn is None:
+        from openlaoke.core.compact import extract_content
 
-    return extract_content(message)
-
-
-def _estimate_tokens(text: str) -> int:
-    return len(text) // 4
+        _extract_content_fn = extract_content
+    return _extract_content_fn(message)
 
 
 def extract_keywords(text: str, max_keywords: int = 50) -> list[str]:
-    """Extract key information from text using regex patterns."""
+    """Extract key information from text using a single combined regex pass."""
     keywords: list[str] = []
     seen: set[str] = set()
 
-    for _name, pattern in KEYWORD_PATTERNS:
-        for match in pattern.finditer(text):
-            keyword = match.group(0).strip()
-            if keyword and keyword not in seen and len(keyword) > 2:
-                seen.add(keyword)
-                keywords.append(keyword)
-                if len(keywords) >= max_keywords:
-                    return keywords
+    for match in _KEYWORD_COMBINED.finditer(text):
+        keyword = match.group(0).strip()
+        if keyword and keyword not in seen and len(keyword) > 2:
+            seen.add(keyword)
+            keywords.append(keyword)
+            if len(keywords) >= max_keywords:
+                return keywords
 
     return keywords
 
@@ -80,7 +84,10 @@ def fast_prune(
     if not messages:
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
-    total_tokens = sum(_estimate_tokens(_extract_content(m)) for m in messages)
+    # Precompute content + tokens once for every message to avoid repeated work.
+    contents = [_extract_content(m) for m in messages]
+    token_list = [len(c) // 4 for c in contents]
+    total_tokens = sum(token_list)
     if total_tokens <= max_tokens:
         return PruneResult(
             messages=messages,
@@ -92,12 +99,15 @@ def fast_prune(
     head_messages: list[Message] = []
     tail_messages: list[Message] = []
     middle_messages: list[Message] = []
+    middle_token_list: list[int] = []
+    middle_contents: list[str] = []
 
     head_tokens = 0
     tail_tokens = 0
 
     for i, msg in enumerate(messages):
-        tokens = _estimate_tokens(_extract_content(msg))
+        tokens = token_list[i]
+        content = contents[i]
 
         if i == 0 or (i < 3 and head_tokens < 2000):
             head_messages.append(msg)
@@ -107,24 +117,24 @@ def fast_prune(
             tail_tokens += tokens
         else:
             middle_messages.append(msg)
+            middle_token_list.append(tokens)
+            middle_contents.append(content)
 
     if not middle_messages:
         if total_tokens > max_tokens + keep_tail_tokens:
             head_messages = messages[:1]
-            remaining = max_tokens - _estimate_tokens(_extract_content(head_messages[0]))
+            remaining = max_tokens - token_list[0]
             tail_budget = min(keep_tail_tokens, remaining)
             tail_messages = []
             tail_tokens = 0
-            for msg in reversed(messages[1:]):
-                t = _estimate_tokens(_extract_content(msg))
+            for idx in range(len(messages) - 1, 0, -1):
+                t = token_list[idx]
                 if tail_tokens + t <= tail_budget:
-                    tail_messages.insert(0, msg)
+                    tail_messages.insert(0, messages[idx])
                     tail_tokens += t
                 else:
                     break
-            new_tokens = _estimate_tokens(_extract_content(head_messages[0])) + sum(
-                _estimate_tokens(_extract_content(m)) for m in tail_messages
-            )
+            new_tokens = token_list[0] + tail_tokens
             return PruneResult(
                 messages=head_messages + tail_messages,
                 tokens_before=total_tokens,
@@ -138,15 +148,32 @@ def fast_prune(
             elapsed_ms=(time.monotonic() - start) * 1000,
         )
 
+    # Sample middle messages for keyword extraction when the set is large:
+    # keep the first 20, last 10, and a uniform stride in between. This bounds
+    # the cost while still covering the whole middle span.
+    n_middle = len(middle_messages)
+    if n_middle > 50:
+        stride = max(1, n_middle // 20)
+        sample_idx = sorted(
+            set(
+                list(range(20))
+                + list(range(20, n_middle - 10, stride))
+                + list(range(max(20, n_middle - 10), n_middle))
+            )
+        )
+        sample_idx = [i for i in sample_idx if 0 <= i < n_middle]
+    else:
+        sample_idx = list(range(n_middle))
+
     all_keywords: list[str] = []
-    for msg in middle_messages:
-        content = _extract_content(msg)
-        keywords = extract_keywords(content)
+    for i in sample_idx:
+        keywords = extract_keywords(middle_contents[i])
         all_keywords.extend(keywords)
 
     keyword_lines = "\n".join(f"- {kw}" for kw in all_keywords[:80])
+    middle_tokens = sum(middle_token_list)
     summary_content = (
-        f"[Compressed: {len(middle_messages)} messages, {sum(_estimate_tokens(_extract_content(m)) for m in middle_messages)} tokens -> keywords]\n"
+        f"[Compressed: {n_middle} messages, {middle_tokens} tokens -> keywords]\n"
         f"Key information preserved:\n{keyword_lines}"
     )
 
@@ -159,7 +186,7 @@ def fast_prune(
     )
 
     new_messages = head_messages + [summary_msg] + tail_messages
-    new_tokens = sum(_estimate_tokens(_extract_content(m)) for m in new_messages)
+    new_tokens = head_tokens + (len(summary_content) // 4) + tail_tokens
 
     elapsed = (time.monotonic() - start) * 1000
 
@@ -193,7 +220,10 @@ def fast_prune_aggressive(
     if not messages:
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
-    total_tokens = sum(_estimate_tokens(_extract_content(m)) for m in messages)
+    # Precompute content + tokens once.
+    contents = [_extract_content(m) for m in messages]
+    token_list = [len(c) // 4 for c in contents]
+    total_tokens = sum(token_list)
     if total_tokens <= max_tokens:
         return PruneResult(
             messages=messages,
@@ -204,35 +234,53 @@ def fast_prune_aggressive(
 
     # Apply tool-result truncation BEFORE splitting head/middle/tail
     truncated_messages: list[Message] = []
-    for msg in messages:
-        if isinstance(msg, SystemMessage) and msg.subtype not in ("error", "warning"):
-            content = _extract_content(msg)
-            if len(content) > 3000:
-                lines = content.split("\n")
-                if len(lines) > 40:
-                    truncated = "\n".join(lines[:20]) + "\n... [truncated " + str(len(lines) - 30) + " lines] ...\n" + "\n".join(lines[-10:])
-                    truncated_messages.append(SystemMessage(
-                        role=msg.role,
-                        content=truncated,
-                        subtype=msg.subtype,
-                    ))
-                    continue
+    truncated_tokens: list[int] = []
+    truncated_contents: list[str] = []
+    for msg, content, tokens in zip(messages, contents, token_list, strict=False):
+        if (
+            isinstance(msg, SystemMessage)
+            and msg.subtype not in ("error", "warning")
+            and len(content) > 3000
+            and len(content.split("\n")) > 40
+        ):
+            lines = content.split("\n")
+            truncated = (
+                "\n".join(lines[:20])
+                + "\n... [truncated "
+                + str(len(lines) - 30)
+                + " lines] ...\n"
+                + "\n".join(lines[-10:])
+            )
+            truncated_messages.append(
+                SystemMessage(
+                    role=msg.role,
+                    content=truncated,
+                    subtype=msg.subtype,
+                )
+            )
+            truncated_tokens.append(len(truncated) // 4)
+            truncated_contents.append(truncated)
+            continue
         truncated_messages.append(msg)
+        truncated_tokens.append(tokens)
+        truncated_contents.append(content)
     messages = truncated_messages
+    token_list = truncated_tokens
+    contents = truncated_contents
 
     # Keep only first message as head
     head_messages = messages[:1]
-    head_tokens = _estimate_tokens(_extract_content(messages[0]))
+    head_tokens = token_list[0] if token_list else 0
 
     # Aggressive tail budget: 25% of max_tokens
     tail_budget = max(512, max_tokens // 4)
     tail_messages: list[Message] = []
     tail_tokens = 0
 
-    for msg in reversed(messages[1:]):
-        t = _estimate_tokens(_extract_content(msg))
+    for idx in range(len(messages) - 1, 0, -1):
+        t = token_list[idx]
         if tail_tokens + t <= tail_budget:
-            tail_messages.insert(0, msg)
+            tail_messages.insert(0, messages[idx])
             tail_tokens += t
         else:
             break
@@ -240,19 +288,31 @@ def fast_prune_aggressive(
     # Keyword extraction from skipped middle
     middle_start = len(head_messages)
     middle_end = len(messages) - len(tail_messages)
-    middle = messages[middle_start:middle_end]
+
+    # Sample large middles to bound cost.
+    n_middle = middle_end - middle_start
+    if n_middle > 50:
+        stride = max(1, n_middle // 20)
+        sample_idx = (
+            list(range(middle_start, middle_start + 20, 1))
+            + list(range(middle_start + 20, middle_end - 10, stride))
+            + list(range(max(middle_start + 20, middle_end - 10), middle_end))
+        )
+        sample_idx = sorted(set(i for i in sample_idx if middle_start <= i < middle_end))
+    else:
+        sample_idx = list(range(middle_start, middle_end))
 
     all_keywords: list[str] = []
-    for msg in middle:
-        content = _extract_content(msg)
-        keywords = extract_keywords(content, max_keywords=30)
+    for i in sample_idx:
+        keywords = extract_keywords(contents[i], max_keywords=30)
         all_keywords.extend(keywords)
 
     keyword_lines = "\n".join(f"- {kw}" for kw in all_keywords[:50])
     summary_content = (
-        f"[Compressed: {len(middle)} messages skipped. "
-        f"Key info:]\n{keyword_lines}"
-    ) if keyword_lines else f"[Compressed: {len(middle)} messages skipped.]"
+        (f"[Compressed: {n_middle} messages skipped. Key info:]\n{keyword_lines}")
+        if keyword_lines
+        else f"[Compressed: {n_middle} messages skipped.]"
+    )
 
     summary_msg = SystemMessage(
         role=MessageRole.SYSTEM,
@@ -261,7 +321,7 @@ def fast_prune_aggressive(
     )
 
     new_messages = head_messages + [summary_msg] + tail_messages
-    new_tokens = sum(_estimate_tokens(_extract_content(m)) for m in new_messages)
+    new_tokens = head_tokens + (len(summary_content) // 4) + tail_tokens
     elapsed = (time.monotonic() - start) * 1000
 
     return PruneResult(

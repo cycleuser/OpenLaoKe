@@ -15,7 +15,6 @@ import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
 
 # ---- Task definitions -------------------------------------------------------
@@ -61,8 +60,11 @@ TASKS: list[dict[str, Any]] = [
         "max_tokens": 400,
         "temperature": 0.1,
         "check": lambda c: (
-            "tool_call" in c or "Bash" in c or "ls" in c.lower()
-            or "Glob" in c or "find" in c.lower()
+            "tool_call" in c
+            or "Bash" in c
+            or "ls" in c.lower()
+            or "Glob" in c
+            or "find" in c.lower()
         ),
     },
     {
@@ -91,7 +93,7 @@ TASKS: list[dict[str, Any]] = [
         "user": (
             "任务:\n"
             "1. 创建 /tmp/olk_demo 目录\n"
-            "2. 在里面创建 config.json 写入 {\"debug\": true}\n"
+            '2. 在里面创建 config.json 写入 {"debug": true}\n'
             "3. 验证文件已创建\n"
             "列出每个步骤要用的命令。"
         ),
@@ -119,9 +121,7 @@ TASKS: list[dict[str, Any]] = [
         ),
         "max_tokens": 500,
         "temperature": 0.1,
-        "check": lambda c: (
-            "KeyError" in c or "key" in c.lower() or "get(" in c
-        ),
+        "check": lambda c: "KeyError" in c or "key" in c.lower() or "get(" in c,
     },
 ]
 
@@ -180,9 +180,9 @@ async def test_ollama_model(
 ) -> ModelReport:
     import httpx
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  TESTING: {model_name} (Ollama)")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     report = ModelReport(
         model_name=model_name,
@@ -202,24 +202,32 @@ async def test_ollama_model(
 
             t0 = time.time()
             try:
-                r = await client.post(f"{base_url}/chat/completions", json={
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "max_tokens": max_tok,
-                    "temperature": temp,
-                })
+                r = await client.post(
+                    f"{base_url}/chat/completions",
+                    json={
+                        "model": model_name,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "max_tokens": max_tok,
+                        "temperature": temp,
+                    },
+                )
                 r.raise_for_status()
             except Exception as e:
                 print(f"API ERROR: {e}")
-                report.tasks.append(TaskResult(
-                    task_id=task_id, task_name=task_def["name"],
-                    passed=False, duration_s=time.time()-t0,
-                    system_prompt=system, user_prompt=user,
-                    response=f"API ERROR: {e}",
-                ))
+                report.tasks.append(
+                    TaskResult(
+                        task_id=task_id,
+                        task_name=task_def["name"],
+                        passed=False,
+                        duration_s=time.time() - t0,
+                        system_prompt=system,
+                        user_prompt=user,
+                        response=f"API ERROR: {e}",
+                    )
+                )
                 continue
 
             dt = time.time() - t0
@@ -250,8 +258,10 @@ async def test_ollama_model(
     report.total_time_s = sum(t.duration_s for t in report.tasks)
     report.avg_time_s = report.total_time_s / max(report.total_tests, 1)
 
-    print(f"\n  RESULT: {report.total_passed}/{report.total_tests}  "
-          f"Total: {report.total_time_s:.1f}s  Avg: {report.avg_time_s:.1f}s")
+    print(
+        f"\n  RESULT: {report.total_passed}/{report.total_tests}  "
+        f"Total: {report.total_time_s:.1f}s  Avg: {report.avg_time_s:.1f}s"
+    )
 
     return report
 
@@ -267,10 +277,10 @@ def test_gguf_model(
     from llama_cpp import Llama
 
     model_name = os.path.basename(model_path).replace(".gguf", "")
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  TESTING: {model_name} (GGUF)")
     print(f"  Path: {model_path}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     size_mb = os.path.getsize(model_path) / (1024 * 1024)
 
@@ -307,12 +317,17 @@ def test_gguf_model(
             )
         except Exception as e:
             print(f"ERROR: {e}")
-            report.tasks.append(TaskResult(
-                task_id=task_id, task_name=task_def["name"],
-                passed=False, duration_s=time.time()-t0,
-                system_prompt=system, user_prompt=user,
-                response=f"LLAMA ERROR: {e}",
-            ))
+            report.tasks.append(
+                TaskResult(
+                    task_id=task_id,
+                    task_name=task_def["name"],
+                    passed=False,
+                    duration_s=time.time() - t0,
+                    system_prompt=system,
+                    user_prompt=user,
+                    response=f"LLAMA ERROR: {e}",
+                )
+            )
             continue
 
         dt = time.time() - t0
@@ -343,8 +358,10 @@ def test_gguf_model(
     report.total_time_s = sum(t.duration_s for t in report.tasks)
     report.avg_time_s = report.total_time_s / max(report.total_tests, 1)
 
-    print(f"\n  RESULT: {report.total_passed}/{report.total_tests}  "
-          f"Total: {report.total_time_s:.1f}s  Avg: {report.avg_time_s:.1f}s")
+    print(
+        f"\n  RESULT: {report.total_passed}/{report.total_tests}  "
+        f"Total: {report.total_time_s:.1f}s  Avg: {report.avg_time_s:.1f}s"
+    )
 
     return report
 
@@ -380,7 +397,7 @@ def print_summary(reports: list[ModelReport]) -> None:
     print("  FINAL SUMMARY — ALL MODELS")
     print("=" * 80)
     print(f"  {'Model':40s} {'Score':8s} {'Time':8s} {'Avg':8s} {'Load':8s}")
-    print(f"  {'-'*72}")
+    print(f"  {'-' * 72}")
     for r in sorted(reports, key=lambda x: x.total_passed, reverse=True):
         medal = "🥇" if r.total_passed >= 7 else ("🥈" if r.total_passed >= 6 else "🥉")
         print(
@@ -393,9 +410,7 @@ def print_summary(reports: list[ModelReport]) -> None:
 
 
 def main() -> None:
-    out_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "test_reports"
-    )
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_reports")
 
     # Filter by --model if specified
     target = None

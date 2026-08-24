@@ -64,6 +64,13 @@ class ApplyPatchTool(Tool):
 
                 abs_path = self._resolve_path(target_file, ctx.app_state.get_cwd())
 
+                from openlaoke.utils.path_safety import validate_path
+
+                path_error = validate_path(abs_path, ctx.app_state.get_cwd())
+                if path_error:
+                    results.append(f"Skipped {target_file}: {path_error}")
+                    continue
+
                 if not os.path.exists(abs_path):
                     results.append(f"Skipped {target_file}: File not found")
                     continue
@@ -88,17 +95,9 @@ class ApplyPatchTool(Tool):
             )
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        resolved = (
-            os.path.normpath(os.path.join(cwd, path))
-            if not os.path.isabs(path)
-            else os.path.normpath(path)
-        )
-        real_cwd = os.path.realpath(cwd)
-        home = os.path.realpath(os.path.expanduser("~"))
-        real_resolved = os.path.realpath(resolved)
-        if not (real_resolved.startswith(real_cwd) or real_resolved.startswith(home)):
-            raise ValueError(f"Path '{path}' is outside workspace and home directory")
-        return resolved
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
     def _parse_patch(self, patch_content: str) -> list[dict[str, Any]]:
         patches = []

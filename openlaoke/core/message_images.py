@@ -90,7 +90,7 @@ def model_supports_vision(model: str) -> bool:
     return any(vm in model.lower() for vm in vision_models)
 
 
-def _resolve(path: str, workspace: str | None) -> str | None:
+def _resolve(path: str, workspace: str | None) -> str:
     if os.path.isabs(path):
         return path
     if workspace:

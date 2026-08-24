@@ -20,11 +20,22 @@
 - **改进**: 添加中文关键词支持
   ```python
   # 新增关键词
-  "翻译", "translate", "convert", "生成", "generate", "移植", "port",  # creation
-  "修复",  # bugfix
-  "优化", "重构",  # refactor
-  "测试",  # testing
-  "文档",  # documentation
+  (
+      "翻译",
+      "translate",
+      "convert",
+      "生成",
+      "generate",
+      "移植",
+      "port",
+  )  # creation
+  ("修复",)  # bugfix
+  (
+      "优化",
+      "重构",
+  )  # refactor
+  ("测试",)  # testing
+  ("文档",)  # documentation
   ```
 - **效果**: "翻译成C语言"现在会被正确识别为"creation"任务
 
@@ -36,13 +47,13 @@
   - 每个任务有明确的`target_file`指定
   ```python
   # 新增7个具体任务
-  - create_openlaoke_c_directory
-  - create_openlaoke_c_core_types
-  - create_openlaoke_c_core_state
-  - create_openlaoke_c_tools
-  - create_openlaoke_c_commands
-  - create_openlaoke_c_main
-  - create_openlaoke_c_makefile
+  -create_openlaoke_c_directory
+  -create_openlaoke_c_core_types
+  -create_openlaoke_c_core_state
+  -create_openlaoke_c_tools
+  -create_openlaoke_c_commands
+  -create_openlaoke_c_main
+  -create_openlaoke_c_makefile
   ```
 
 ### 4. 改进AI提示

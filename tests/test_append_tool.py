@@ -1,4 +1,5 @@
 """Tests for AppendFile tool."""
+
 from __future__ import annotations
 
 import os

@@ -339,7 +339,7 @@ class InsomniaEngine:
                         )
                         continue
 
-                    result = await tool.call(ctx, **tool_use.input)
+                    result = await tool.safe_call(ctx, **tool_use.input)
                     result_content = (
                         result.content if isinstance(result.content, str) else str(result.content)
                     )

@@ -1,4 +1,5 @@
 """Tests for openlaoke.utils.diff — LCS diff generator ported from sekrun."""
+
 from __future__ import annotations
 
 from openlaoke.utils.diff import diff_lines
@@ -31,8 +32,10 @@ class TestDiffLines:
 
     def test_multiple_hunks(self):
         old = "\n".join(f"line{i}" for i in range(1, 21))
-        new = "\n".join(f"line{i}" for i in range(1, 11)) + "\n" + "\n".join(
-            f"line{i}" for i in range(16, 21)
+        new = (
+            "\n".join(f"line{i}" for i in range(1, 11))
+            + "\n"
+            + "\n".join(f"line{i}" for i in range(16, 21))
         )
         result = diff_lines("a.py", old, new, True)
         assert result.count("@@") >= 1

@@ -122,7 +122,8 @@ class FindAndReadTool(Tool):
         if glob_result.is_error:
             return glob_result
 
-        lines = glob_result.content.strip().split("\n")
+        glob_text = glob_result.content if isinstance(glob_result.content, str) else ""
+        lines = glob_text.strip().split("\n")
         file_paths = [line.strip() for line in lines if line.strip() and not line.startswith("#")]
         file_paths = file_paths[:max_files]
 
@@ -137,7 +138,8 @@ class FindAndReadTool(Tool):
         outputs = [f"Found {len(file_paths)} file(s) matching '{pattern}':\n"]
         for fp in file_paths:
             r = await read_tool.call(ctx, file_path=fp, limit=100)
-            outputs.append(r.content if not r.is_error else f"Error reading {fp}: {r.content}")
+            text = r.content if isinstance(r.content, str) else str(r.content)
+            outputs.append(text if not r.is_error else f"Error reading {fp}: {text}")
             outputs.append("")
 
         return ToolResultBlock(

@@ -106,7 +106,7 @@ class LLMProvider(abc.ABC):
         self._identical_error_count = 0
 
     @abc.abstractmethod
-    async def stream(self, request: ProviderRequest) -> AsyncIterator[Chunk]:
+    def stream(self, request: ProviderRequest) -> AsyncIterator[Chunk]:
         """Stream a response as a sequence of typed chunks."""
         raise NotImplementedError
 
@@ -213,11 +213,20 @@ class LLMProvider(abc.ABC):
 
 
 def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge consecutive same-role messages and ensure user-first."""
+    """Merge consecutive same-role messages and ensure user-first.
+
+    Tool-role messages are never merged — OpenAI-compatible providers
+    require one tool message per tool_call_id.
+    """
     if not messages:
         return messages
     fixed: list[dict[str, Any]] = []
     for msg in messages:
+        # Tool results must stay individual — merging them breaks the
+        # one-tool-message-per-tool_call_id contract on strict providers.
+        if msg.get("role") == "tool":
+            fixed.append(dict(msg))
+            continue
         if fixed and fixed[-1].get("role") == msg.get("role"):
             prev = fixed[-1]
             content = prev.get("content", "")

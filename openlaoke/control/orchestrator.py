@@ -25,25 +25,42 @@ from openlaoke.bus.queue import MessageBus
 from openlaoke.bus.runtime_events import AgentEvent, EventKind, EventSink, make_event
 from openlaoke.control.commands import (
     ApproveCommand,
+    BranchCommand,
     CancelCommand,
     CompactCommand,
     ControllerCommand,
+    ForgetMemoryCommand,
     ForkCommand,
     NewSessionCommand,
     QuickAddCommand,
     ResumeSessionCommand,
     RewindCommand,
+    SaveDocCommand,
+    SetBypassCommand,
     SetPlanModeCommand,
     SubmitCommand,
+    SummarizeFromCommand,
+    SummarizeUpToCommand,
+    SwitchCommand,
 )
 from openlaoke.control.controller import ApprovalTicket, SessionState, TurnHandle
 from openlaoke.control.phase import RunResult, TurnPhase, can_transition
 from openlaoke.core.tool_dedup import ToolDedup
 from openlaoke.permission.policy import Decision
+from openlaoke.plan.state import plan_mode_block_message
+from openlaoke.snapshot.rewind import (
+    rewind_both,
+    rewind_code,
+    rewind_conversation,
+    summarize_from,
+    summarize_up_to,
+)
+from openlaoke.snapshot.store import SnapshotStore
 from openlaoke.types.core_types import (
     AssistantMessage,
     MessageRole,
     StreamEventType,
+    SystemMessage,
     TokenUsage,
     ToolUseBlock,
     UserMessage,
@@ -105,11 +122,22 @@ class Orchestrator:
         self._turns: dict[str, TurnHandle] = {}
         self._approvals: dict[str, ApprovalTicket] = {}
         self._pending_memory: dict[str, list[str]] = {}
+        self._turn_counters: dict[str, int] = {}
+        self._snapshot_store_instance: SnapshotStore | None = None
+        self._memory_store_instance: Any = None
         self._closed = False
         self._cfg: AgentLoopConfig | None = None
 
     def configure(self, cfg: AgentLoopConfig) -> None:
         self._cfg = cfg
+
+    def set_snapshot_store(self, store: SnapshotStore) -> None:
+        """Inject a SnapshotStore (e.g. a temp-dir store in tests)."""
+        self._snapshot_store_instance = store
+
+    def set_memory_store(self, store: Any) -> None:
+        """Inject a memory store (must expose store()/delete())."""
+        self._memory_store_instance = store
 
     @property
     def cfg(self) -> AgentLoopConfig:
@@ -178,6 +206,20 @@ class Orchestrator:
             return await self.rewind(session_id, command.target, command.scope)
         if isinstance(command, ForkCommand):
             return await self.fork(session_id, command.target, command.label)
+        if isinstance(command, BranchCommand):
+            return await self.branch(session_id, command.label)
+        if isinstance(command, SwitchCommand):
+            return await self.switch(session_id, command.target)
+        if isinstance(command, SummarizeFromCommand):
+            return await self.summarize_from(session_id, command.target)
+        if isinstance(command, SummarizeUpToCommand):
+            return await self.summarize_up_to(session_id, command.target)
+        if isinstance(command, SetBypassCommand):
+            return self.set_bypass(session_id, command.enabled)
+        if isinstance(command, ForgetMemoryCommand):
+            return self.forget_memory(session_id, command.fact_id)
+        if isinstance(command, SaveDocCommand):
+            return self.save_doc(session_id, command.text, command.target)
         if isinstance(command, QuickAddCommand):
             return self.queue_pending_memory(session_id, command.note)
         return None
@@ -195,6 +237,7 @@ class Orchestrator:
             )
         turn_id = uuid.uuid4().hex[:10]
         state = self.sessions_for(session_id)
+        turn_index = self._next_turn_index(session_id)
         start = time.time()
 
         await self.emit(make_event(EventKind.TURN_STARTED, session_id, turn_id=turn_id, text=text))
@@ -248,6 +291,7 @@ class Orchestrator:
         finally:
             if app_state:
                 app_state.is_running = False
+            await self._capture_turn(session_id, turn_index)
             await self.emit(make_event(EventKind.TURN_DONE, session_id, turn_id=turn_id))
 
     # -- agent loop core -----------------------------------------------------
@@ -363,7 +407,7 @@ class Orchestrator:
                     assistant = AssistantMessage(
                         role=MessageRole.ASSISTANT,
                         content=content_text,
-                        reasoning=reasoning_text if reasoning_text else None,
+                        thinking=reasoning_text or "",
                     )
                     if usage:
                         app_state.add_token_usage(usage)
@@ -375,8 +419,22 @@ class Orchestrator:
 
                 dedup_block = dedup.check(tu.name, _safe_dict(tu.input))
                 if dedup_block:
+                    messages.append({"role": "tool", "tool_call_id": tu.id, "content": dedup_block})
+                    continue
+
+                session_state = self._sessions.get(session_id)
+                if (
+                    session_state is not None
+                    and session_state.plan.enabled
+                    and not session_state.plan.is_writer_allowed()
+                    and not self._is_plan_exempt(tu.name)
+                ):
                     messages.append(
-                        {"role": "tool", "tool_call_id": tu.id, "content": dedup_block}
+                        {
+                            "role": "tool",
+                            "tool_call_id": tu.id,
+                            "content": plan_mode_block_message(tu.name),
+                        }
                     )
                     continue
 
@@ -394,7 +452,7 @@ class Orchestrator:
                     if result.decision == Decision.ASK:
                         await self.emit(
                             make_event(
-                                EventKind.APPROVAL_NEEDED,
+                                EventKind.APPROVAL_REQUEST,
                                 session_id,
                                 tool_name=tu.name,
                                 tool_args=_safe_dict(tu.input),
@@ -419,7 +477,11 @@ class Orchestrator:
                     registry = self.cfg.registry
                     if registry and hasattr(registry, "execute"):
                         result_block = await registry.execute(tu.name, _safe_dict(tu.input))
-                        tool_output = result_block.output if hasattr(result_block, "output") else str(result_block)
+                        tool_output = (
+                            result_block.output
+                            if hasattr(result_block, "output")
+                            else str(result_block)
+                        )
                     else:
                         tool_output = f"Tool '{tu.name}' not found in registry"
                 except Exception as exc:
@@ -429,26 +491,32 @@ class Orchestrator:
 
                 max_out = 32000
                 if len(tool_output) > max_out:
-                    tool_output = tool_output[:max_out] + f"\n\n... (truncated {len(tool_output) - max_out} bytes)"
+                    tool_output = (
+                        tool_output[:max_out]
+                        + f"\n\n... (truncated {len(tool_output) - max_out} bytes)"
+                    )
 
-                messages.append(
-                    {"role": "tool", "tool_call_id": tu.id, "content": tool_output}
-                )
+                messages.append({"role": "tool", "tool_call_id": tu.id, "content": tool_output})
 
                 if app_state:
                     app_state.add_message(
-                        UserMessage(
+                        SystemMessage(
                             role=MessageRole.SYSTEM,
                             content=tool_output,
+                            subtype="tool_result",
                             tool_use_id=tu.id,
                         )
                     )
 
             if total_tool_calls > 50:
                 messages.append(
-                    {"role": "user", "content": "[System] You have made 50 tool calls. Respond concisely now."}
+                    {
+                        "role": "user",
+                        "content": "[System] You have made 50 tool calls. Respond concisely now.",
+                    }
                 )
 
+        await self._capture_turn(session_id, self._next_turn_index(session_id))
         return messages
 
     # -- permissions ---------------------------------------------------------
@@ -501,10 +569,13 @@ class Orchestrator:
     def set_plan_mode(self, session_id: str, enabled: bool) -> None:
         state = self.sessions_for(session_id)
         state.plan_mode = enabled
+        state.plan.enabled = enabled
+        if not enabled:
+            state.plan.auto_approve = False
 
     def is_plan_mode(self, session_id: str) -> bool:
         state = self._sessions.get(session_id)
-        return bool(state and state.plan_mode)
+        return bool(state and (state.plan_mode or state.plan.enabled))
 
     def is_bypass(self, session_id: str) -> bool:
         state = self._sessions.get(session_id)
@@ -519,27 +590,155 @@ class Orchestrator:
         await self._run_phase(state, TurnPhase.COMPACT)
 
     async def rewind(self, session_id: str, target_turn: int, scope: str) -> dict[str, Any]:
+        store = self._snapshot_store()
+        app_state = self.cfg.app_state
+        messages = app_state.messages if app_state is not None else None
+
+        if scope == "code":
+            report = rewind_code(store, session_id, target_turn)
+        elif scope == "conversation":
+            report = rewind_conversation(store, session_id, target_turn, messages=messages)
+        else:
+            report = rewind_both(store, session_id, target_turn, messages=messages)
+
         await self.emit(
             make_event(
                 EventKind.NOTICE,
                 session_id,
                 level="info",
-                message=f"Rewind turn={target_turn} scope={scope}",
+                message=(
+                    f"Rewind turn={target_turn} scope={report.scope} "
+                    f"files={len(report.files)} turns_dropped={report.turns_dropped}"
+                ),
             )
         )
-        return {"rewound": True, "target_turn": target_turn, "scope": scope}
+        return {
+            "rewound": True,
+            "target_turn": target_turn,
+            "scope": report.scope,
+            "files_restored": len(report.files),
+            "turns_dropped": report.turns_dropped,
+            "files": report.files,
+        }
 
     async def fork(self, session_id: str, target_turn: int | None, label: str) -> str:
-        new_id = self.new_session()
+        store = self._snapshot_store()
+        effective = target_turn if target_turn is not None else -1
+        new_id, meta_path = store.fork_session(session_id, effective)
+        state = self.register_session(new_id)
+        parent = self._sessions.get(session_id)
+        if parent is not None:
+            state.bypass = parent.bypass
+            state.plan_mode = parent.plan_mode
+            state.plan.enabled = parent.plan.enabled
+        self._init_fork_turn_counter(store, new_id, effective)
         await self.emit(
             make_event(
                 EventKind.NOTICE,
                 session_id,
                 level="info",
-                message=f"Forked into {new_id}",
+                message=f"Forked into {new_id} at turn {effective}",
             )
         )
         return new_id
+
+    async def branch(self, session_id: str, label: str) -> str:
+        store = self._snapshot_store()
+        new_id, meta_path = store.fork_session(session_id, -1)
+        state = self.register_session(new_id)
+        parent = self._sessions.get(session_id)
+        if parent is not None:
+            state.bypass = parent.bypass
+            state.plan_mode = parent.plan_mode
+            state.plan.enabled = parent.plan.enabled
+        self._init_fork_turn_counter(store, new_id, -1)
+        await self.emit(
+            make_event(
+                EventKind.NOTICE,
+                session_id,
+                level="info",
+                message=f"Branch {label or new_id} created from {session_id} tip",
+            )
+        )
+        return new_id
+
+    async def switch(self, session_id: str, target: str) -> str:
+        if target in self._sessions:
+            await self.emit(
+                make_event(
+                    EventKind.NOTICE,
+                    session_id,
+                    level="info",
+                    message=f"Switched active session to {target}",
+                )
+            )
+            return target
+        await self.emit(
+            make_event(
+                EventKind.NOTICE,
+                session_id,
+                level="error",
+                message=f"Cannot switch to unknown session '{target}'",
+            )
+        )
+        return ""
+
+    async def summarize_from(self, session_id: str, target_turn: int) -> dict[str, Any]:
+        store = self._snapshot_store()
+        info = summarize_from(store, session_id, target_turn)
+        await self.emit(
+            make_event(
+                EventKind.NOTICE,
+                session_id,
+                level="info",
+                message=f"Summarized from turn {target_turn}: {info['compacted']} turns",
+            )
+        )
+        return info
+
+    async def summarize_up_to(self, session_id: str, target_turn: int) -> dict[str, Any]:
+        store = self._snapshot_store()
+        info = summarize_up_to(store, session_id, target_turn)
+        await self.emit(
+            make_event(
+                EventKind.NOTICE,
+                session_id,
+                level="info",
+                message=f"Summarized up to turn {target_turn}: {info['compacted']} turns",
+            )
+        )
+        return info
+
+    # -- memory ---------------------------------------------------------------
+
+    def forget_memory(self, session_id: str, fact_id: str) -> bool:
+        store = self._memory_store()
+        if store is None:
+            return False
+        try:
+            return bool(store.delete(fact_id))
+        except Exception as exc:
+            logger.warning("Failed to forget memory %s: %s", fact_id, exc)
+            return False
+
+    def save_doc(self, session_id: str, text: str, target: str) -> str:
+        store = self._memory_store()
+        if store is None:
+            return ""
+        try:
+            from openlaoke.core.memory.sqlite_store import MemoryRecord
+
+            record = MemoryRecord(
+                id=f"doc_{uuid.uuid4().hex[:8]}",
+                content=text,
+                memory_type="doc",
+                key=target or "project",
+            )
+            doc_id = store.store(record)
+            return str(doc_id) if doc_id else ""
+        except Exception as exc:
+            logger.warning("Failed to save doc: %s", exc)
+            return ""
 
     # -- memory ---------------------------------------------------------------
 
@@ -554,14 +753,71 @@ class Orchestrator:
 
     # -- internals -----------------------------------------------------------
 
+    def _next_turn_index(self, session_id: str) -> int:
+        idx = self._turn_counters.get(session_id, 0)
+        self._turn_counters[session_id] = idx + 1
+        return idx
+
+    def _init_fork_turn_counter(self, store: SnapshotStore, new_id: str, effective: int) -> None:
+        """Seed the forked session's turn counter past the fork point so
+        the inherited snapshot records are never overwritten."""
+        existing = store.all_turns(new_id)
+        next_idx = max((t.turn_index for t in existing), default=-1) + 1
+        self._turn_counters[new_id] = max(next_idx, effective + 1)
+
+    async def _capture_turn(self, session_id: str, turn_index: int) -> None:
+        app_state = self.cfg.app_state
+        if app_state is None:
+            return
+        try:
+            store = self._snapshot_store()
+            store.capture_conversation(session_id, turn_index, app_state.messages)
+        except Exception as exc:
+            logger.warning("Failed to capture conversation for %s: %s", session_id, exc)
+
+    def _snapshot_store(self) -> SnapshotStore:
+        if self._snapshot_store_instance is not None:
+            return self._snapshot_store_instance
+        app_state = self.cfg.app_state
+        if app_state is not None:
+            try:
+                store = app_state.snapshot_store
+                if isinstance(store, SnapshotStore):
+                    return store
+            except Exception:
+                pass
+        self._snapshot_store_instance = SnapshotStore()
+        return self._snapshot_store_instance
+
+    def _memory_store(self) -> Any:
+        if self._memory_store_instance is None:
+            try:
+                from openlaoke.core.memory.sqlite_store import SQLiteMemoryStore
+
+                self._memory_store_instance = SQLiteMemoryStore()
+            except Exception as exc:
+                logger.warning("Memory store unavailable: %s", exc)
+                self._memory_store_instance = False
+        return self._memory_store_instance or None
+
+    def _is_plan_exempt(self, tool_name: str) -> bool:
+        """Tools allowed while plan mode blocks writers."""
+        if tool_name == "Plan":
+            return True
+        registry = self.cfg.registry
+        if registry is not None and hasattr(registry, "is_readonly"):
+            try:
+                return bool(registry.is_readonly(tool_name))
+            except Exception:
+                return False
+        return False
+
     async def _run_phase(self, state: SessionState, phase: TurnPhase) -> None:
         current = getattr(state, "phase", TurnPhase.RESTORE)
         if not can_transition(current, phase) and phase != TurnPhase.RESTORE:
             return
         state.phase = phase
-        await self.emit(
-            make_event(EventKind.PHASE, state.session_id, phase=phase.value)
-        )
+        await self.emit(make_event(EventKind.PHASE, state.session_id, phase=phase.value))
 
     async def shutdown(self) -> None:
         self._closed = True

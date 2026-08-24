@@ -16,8 +16,10 @@ import contextlib
 import gc
 import json
 import os
+import re
 import signal
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -26,11 +28,15 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
-from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.commands.registry import get_command, parse_command, register_all
+from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
-from openlaoke.core.prompt_input import PromptSessionManager, run_model_picker_async, run_lang_picker_async
+from openlaoke.core.prompt_input import (
+    PromptSessionManager,
+    run_lang_picker_async,
+    run_model_picker_async,
+)
 from openlaoke.core.state import AppState
 from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
@@ -47,6 +53,20 @@ from openlaoke.types.core_types import (
 )
 from openlaoke.types.providers import MultiProviderConfig
 from openlaoke.utils.theme import ThemeManager
+
+# Hoisted regexes used in the agent loop (avoid re-compiling per iteration).
+_CODING_TRIGGERS = re.compile(
+    r"(write|code|implement|create|build|fix|debug|edit|modify|change|update|"
+    r"add|remove|delete|refactor|test|run|install|deploy|commit|push|pull|merge|"
+    r"search|find|check|look|read|show|list|explain|how|make|generate)",
+    re.IGNORECASE,
+)
+_CONVERSATION_ONLY = re.compile(
+    r"^(hi|hello|hey|who are you|what can you do|你会做什么|你能做什么|"
+    r"你是谁|你好|谢谢|thank|help|what is|what are|天气|时间|日期)$",
+    re.IGNORECASE,
+)
+_KV_PATTERN = re.compile(r"(\w[\w_]*)\s*=\s*")
 
 
 class REPL:
@@ -122,9 +142,13 @@ class REPL:
 
         atexit.register(_cleanup)
 
+        def _signal_handler(signum: int, frame: Any) -> None:
+            _cleanup()
+            os._exit(0)
+
         for sig in (signal.SIGTERM, signal.SIGINT):
             with contextlib.suppress(ValueError, OSError):
-                signal.signal(sig, lambda s, f: _cleanup() or os._exit(0))
+                signal.signal(sig, _signal_handler)
 
     @staticmethod
     def _reset_terminal() -> None:
@@ -211,9 +235,7 @@ class REPL:
         self.app_state._insomnia_engine = self._insomnia_engine
 
         if self.app_state.insomnia_mode:
-            self.console.print(
-                f"[bold {self._c('primary')}]{self._t('insomnia_resuming')}[/]"
-            )
+            self.console.print(f"[bold {self._c('primary')}]{self._t('insomnia_resuming')}[/]")
             await self._insomnia_engine.start()
             if self.app_state.insomnia_task_queue:
                 task = asyncio.create_task(self._insomnia_engine._process_queue())
@@ -281,7 +303,9 @@ class REPL:
                 ):
                     self.app_state.active_skills.append(potential_name)
 
-                self.console.print(f"[{self._c('success')}]{self._t('skill_activated')} {skill.name}[/]")
+                self.console.print(
+                    f"[{self._c('success')}]{self._t('skill_activated')} {skill.name}[/]"
+                )
                 if skill.description:
                     desc = skill.description[:100]
                     if len(skill.description) > 100:
@@ -307,9 +331,7 @@ class REPL:
 
         command = get_command(name)
         if not command:
-            self.console.print(
-                f"[{self._c('error')}]{self._t('unknown_command')} /{name}[/]"
-            )
+            self.console.print(f"[{self._c('error')}]{self._t('unknown_command')} /{name}[/]")
             self.console.print(self._t("type_help"))
             return
 
@@ -386,7 +408,11 @@ class REPL:
         )
 
     async def _handle_chat(self, user_input: str) -> None:
+        # Resolve @-mentions: inline file/directory content into the prompt.
+        from openlaoke.agent.references import resolve_references
         from openlaoke.core.intent_parser import IntentParser, IntentType
+
+        user_input = resolve_references(user_input, cwd=self.app_state.get_cwd())
 
         if self.app_state.local_mode:
             parser = IntentParser()
@@ -415,6 +441,7 @@ class REPL:
 
         user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
+        self.app_state._persist()
 
         self._memory.on_user_message(
             user_input,
@@ -683,11 +710,13 @@ class REPL:
                     model=self.app_state.session_config.model,
                 )
                 if session_ctx:
-                    messages.append({
-                        "role": "user",
-                        "content": session_ctx,
-                        "system_injected": True,
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": session_ctx,
+                            "system_injected": True,
+                        }
+                    )
 
                 # Merge world_context into the last user message (not system prompt)
                 world_ctx = ""
@@ -695,9 +724,14 @@ class REPL:
                     world_ctx = self._world_sensor.to_context_block()
                 if world_ctx and messages:
                     for i in range(len(messages) - 1, -1, -1):
-                        if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
+                        if messages[i].get("role") == "user" and not messages[i].get(
+                            "system_injected"
+                        ):
                             messages[i]["content"] = (
-                                messages[i]["content"] + "\n\n<sc:context>" + world_ctx + "</sc:context>"
+                                messages[i]["content"]
+                                + "\n\n<sc:context>"
+                                + world_ctx
+                                + "</sc:context>"
                             )
                             break
 
@@ -723,7 +757,9 @@ class REPL:
                 extra = "\n\n".join(extra_parts)
                 if extra and messages:
                     for i in range(len(messages) - 1, -1, -1):
-                        if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
+                        if messages[i].get("role") == "user" and not messages[i].get(
+                            "system_injected"
+                        ):
                             messages[i]["content"] = extra + "\n" + messages[i]["content"]
                             break
             elif is_local_builtin:
@@ -755,30 +791,18 @@ class REPL:
                 provider = self.api.config.get_active_provider() if self.api.config else None
                 if provider and getattr(provider, "provider_type", None):
                     from openlaoke.types.providers import ProviderType
+
                     if provider.provider_type == ProviderType.ANTHROPIC:
                         messages = CacheGuard.apply_cache_markers(messages)
 
             needs_tool_hint = is_local_builtin or self._is_ollama_provider()
             if needs_tool_hint:
-                import re
-
-                _coding_triggers = re.compile(
-                    r"(write|code|implement|create|build|fix|debug|edit|modify|change|update|"
-                    r"add|remove|delete|refactor|test|run|install|deploy|commit|push|pull|merge|"
-                    r"search|find|check|look|read|show|list|explain|how|make|generate)",
-                    re.IGNORECASE,
-                )
-                _conversation_only = re.compile(
-                    r"^(hi|hello|hey|who are you|what can you do|你会做什么|你能做什么|"
-                    r"你是谁|你好|谢谢|thank|help|what is|what are|天气|时间|日期)$",
-                    re.IGNORECASE,
-                )
                 for i in range(len(messages) - 1, -1, -1):
                     if messages[i].get("role") == "user":
                         content = messages[i].get("content", "")
                         stripped = content.strip()
-                        if _conversation_only.match(stripped) or (
-                            len(stripped) < 30 and not _coding_triggers.search(stripped)
+                        if _CONVERSATION_ONLY.match(stripped) or (
+                            len(stripped) < 30 and not _CODING_TRIGGERS.search(stripped)
                         ):
                             break
                         if model_size == "tiny":
@@ -980,7 +1004,9 @@ class REPL:
                             tool_uses=tool_uses if tool_uses else [],
                             thinking=reasoning_text,
                         )
-                        self.app_state.add_message(msg)
+                        # Defer persistence to the explicit _persist() call at
+                        # turn end — avoids a blocking disk write per iteration.
+                        self.app_state.add_message(msg, persist=False)
                         assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
                         if content_text:
                             assistant_msg_dict["content"] = content_text
@@ -1013,17 +1039,17 @@ class REPL:
                             self.console.print(
                                 f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
                             )
-                            messages.append({
-                                "role": "user",
-                                "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                            })
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                                }
+                            )
                             continue
                         break
 
                     # Parallel dispatch for read-only tool batches
-                    _all_readonly = all(
-                        self.registry.is_readonly(tu.name) for tu in tool_uses
-                    )
+                    _all_readonly = all(self.registry.is_readonly(tu.name) for tu in tool_uses)
                     if _all_readonly and len(tool_uses) > 1:
                         results = await asyncio.gather(
                             *[self._execute_tool(tu) for tu in tool_uses],
@@ -1050,16 +1076,21 @@ class REPL:
                             if not self._running:
                                 break
 
-                            corrected_name, corrected_params, val_hint = self._tool_validator.validate(
-                                tool_use.name, tool_use.input
+                            corrected_name, corrected_params, val_hint = (
+                                self._tool_validator.validate(tool_use.name, tool_use.input)
                             )
-                            if corrected_name != tool_use.name or corrected_params != tool_use.input:
+                            if (
+                                corrected_name != tool_use.name
+                                or corrected_params != tool_use.input
+                            ):
                                 tool_use.name = corrected_name
                                 tool_use.input = corrected_params
                                 if val_hint:
                                     messages.append({"role": "user", "content": val_hint})
 
-                            tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                            tool_key = (
+                                f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                            )
                             failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
 
                             if self._guard:
@@ -1182,10 +1213,12 @@ class REPL:
                             self.console.print(
                                 f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
                             )
-                            messages.append({
-                                "role": "user",
-                                "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                            })
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
+                                }
+                            )
                             continue
                         break
 
@@ -1351,7 +1384,7 @@ class REPL:
                 is_error=True,
             )
 
-        result = await tool.call(ctx, **tool_input)
+        result = await tool.safe_call(ctx, **tool_input)
 
         if tool_use.name in ("Write", "Edit", "NotebookWrite"):
             self._verify_file_written(tool_input, result)
@@ -1483,6 +1516,15 @@ class REPL:
             self.console.print(content)
 
     async def _ask_permission(self, tool_name: str, tool_input: dict[str, Any], tool: Tool) -> bool:
+        # Show a preview of what the tool would do before asking (diff for
+        # editors/writers, command summary for bash).
+        try:
+            preview = tool.preview(**tool_input)
+            if preview and preview.summary:
+                self.console.print(f"  [{self._c('muted')}]Preview:[/] {preview.summary}")
+        except Exception:
+            pass
+
         prompt_text = Text()
         prompt_text.append(f"  {self._t('allow_tool')} ", style=self._theme.style("warning"))
         prompt_text.append(f"{tool_name}", style=self._theme.style("assistant_message"))
@@ -1586,7 +1628,7 @@ class REPL:
             "Bash command=your command here",
             "Read file_path=filename",
             "Glob pattern=*.py",
-            "Edit file_path=file old_string=old new_string=new",
+            "Edit file_path=file old_text=old new_text=new",
             "Grep pattern=keyword",
             "",
             "Or use XML format: <tool_call> <function=Name> <parameter=key> value </tool_call>",
@@ -1601,9 +1643,6 @@ class REPL:
 
     @staticmethod
     def _parse_inline_tool_calls(content: str) -> list[ToolUseBlock]:
-        import re
-        import uuid
-
         tool_uses: list[ToolUseBlock] = []
 
         _tool_aliases: dict[str, str] = {
@@ -1636,10 +1675,9 @@ class REPL:
 
             params: dict[str, str] = {}
             remaining = " ".join(parts[1:])
-            kv_pattern = re.compile(r"(\w[\w_]*)\s*=\s*")
             pos = 0
             last_key = None
-            for km in kv_pattern.finditer(remaining):
+            for km in _KV_PATTERN.finditer(remaining):
                 if last_key:
                     params[last_key] = _clean(remaining[pos : km.start()])
                 last_key = km.group(1)
@@ -1839,8 +1877,12 @@ class REPL:
         c_warn = self._c("warning")
 
         self.console.print(f"\n[{c_prim} bold]{self._t('provider_label')}[/] {provider_name}")
-        self.console.print(f"[{c_prim} bold]{self._t('model_label')}[/] {self.app_state.session_config.model}")
-        self.console.print(f"[{c_prim} bold]{self._t('working_dir_label')}[/] {self.app_state.get_cwd()}")
+        self.console.print(
+            f"[{c_prim} bold]{self._t('model_label')}[/] {self.app_state.session_config.model}"
+        )
+        self.console.print(
+            f"[{c_prim} bold]{self._t('working_dir_label')}[/] {self.app_state.get_cwd()}"
+        )
         if self.app_state.local_mode:
             self.console.print(
                 f"[{c_prim} bold]{self._t('mode_label')}[/] [{c_warn}]{self._t('mode_local')}[/]"
@@ -1869,9 +1911,7 @@ class REPL:
         if self.app_state.insomnia_mode:
             self.console.print(f"[{c_prim} bold]Mode:[/] [bold {c_prim}]Insomnia[/]")
 
-        self.console.print(
-            f"\n[{c.muted}]{self._t('welcome_hint')}[/]"
-        )
+        self.console.print(f"\n[{c.muted}]{self._t('welcome_hint')}[/]")
 
     @staticmethod
     def _format_context_composition(messages: list[dict]) -> str:

@@ -82,10 +82,10 @@ if not result.is_valid:
 
 ### 2. 函数级验证
 ```python
-result = validator.validate_function('''
+result = validator.validate_function("""
 def broken(:
     pass
-''')
+""")
 
 # 输出: Line 1: invalid syntax
 ```

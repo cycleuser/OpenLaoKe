@@ -117,7 +117,7 @@ Completed 3 iterations before failure
 
 ### 测试 3: 方法检查
 ```python
-hasattr(cmd, '_update_task_progress')  # True
+hasattr(cmd, "_update_task_progress")  # True
 ```
 
 ## 使用示例

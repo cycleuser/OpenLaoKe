@@ -84,7 +84,7 @@ class ContractCreateTool(Tool):
         for a in assertions:
             lines.append(f"  [{a.state}] {a.id}: {a.description}")
 
-        return ToolResultBlock(result_for_assistant="\n".join(lines))
+        return ToolResultBlock(tool_use_id=ctx.tool_use_id, content="\n".join(lines))
 
 
 class _ContractAssertTool(Tool):
@@ -100,7 +100,9 @@ class _ContractAssertTool(Tool):
         store = _get_store(ctx)
         contract = store.load(contract_id)
         if not contract:
-            return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id, content=f"Contract {contract_id} not found"
+            )
 
         for a in contract.assertions:
             if str(a.id) == assertion_id:
@@ -108,11 +110,13 @@ class _ContractAssertTool(Tool):
                 a.evidence = evidence
                 store.save(contract)
                 return ToolResultBlock(
-                    result_for_assistant=f"[{icon}] Assertion {assertion_id} marked {new_state}: {a.description}"
+                    tool_use_id=ctx.tool_use_id,
+                    content=f"[{icon}] Assertion {assertion_id} marked {new_state}: {a.description}",
                 )
 
         return ToolResultBlock(
-            result_for_assistant=f"Assertion {assertion_id} not found in contract {contract_id}"
+            tool_use_id=ctx.tool_use_id,
+            content=f"Assertion {assertion_id} not found in contract {contract_id}",
         )
 
 
@@ -156,18 +160,20 @@ class ContractStatusTool(Tool):
         if contract_id:
             contract = store.load(contract_id)
             if not contract:
-                return ToolResultBlock(result_for_assistant=f"Contract {contract_id} not found")
-            return ToolResultBlock(result_for_assistant=_format_contract(contract))
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id, content=f"Contract {contract_id} not found"
+                )
+            return ToolResultBlock(tool_use_id=ctx.tool_use_id, content=_format_contract(contract))
 
         contracts = store.load_active()
         if not contracts:
-            return ToolResultBlock(result_for_assistant="No active contracts")
+            return ToolResultBlock(tool_use_id=ctx.tool_use_id, content="No active contracts")
 
         lines = [f"Active contracts ({len(contracts)}):"]
         for c in contracts:
             lines.append(_format_contract(c))
             lines.append("")
-        return ToolResultBlock(result_for_assistant="\n".join(lines))
+        return ToolResultBlock(tool_use_id=ctx.tool_use_id, content="\n".join(lines))
 
 
 def _format_contract(contract: Contract) -> str:

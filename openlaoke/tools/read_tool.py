@@ -127,40 +127,14 @@ class ReadTool(Tool):
             )
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
     def _validate_path(self, resolved: str, cwd: str) -> str | None:
-        real_resolved = os.path.realpath(resolved)
-        real_cwd = os.path.realpath(cwd)
-        home = os.path.realpath(os.path.expanduser("~"))
+        from openlaoke.utils.path_safety import validate_path
 
-        if not _contains(real_cwd, real_resolved) and not _contains(home, real_resolved):
-            if _is_user_home_path(resolved):
-                return None
-            return f"Path '{resolved}' is outside workspace and home directory"
-        return None
-
-
-def _contains(parent: str, child: str) -> bool:
-    """Check if child path is inside parent."""
-    try:
-        rel = os.path.relpath(child, parent)
-        return not rel.startswith("..")
-    except ValueError:
-        return False
-
-
-def _is_user_home_path(path: str) -> bool:
-    """Check if path is under user home directory, allowing truncated usernames."""
-    home = os.path.realpath(os.path.expanduser("~"))
-    home_parent = os.path.dirname(home)
-    if path.startswith(home_parent + "/"):
-        parts = path[len(home_parent) + 1 :].split("/", 1)
-        if parts and os.path.basename(home).startswith(parts[0]):
-            return True
-    return False
+        return validate_path(resolved, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

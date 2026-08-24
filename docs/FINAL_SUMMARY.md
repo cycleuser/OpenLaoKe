@@ -18,9 +18,9 @@
 **关键实现**:
 ```python
 # Tier 5 (gemma3:1b) 严格限制
-max_lines_per_task = 15        # 每个任务最多15行代码
-max_params_per_function = 3    # 每个函数最多3个参数
-max_complexity = 5             # 最大复杂度分数
+max_lines_per_task = 15  # 每个任务最多15行代码
+max_params_per_function = 3  # 每个函数最多3个参数
+max_complexity = 5  # 最大复杂度分数
 ```
 
 ### 2. 细粒度任务分解器 ✅
@@ -216,15 +216,17 @@ TaskGranularity(
 ```python
 {
     "name": "calculator",
-    "modules": [{
-        "name": "calculator",
-        "components": [
-            {"name": "add", "type": "function"},
-            {"name": "subtract", "type": "function"},
-            {"name": "multiply", "type": "function"},
-            {"name": "divide", "type": "function"},
-        ]
-    }]
+    "modules": [
+        {
+            "name": "calculator",
+            "components": [
+                {"name": "add", "type": "function"},
+                {"name": "subtract", "type": "function"},
+                {"name": "multiply", "type": "function"},
+                {"name": "divide", "type": "function"},
+            ],
+        }
+    ],
 }
 ```
 
@@ -250,11 +252,11 @@ TaskGranularity(
 
 ### 系统限制（Tier 5）
 ```python
-max_lines_per_task = 15        # 代码行数限制
-max_params_per_function = 3    # 参数数量限制
-max_complexity = 5             # 复杂度限制
-retry_limit = 8                # 重试次数限制
-timeout_multiplier = 3.0       # 超时倍数
+max_lines_per_task = 15  # 代码行数限制
+max_params_per_function = 3  # 参数数量限制
+max_complexity = 5  # 复杂度限制
+retry_limit = 8  # 重试次数限制
+timeout_multiplier = 3.0  # 超时倍数
 ```
 
 ## 📚 完整文档
@@ -285,13 +287,15 @@ orchestrator = create_orchestrator_for_model(app_state, "gemma3:1b")
 # 2. 定义项目规格
 project_spec = {
     "name": "my_project",
-    "modules": [{
-        "name": "main",
-        "components": [
-            {"name": "function1", "type": "function"},
-            {"name": "class1", "type": "class"},
-        ]
-    }]
+    "modules": [
+        {
+            "name": "main",
+            "components": [
+                {"name": "function1", "type": "function"},
+                {"name": "class1", "type": "class"},
+            ],
+        }
+    ],
 }
 
 # 3. 创建并执行工作流

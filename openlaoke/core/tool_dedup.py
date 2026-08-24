@@ -66,11 +66,36 @@ class _ToolCallCacheEntry:
         self.result_preview = result_preview
 
 
-_WRITE_TOOL_NAMES = frozenset({
-    "Write", "Edit", "Bash", "ApplyPatch", "MultiEdit",
-    "NotebookWrite", "Git", "write_file", "edit_file", "bash",
-    "multi_edit", "apply_patch",
-})
+_WRITE_TOOL_NAMES = frozenset(
+    {
+        "Write",
+        "Edit",
+        "Bash",
+        "ApplyPatch",
+        "MultiEdit",
+        "NotebookWrite",
+        "Git",
+        "write_file",
+        "edit_file",
+        "bash",
+        "multi_edit",
+        "apply_patch",
+    }
+)
+
+_IDEMPOTENT_WRITE_TOOLS = frozenset(
+    {
+        "Write",
+        "Edit",
+        "ApplyPatch",
+        "MultiEdit",
+        "NotebookWrite",
+        "write_file",
+        "edit_file",
+        "multi_edit",
+        "apply_patch",
+    }
+)
 
 
 class ToolCallCache:
@@ -79,6 +104,7 @@ class ToolCallCache:
     def __init__(self, window_size: int = 50) -> None:
         self._window: list[_ToolCallCacheEntry] = []
         self._max = window_size
+        self._applied_writes: set[str] = set()
 
     @staticmethod
     def _key(tool_name: str, args: dict[str, object]) -> str:
@@ -87,12 +113,26 @@ class ToolCallCache:
 
     def record(self, tool_name: str, args: dict[str, object], result_preview: str) -> None:
         if tool_name in _WRITE_TOOL_NAMES:
+            if tool_name in _IDEMPOTENT_WRITE_TOOLS:
+                self._applied_writes.add(self._key(tool_name, args))
             return
         key = self._key(tool_name, args)
         entry = _ToolCallCacheEntry(tool_name, key, result_preview[:500])
         self._window.append(entry)
         if len(self._window) > self._max:
             self._window.pop(0)
+
+    def check_idempotent_write(self, tool_name: str, args: dict[str, object]) -> str | None:
+        """Return a dedup notice if this exact idempotent write was already applied."""
+        if tool_name not in _IDEMPOTENT_WRITE_TOOLS:
+            return None
+        key = self._key(tool_name, args)
+        if key in self._applied_writes:
+            return (
+                f"Dedup: an identical '{tool_name}' call was already applied successfully. "
+                "The file is already in the requested state; no action needed."
+            )
+        return None
 
     def check(self, tool_name: str, args: dict[str, object]) -> str | None:
         if tool_name in _WRITE_TOOL_NAMES:
@@ -110,3 +150,4 @@ class ToolCallCache:
     def clear(self) -> None:
         """Clear entire cache."""
         self._window.clear()
+        self._applied_writes.clear()

@@ -17,6 +17,10 @@ class EditInput(BaseModel):
     file_path: str = Field(description="Path to the file to edit")
     old_text: str = Field(description="Text to find and replace")
     new_text: str = Field(description="Replacement text")
+    replace_all: bool = Field(
+        default=False,
+        description="Replace all occurrences of old_text (default false requires unique match)",
+    )
 
 
 class EditTool(Tool):
@@ -44,15 +48,21 @@ class EditTool(Tool):
             return PreviewResult(summary="Error: missing file_path or old_text")
         abs_path = os.path.abspath(file_path)
         if not os.path.exists(abs_path):
-            return PreviewResult(summary=f"Error: {abs_path} does not exist", path=abs_path, action="noop")
+            return PreviewResult(
+                summary=f"Error: {abs_path} does not exist", path=abs_path, action="noop"
+            )
         try:
             with open(abs_path, encoding="utf-8", errors="replace") as f:
                 original = f.read()
         except (OSError, UnicodeDecodeError):
-            return PreviewResult(summary=f"Update {abs_path} (binary file)", path=abs_path, action="update")
+            return PreviewResult(
+                summary=f"Update {abs_path} (binary file)", path=abs_path, action="update"
+            )
         count = original.count(old_text) if old_text else 0
         if count == 0:
-            return PreviewResult(summary=f"Warning: old_text not found in {abs_path}", path=abs_path, action="noop")
+            return PreviewResult(
+                summary=f"Warning: old_text not found in {abs_path}", path=abs_path, action="noop"
+            )
         old_lines = old_text.count("\n") + 1
         new_lines = new_text.count("\n") + 1
         return PreviewResult(
@@ -65,8 +75,9 @@ class EditTool(Tool):
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         file_path = kwargs.get("file_path", "")
-        old_text = kwargs.get("old_text", "")
-        new_text = kwargs.get("new_text", "")
+        old_text = kwargs.get("old_text", "") or kwargs.get("old_string", "")
+        new_text = kwargs.get("new_text", "") or kwargs.get("new_string", "")
+        replace_all = bool(kwargs.get("replace_all", False))
 
         if not file_path:
             return ToolResultBlock(
@@ -133,26 +144,35 @@ class EditTool(Tool):
                 )
 
             # Uniqueness check: count occurrences (like sekrun's replace tool)
-            first_idx = original.index(old_text)
-            second_idx = original.index(old_text, first_idx + len(old_text)) if len(old_text) <= len(original) - first_idx - 1 else -1
-            if second_idx != -1:
-                return ToolResultBlock(
-                    tool_use_id=ctx.tool_use_id,
-                    content=(
-                        f"Error: old_text matches multiple locations in {file_path}. "
-                        "Provide more surrounding context to make it unique."
-                    ),
-                    is_error=True,
-                )
-
-            new_content = original.replace(old_text, new_text, 1)
+            first_idx = original.find(old_text)
+            if replace_all:
+                occurrences = original.count(old_text)
+                new_content = original.replace(old_text, new_text)
+            else:
+                second_idx = original.find(old_text, first_idx + 1)
+                if second_idx != -1:
+                    return ToolResultBlock(
+                        tool_use_id=ctx.tool_use_id,
+                        content=(
+                            f"Error: old_text matches multiple locations in {file_path}. "
+                            "Provide more surrounding context to make it unique, "
+                            "or set replace_all=true to replace all occurrences."
+                        ),
+                        is_error=True,
+                    )
+                occurrences = 1
+                new_content = original.replace(old_text, new_text, 1)
 
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
             # Compute and append diff
             diff_text = diff_lines(abs_path, original, new_content, True)
-            result_content = f"Edited {abs_path}"
+            result_content = (
+                f"Replaced {occurrences} occurrence(s) in {abs_path}"
+                if replace_all
+                else f"Edited {abs_path}"
+            )
             if diff_text and diff_text != "(no changes)":
                 result_content += f"\n{diff_text}"
 
@@ -176,40 +196,14 @@ class EditTool(Tool):
             )
 
     def _resolve_path(self, path: str, cwd: str) -> str:
-        if os.path.isabs(path):
-            return os.path.normpath(path)
-        return os.path.normpath(os.path.join(cwd, path))
+        from openlaoke.utils.path_safety import resolve_path
+
+        return resolve_path(path, cwd)
 
     def _validate_path(self, resolved: str, cwd: str) -> str | None:
-        real_resolved = os.path.realpath(resolved)
-        real_cwd = os.path.realpath(cwd)
-        home = os.path.realpath(os.path.expanduser("~"))
+        from openlaoke.utils.path_safety import validate_path
 
-        if not _contains(real_cwd, real_resolved) and not _contains(home, real_resolved):
-            if _is_user_home_path(resolved):
-                return None
-            return f"Path '{resolved}' is outside workspace and home directory"
-        return None
-
-
-def _contains(parent: str, child: str) -> bool:
-    """Check if child path is inside parent."""
-    try:
-        rel = os.path.relpath(child, parent)
-        return not rel.startswith("..")
-    except ValueError:
-        return False
-
-
-def _is_user_home_path(path: str) -> bool:
-    """Check if path is under user home directory, allowing truncated usernames."""
-    home = os.path.realpath(os.path.expanduser("~"))
-    home_parent = os.path.dirname(home)
-    if path.startswith(home_parent + "/"):
-        parts = path[len(home_parent) + 1 :].split("/", 1)
-        if parts and os.path.basename(home).startswith(parts[0]):
-            return True
-    return False
+        return validate_path(resolved, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

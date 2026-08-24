@@ -164,7 +164,9 @@ class TestEdit:
         fp = os.path.join(tmp, "diff_edit.txt")
         with open(fp, "w") as f:
             f.write("line1\nline2\nline3\n")
-        r = await EditTool().call(_ctx(tmp), file_path=fp, old_text="line2\n", new_text="modified\n")
+        r = await EditTool().call(
+            _ctx(tmp), file_path=fp, old_text="line2\n", new_text="modified\n"
+        )
         assert "@@" in r.content
         assert "-line2" in r.content
         assert "+modified" in r.content

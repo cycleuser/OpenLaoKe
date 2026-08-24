@@ -110,8 +110,25 @@ class WebFetchTool(Tool):
             )
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.get(url, follow_redirects=True)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                response = await client.get(url)
+                # Manually follow redirects, re-validating each hop for SSRF safety.
+                hops = 0
+                while response.is_redirect and hops < 5:
+                    next_url = str(response.headers.get("location", ""))
+                    if next_url and not next_url.startswith(("http://", "https://")):
+                        # Relative redirect — resolve against the current URL.
+                        next_url = str(httpx.URL(url).join(next_url))
+                    safe, reason = _is_safe_url(next_url)
+                    if not safe:
+                        return ToolResultBlock(
+                            tool_use_id=ctx.tool_use_id,
+                            content=f"Security: redirect blocked — {reason}",
+                            is_error=True,
+                        )
+                    url = next_url
+                    response = await client.get(url)
+                    hops += 1
                 response.raise_for_status()
 
             content = response.text

@@ -406,7 +406,7 @@ await manager.initialize()
 tasks = [
     "Analyze requirements for feature X",
     "Decompose into atomic tasks",
-    "Plan validation strategy"
+    "Plan validation strategy",
 ]
 
 results = await manager.batch_call_planner(tasks)

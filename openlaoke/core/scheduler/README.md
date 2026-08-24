@@ -25,32 +25,34 @@ from openlaoke.types.core_types import TaskStatus
 
 # 创建调度器
 scheduler = TaskScheduler(
-    max_concurrent=3,      # 最大并发数
-    default_timeout=900.0  # 默认超时（15分钟）
+    max_concurrent=3,  # 最大并发数
+    default_timeout=900.0,  # 默认超时（15分钟）
 )
 
 # 启动调度器
 await scheduler.start()
 
+
 # 提交任务
 def my_task(x: int) -> int:
     return x * 2
 
+
 result = await scheduler.submit(
     my_task,
-    5,                     # 参数
-    priority=0,            # 优先级（越小越优先）
-    timeout=60.0,          # 超时时间
+    5,  # 参数
+    priority=0,  # 优先级（越小越优先）
+    timeout=60.0,  # 超时时间
 )
 
-print(result.status)       # TaskStatus.COMPLETED
-print(result.result)       # 10
+print(result.status)  # TaskStatus.COMPLETED
+print(result.result)  # 10
 
 # 批量提交
 tasks = [(my_task, (i,), {}) for i in range(10)]
 results = await scheduler.submit_batch(
     tasks,
-    parallel=True,         # 并行执行
+    parallel=True,  # 并行执行
     timeout=30.0,
 )
 
@@ -73,20 +75,20 @@ from openlaoke.core.scheduler import TimeoutHandler
 
 handler = TimeoutHandler(default_timeout=900.0)
 
+
 # 带超时执行协程
 async def my_coro():
     await asyncio.sleep(1)
     return "done"
 
-result = await handler.with_timeout(
-    my_coro(),
-    timeout=60.0,
-    task_id="task_123"
-)
+
+result = await handler.with_timeout(my_coro(), timeout=60.0, task_id="task_123")
+
 
 # 设置超时回调
 def on_timeout():
     print("Task timed out!")
+
 
 handler.set_timeout("task_id", 30.0, on_timeout)
 
@@ -104,28 +106,13 @@ handler.cancel_timeout("task_id")
 ```python
 from openlaoke.core.scheduler import TaskExecutor
 
-executor = TaskExecutor(
-    max_workers=3,
-    max_retries=3,
-    retry_delay=1.0
-)
+executor = TaskExecutor(max_workers=3, max_retries=3, retry_delay=1.0)
 
 # 执行同步函数
-result = await executor.execute(
-    "task_id",
-    my_function,
-    *args,
-    timeout=60.0,
-    retries=3,
-    **kwargs
-)
+result = await executor.execute("task_id", my_function, *args, timeout=60.0, retries=3, **kwargs)
 
 # 执行异步函数
-result = await executor.execute_async(
-    "task_id",
-    my_coroutine(),
-    timeout=30.0
-)
+result = await executor.execute_async("task_id", my_coroutine(), timeout=30.0)
 
 # 取消任务
 executor.cancel("task_id")
@@ -144,7 +131,7 @@ from openlaoke.core.scheduler import PriorityQueue
 queue = PriorityQueue(maxsize=100)
 
 # 添加任务（priority越小越优先）
-queue.put(item, priority=0)   # 高优先级
+queue.put(item, priority=0)  # 高优先级
 queue.put(item, priority=10)  # 低优先级
 
 # 获取任务
@@ -169,18 +156,18 @@ queue.clear()
 ```python
 @dataclass
 class ScheduledTask:
-    id: str                    # 任务ID
-    func: Any                  # 函数或协程
-    args: tuple                # 参数
-    kwargs: dict               # 关键字参数
-    priority: int              # 优先级
-    timeout: float | None      # 超时时间
-    status: TaskStatus         # 状态
-    result: Any | None         # 结果
-    error: str | None          # 错误信息
-    started_at: float | None   # 开始时间
-    completed_at: float | None # 完成时间
-    retries: int               # 重试次数
+    id: str  # 任务ID
+    func: Any  # 函数或协程
+    args: tuple  # 参数
+    kwargs: dict  # 关键字参数
+    priority: int  # 优先级
+    timeout: float | None  # 超时时间
+    status: TaskStatus  # 状态
+    result: Any | None  # 结果
+    error: str | None  # 错误信息
+    started_at: float | None  # 开始时间
+    completed_at: float | None  # 完成时间
+    retries: int  # 重试次数
 ```
 
 ### TaskResult
@@ -188,20 +175,20 @@ class ScheduledTask:
 ```python
 @dataclass
 class TaskResult:
-    task_id: str               # 任务ID
-    status: TaskStatus         # 状态
-    result: Any | None         # 结果
-    error: str | None          # 错误信息
-    duration: float | None     # 执行时长
+    task_id: str  # 任务ID
+    status: TaskStatus  # 状态
+    result: Any | None  # 结果
+    error: str | None  # 错误信息
+    duration: float | None  # 执行时长
 ```
 
 ## 配置常量
 
 ```python
-MAX_CONCURRENT = 3            # 最大并发任务数
-DEFAULT_TIMEOUT = 15 * 60     # 默认超时（15分钟）
-MAX_RETRIES = 3               # 最大重试次数
-RETRY_DELAY = 1.0             # 重试延迟（秒）
+MAX_CONCURRENT = 3  # 最大并发任务数
+DEFAULT_TIMEOUT = 15 * 60  # 默认超时（15分钟）
+MAX_RETRIES = 3  # 最大重试次数
+RETRY_DELAY = 1.0  # 重试延迟（秒）
 ```
 
 ## 使用示例
@@ -212,24 +199,17 @@ RETRY_DELAY = 1.0             # 重试延迟（秒）
 async def main():
     scheduler = TaskScheduler(max_concurrent=5)
     await scheduler.start()
-    
-    tasks = [
-        (process_file, (f,), {})
-        for f in files
-    ]
-    
-    results = await scheduler.submit_batch(
-        tasks,
-        parallel=True,
-        timeout=60.0
-    )
-    
+
+    tasks = [(process_file, (f,), {}) for f in files]
+
+    results = await scheduler.submit_batch(tasks, parallel=True, timeout=60.0)
+
     for result in results:
         if result.status == TaskStatus.COMPLETED:
             print(f"Success: {result.result}")
         else:
             print(f"Failed: {result.error}")
-    
+
     await scheduler.shutdown()
 ```
 
@@ -239,21 +219,13 @@ async def main():
 async def main():
     scheduler = TaskScheduler()
     await scheduler.start()
-    
+
     # 高优先级任务
-    await scheduler.submit(
-        urgent_task,
-        priority=0,
-        timeout=30.0
-    )
-    
+    await scheduler.submit(urgent_task, priority=0, timeout=30.0)
+
     # 低优先级任务
-    await scheduler.submit(
-        background_task,
-        priority=10,
-        timeout=300.0
-    )
-    
+    await scheduler.submit(background_task, priority=10, timeout=300.0)
+
     await scheduler.shutdown()
 ```
 
@@ -263,13 +235,13 @@ async def main():
 async def main():
     scheduler = TaskScheduler()
     await scheduler.start()
-    
+
     result = await scheduler.submit(
         unreliable_api_call,
-        retries=3,          # 重试3次
+        retries=3,  # 重试3次
         timeout=60.0,
     )
-    
+
     await scheduler.shutdown()
 ```
 

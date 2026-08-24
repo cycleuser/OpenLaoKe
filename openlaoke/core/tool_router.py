@@ -8,8 +8,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TypedDict
 
-TOOL_CATEGORIES = {
+
+class CategoryConfig(TypedDict):
+    description: str
+    tools: list[str]
+    patterns: list[tuple[str, int]]
+    anti_patterns: list[tuple[str, int]]
+
+
+TOOL_CATEGORIES: dict[str, CategoryConfig] = {
     "read": {
         "description": "Read files, list directories, explore codebase",
         "tools": ["Read", "ListDirectory", "Glob", "Grep"],
@@ -158,7 +167,7 @@ class ToolRouter:
                     score += weight
             scores[category] = score
 
-        best_category = max(scores, key=scores.get)
+        best_category = max(scores, key=lambda k: scores[k])
 
         if scores[best_category] <= 0:
             best_category = "respond"
@@ -204,7 +213,8 @@ class ToolRouter:
 
     def get_tools_for_category(self, category: str) -> list[str]:
         """Get tools for a specific category."""
-        return TOOL_CATEGORIES.get(category, {}).get("tools", [])
+        config = TOOL_CATEGORIES.get(category)
+        return config["tools"] if config else []
 
     def get_all_tools_by_category(self) -> dict[str, list[str]]:
         """Get all tools organized by category."""

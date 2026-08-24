@@ -7,6 +7,7 @@ agent turns and emits the result as events.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -181,6 +182,15 @@ COMMAND_TYPES: dict[str, type[ControllerCommand]] = {
 
 def parse_command(name: str, args: dict[str, Any] | None = None) -> ControllerCommand:
     """Build a typed command from name + args dict (useful for HTTP/JSON)."""
-    cls = COMMAND_TYPES.get(name, ControllerCommand)
-    cmd = cls(args=args or {})
-    return cmd
+    args = args or {}
+    cls = COMMAND_TYPES.get(name)
+    if cls is None:
+        return ControllerCommand(name=name, args=args)
+    if cls is SubmitCommand:
+        return SubmitCommand(
+            text=str(args.get("text", "")),
+            session_id=str(args.get("session_id", "")),
+        )
+    valid = {f.name for f in dataclasses.fields(cls)} - {"name", "args"}
+    kwargs = {k: v for k, v in args.items() if k in valid}
+    return cls(**kwargs)

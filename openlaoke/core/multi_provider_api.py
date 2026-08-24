@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import random
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -131,10 +132,10 @@ class MultiProviderClient:
             self._builtin_client.unload()
             self._builtin_client = None
 
-    def _retry_with_backoff(self, status: int) -> tuple[bool, float]:
+    def _retry_with_backoff(self, status: int, attempt: int = 0) -> tuple[bool, float]:
         if status not in _RETRYABLE_STATUS:
             return False, 0
-        delay = min(_BASE_DELAY * (2 ** (0)), _MAX_DELAY)
+        delay = min(_BASE_DELAY * (2**attempt), _MAX_DELAY)
         delay += random.uniform(0, delay * 0.3)  # jitter
         return True, delay
 
@@ -146,6 +147,7 @@ class MultiProviderClient:
         """
         results: dict[str, Any] = {}
         import time as _time
+
         for name, provider in config.providers.items():
             if provider.is_local:
                 results[name] = {"ok": True, "latency_ms": 0, "note": "local"}
@@ -868,13 +870,23 @@ class MultiProviderClient:
                         if fallback_provider.provider_type == ProviderType.ANTHROPIC:
                             fb_endpoint = f"{fb_url}/v1/messages"
                             fb_body = self._build_anthropic_body(
-                                fb_model, fb_messages, tools, max_tokens, temperature, thinking_budget
+                                fb_model,
+                                fb_messages,
+                                tools,
+                                max_tokens,
+                                temperature,
+                                thinking_budget,
                             )
                             fb_body["system"] = system_prompt
                         else:
                             fb_endpoint = f"{fb_url}/chat/completions"
                             fb_body = self._build_openai_body(
-                                fb_model, fb_messages, tools, max_tokens, temperature, thinking_budget
+                                fb_model,
+                                fb_messages,
+                                tools,
+                                max_tokens,
+                                temperature,
+                                thinking_budget,
                             )
                             fb_body["messages"] = [
                                 {"role": "system", "content": system_prompt},
@@ -911,10 +923,10 @@ class MultiProviderClient:
             raise ValueError("No active provider configured")
 
         if provider.provider_type == ProviderType.LOCAL_BUILTIN:
-            async for chunk in self._stream_builtin_message(
+            async for item in self._stream_builtin_message(
                 system_prompt, messages, tools, model, max_tokens, temperature
             ):
-                text, usage, cost = chunk
+                text, usage, cost = item
                 yield StreamChunk(
                     event_type=StreamEventType.TEXT if text else StreamEventType.USAGE,
                     text=text,
@@ -956,10 +968,15 @@ class MultiProviderClient:
             try:
                 async with client.stream("POST", endpoint, headers=headers, json=body) as response:
                     if response.status_code >= 400 and attempt < _MAX_RETRIES:
-                        retry, delay = self._retry_with_backoff(response.status_code)
+                        retry, delay = self._retry_with_backoff(response.status_code, attempt)
                         if retry:
-                            logger.warning("Retry %d/%d after %.1fs for status %d",
-                                           attempt + 1, _MAX_RETRIES, delay, response.status_code)
+                            logger.warning(
+                                "Retry %d/%d after %.1fs for status %d",
+                                attempt + 1,
+                                _MAX_RETRIES,
+                                delay,
+                                response.status_code,
+                            )
                             await asyncio.sleep(delay)
                             continue
                     response.raise_for_status()
@@ -976,14 +993,18 @@ class MultiProviderClient:
                             except json.JSONDecodeError:
                                 continue
                             if provider.provider_type == ProviderType.ANTHROPIC:
-                                for chunk in self._parse_anthropic_stream_events(event, pending_tool_calls, model):
+                                for chunk in self._parse_anthropic_stream_events(
+                                    event, pending_tool_calls, model
+                                ):
                                     if chunk.usage:
                                         final_usage = chunk.usage
                                     if chunk.cost:
                                         final_cost = chunk.cost
                                     yield chunk
                             else:
-                                for chunk in self._parse_openai_stream_events(event, pending_tool_calls, model):
+                                for chunk in self._parse_openai_stream_events(
+                                    event, pending_tool_calls, model
+                                ):
                                     if chunk.usage:
                                         final_usage = chunk.usage
                                     if chunk.cost:
@@ -992,19 +1013,25 @@ class MultiProviderClient:
                     break  # successful stream, exit retry loop
             except httpx.HTTPStatusError as exc:
                 if attempt < _MAX_RETRIES:
-                    retry, delay = self._retry_with_backoff(exc.response.status_code)
+                    retry, delay = self._retry_with_backoff(exc.response.status_code, attempt)
                     if retry:
-                        logger.warning("Retry %d/%d after %.1fs: %s",
-                                       attempt + 1, _MAX_RETRIES, delay, exc)
+                        logger.warning(
+                            "Retry %d/%d after %.1fs: %s", attempt + 1, _MAX_RETRIES, delay, exc
+                        )
                         await asyncio.sleep(delay)
                         continue
                 raise
             except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
                 if attempt < _MAX_RETRIES:
-                    delay = min(_BASE_DELAY * (2 ** attempt), _MAX_DELAY)
+                    delay = min(_BASE_DELAY * (2**attempt), _MAX_DELAY)
                     delay += random.uniform(0, delay * 0.3)
-                    logger.warning("Network error retry %d/%d after %.1fs: %s",
-                                   attempt + 1, _MAX_RETRIES, delay, exc)
+                    logger.warning(
+                        "Network error retry %d/%d after %.1fs: %s",
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        delay,
+                        exc,
+                    )
                     await asyncio.sleep(delay)
                     continue
                 raise
@@ -1074,7 +1101,10 @@ class MultiProviderClient:
                 chunks.append(StreamChunk(event_type=StreamEventType.USAGE, usage=usage, cost=cost))
 
         elif event_type == "message_stop":
-            pending_tool_calls.clear()
+            # NOTE: do NOT clear pending_tool_calls here — the caller
+            # (stream_message) consumes them after the stream ends to emit
+            # TOOL_CALL_START chunks. Clearing early drops all tool calls.
+            pass
 
         return chunks
 
@@ -1121,9 +1151,9 @@ class MultiProviderClient:
                             pending_tool_calls[idx].get("arguments", "") + func["arguments"]
                         )
 
-            finish_reason = choices[0].get("finish_reason")
-            if finish_reason == "tool_calls" or finish_reason == "stop":
-                pending_tool_calls.clear()
+            # NOTE: do NOT clear pending_tool_calls on finish_reason — the
+            # caller (stream_message) consumes them after the stream ends to
+            # emit TOOL_CALL_START chunks. Clearing early drops all tool calls.
 
         usage_data = event.get("usage", {})
         if usage_data:
@@ -1211,7 +1241,9 @@ class MultiProviderClient:
                     fc = part["functionCall"]
                     tool_uses.append(
                         ToolUseBlock(
-                            id=fc.get("name", ""), name=fc.get("name", ""), input=fc.get("args", {})
+                            id=f"{fc.get('name', 'call')}_{uuid.uuid4().hex[:8]}",
+                            name=fc.get("name", ""),
+                            input=fc.get("args", {}),
                         )
                     )
         usage_data = data.get("usageMetadata", {})

@@ -50,7 +50,7 @@ class ToolExecutor:
                 tool_use_id=f"ha_tool_{int(time.time() * 1000)}",
             )
 
-            result = await tool.call(ctx, **tool_input)
+            result = await tool.safe_call(ctx, **tool_input)
 
             return result
 

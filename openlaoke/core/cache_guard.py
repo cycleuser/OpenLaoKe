@@ -19,11 +19,11 @@ from __future__ import annotations
 import os
 import platform
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openlaoke.core.state import AppState
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,6 @@ SYSTEM_PROMPT_CAVEMAN = """You are OpenLaoKe, an expert AI coding assistant.
 - Say 'I am OpenLaoKe' when asked. Do not claim other AI identities."""
 
 SYSTEM_PROMPT_STATIC = """You are OpenLaoKe, an expert AI coding assistant designed to help with software engineering tasks. You can read and write files, run shell commands, \
-search codebases, and spawn sub-agents for parallel work.
 search codebases, and spawn sub-agents for parallel work.
 
 ## Core Principles
@@ -64,7 +63,7 @@ search codebases, and spawn sub-agents for parallel work.
 
 IMPORTANT: When using tools, ALWAYS provide ALL required parameters:
 - Write tool: requires both 'file_path' AND 'content'
-- Edit tool: requires 'file_path', 'old_string', AND 'new_string'
+- Edit tool: requires 'file_path', 'old_text', AND 'new_text'
 - Bash tool: requires 'command'
 - Read tool: requires 'file_path'
 Never omit required parameters. If you're unsure about a parameter, ask the user.
@@ -249,8 +248,7 @@ class CacheGuard:
             self.build()
         # Check caveman_mode from app_state (set via /caveman command)
         if self._caveman_mode or (
-            self._app_state is not None
-            and getattr(self._app_state, "caveman_mode", False)
+            self._app_state is not None and getattr(self._app_state, "caveman_mode", False)
         ):
             base = SYSTEM_PROMPT_CAVEMAN
         else:
@@ -485,16 +483,13 @@ class CacheGuard:
         )
 
         if user_input:
+            extras: list[str] = []
             try:
-                from openlaoke.agent.context import ContextBuilder
+                from openlaoke.agent.context import compose_runtime_block
 
-                ctx = ContextBuilder()
-                runtime = ctx.build_runtime_block(
-                    user_input=user_input,
-                    cwd=cwd,
-                )
+                runtime = compose_runtime_block()
                 if runtime:
-                    return f"{base}\n\n{runtime}"
+                    extras.append(runtime)
             except Exception:
                 pass
 
@@ -503,6 +498,9 @@ class CacheGuard:
             manager = DistilledTemplateManager()
             context = manager.build_context(user_input, max_tokens=200)
             if context:
-                return f"{base}\n\n{context}"
+                extras.append(context)
+
+            if extras:
+                return f"{base}\n\n" + "\n\n".join(extras)
 
         return base

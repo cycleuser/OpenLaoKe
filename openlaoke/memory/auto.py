@@ -50,8 +50,8 @@ class Fact:
     path: str = ""
 
     def one_line(self) -> str:
-        first = (self.body or "").splitlines()
-        first = first[0] if first else ""
+        body_lines = (self.body or "").splitlines()
+        first = body_lines[0] if body_lines else ""
         if len(first) > 120:
             first = first[:117] + "..."
         return f"- **{self.name}**: {first}"

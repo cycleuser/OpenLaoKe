@@ -62,14 +62,14 @@ should_decompose_for_model(task_size, model_tier)
 ```python
 @dataclass
 class AtomicTask:
-    task_id: str                    # 任务ID
-    description: str                # 描述
-    component_spec: ComponentSpec   # 组件规格
-    template: CodeTemplate          # 代码模板
-    dependencies: list[str]         # 依赖任务
-    estimated_lines: int = 10       # 预估行数
-    test_required: bool = True      # 是否需要测试
-    validation_rules: list[str]     # 验证规则
+    task_id: str  # 任务ID
+    description: str  # 描述
+    component_spec: ComponentSpec  # 组件规格
+    template: CodeTemplate  # 代码模板
+    dependencies: list[str]  # 依赖任务
+    estimated_lines: int = 10  # 预估行数
+    test_required: bool = True  # 是否需要测试
+    validation_rules: list[str]  # 验证规则
 ```
 
 ### 3. 自动组装与验证 (`openlaoke/core/architecture/assembler.py`)
@@ -96,10 +96,10 @@ class AtomicTask:
 ```python
 @dataclass
 class ValidationResult:
-    is_valid: bool              # 是否有效
-    errors: list[str]           # 错误列表
-    warnings: list[str]         # 警告列表
-    suggestions: list[str]      # 改进建议
+    is_valid: bool  # 是否有效
+    errors: list[str]  # 错误列表
+    warnings: list[str]  # 警告列表
+    suggestions: list[str]  # 改进建议
 ```
 
 ### 4. 增量式工作流编排 (`openlaoke/core/architecture/orchestrator.py`)
@@ -145,15 +145,17 @@ max_attempts = {
 ```python
 {
     "name": "calculator",
-    "modules": [{
-        "name": "calculator",
-        "components": [
-            {"name": "add", "type": "function"},
-            {"name": "subtract", "type": "function"},
-            {"name": "multiply", "type": "function"},
-            {"name": "divide", "type": "function"},
-        ]
-    }]
+    "modules": [
+        {
+            "name": "calculator",
+            "components": [
+                {"name": "add", "type": "function"},
+                {"name": "subtract", "type": "function"},
+                {"name": "multiply", "type": "function"},
+                {"name": "divide", "type": "function"},
+            ],
+        }
+    ],
 }
 ```
 
@@ -217,13 +219,15 @@ orchestrator = create_orchestrator_for_model(app_state, "gemma3:1b")
 # 3. 定义项目规格
 project_spec = {
     "name": "my_project",
-    "modules": [{
-        "name": "main",
-        "components": [
-            {"name": "function1", "type": "function"},
-            {"name": "class1", "type": "class"},
-        ]
-    }]
+    "modules": [
+        {
+            "name": "main",
+            "components": [
+                {"name": "function1", "type": "function"},
+                {"name": "class1", "type": "class"},
+            ],
+        }
+    ],
 }
 
 # 4. 创建并执行工作流

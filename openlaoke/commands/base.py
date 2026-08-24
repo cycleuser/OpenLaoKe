@@ -541,14 +541,17 @@ class CompactCommand(SlashCommand):
         if len(messages) < 4:
             return CommandResult(message="Conversation is too short to compact.")
 
-        ctx.app_state.messages = messages[:2]
-        ctx.app_state.messages.append(
-            type(messages[-1])(
-                role=messages[-1].role,
-                content="[Conversation compacted - earlier messages summarized]",
+        from openlaoke.core.compact.fast_pruner import fast_prune
+
+        result = fast_prune(messages, max_tokens=8192, keep_tail_tokens=4096)
+        dropped = len(messages) - len(result.messages)
+        ctx.app_state.messages = result.messages
+        return CommandResult(
+            message=(
+                f"Conversation compacted: {len(messages)} → {len(result.messages)} messages "
+                f"({dropped} dropped, {result.keywords_extracted} keywords preserved)."
             )
         )
-        return CommandResult(message="Conversation compacted.")
 
 
 class CostCommand(SlashCommand):
@@ -1114,9 +1117,7 @@ class LangCommand(SlashCommand):
         save_config(app_config)
 
         lang_name = SUPPORTED_LANGUAGES[args]
-        return CommandResult(
-            message=f"{get_tui_text('language_set', args)} {lang_name} ({args})"
-        )
+        return CommandResult(message=f"{get_tui_text('language_set', args)} {lang_name} ({args})")
 
 
 class VimCommand(SlashCommand):
@@ -2623,6 +2624,4 @@ class CavemanCommand(SlashCommand):
         # Invalidate any active CacheGuard so it picks up the change
         if hasattr(ctx.app_state, "_cache_guard") and ctx.app_state._cache_guard:
             ctx.app_state._cache_guard.invalidate()
-        return CommandResult(
-            message=f"Caveman mode {'ON' if new_state else 'OFF'}"
-        )
+        return CommandResult(message=f"Caveman mode {'ON' if new_state else 'OFF'}")

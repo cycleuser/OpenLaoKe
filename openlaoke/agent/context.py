@@ -131,7 +131,14 @@ class CompactSummary:
             setattr(result, key, "\n".join(lines).strip())
 
     def has_any(self) -> bool:
-        return bool(self.goal or self.decisions or self.files or self.commands or self.errors or self.pending)
+        return bool(
+            self.goal
+            or self.decisions
+            or self.files
+            or self.commands
+            or self.errors
+            or self.pending
+        )
 
 
 COMPACTION_SYSTEM_PROMPT = """You are compacting the earlier part of a coding agent's conversation to save context.
@@ -320,7 +327,9 @@ class ContextBuilder:
             kept.append(line)
             chars_used += line_chars
         if len(kept) < len(lines):
-            kept.append(f"\n... (window={self.window_tokens}, prefix trimmed to {chars_used} chars)")
+            kept.append(
+                f"\n... (window={self.window_tokens}, prefix trimmed to {chars_used} chars)"
+            )
         return "\n".join(kept)
 
     @property
