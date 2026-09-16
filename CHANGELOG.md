@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### OpenCode-style Workflow Core
+- **Conversation rewind** — `SnapshotStore.capture_conversation` persists per-turn conversation; `rewind_conversation` truncates live history (code / conversation / both scopes); rewinding to the first recorded turn clears the conversation
+- **Session fork / branch** — `fork_session` inherits the parent's conversation and file snapshots; `Orchestrator.fork/branch/switch` register switchable sessions; forked sessions continue at the next turn index (never overwrite inherited records)
+- **Command wiring** — `dispatch` now handles `Branch`, `Switch`, `SummarizeFrom`, `SummarizeUpTo`, `SetBypass`, `ForgetMemory`, `SaveDoc`
+- **Plan mode unified on `PlanState`** — writer tools are blocked in the agent loop *before* the permission gate (Plan tool and read-only tools exempt); approval unblocks execution
+- **Fixed: `SystemMessage.tool_use_id`** — tool results round-trip through serialization and rebuild as `role=tool` messages in the next turn
+- **Fixed: `run_agent_loop` conversation capture** — assistant/tool messages are snapshotted at the loop boundary
+- **`SnapshotStore` bounded cache** — LRU eviction (`max_cache_entries`, default 128) prevents unbounded memory growth in long sessions
+
+### Dependency Slimming
+- **Removed 6 unused runtime deps**: `anthropic` (REST via httpx), `mcp`, `aiofiles`, `tiktoken`, `jsonschema`, `setproctitle` — all verified zero code references
+- **`watchfiles`** moved to the `dev` extra (uvicorn `--reload` only)
+- Runtime dependencies: 18 → 11
+
+### Test Coverage
+- **+19 tests**: snapshot cache eviction, corrupt-line handling, unreadable paths, health checks, agent-loop edge cases (no API, shutdown, approval allow/deny), session round-trip
+- `openlaoke/control/health.py` 37% → 88%; `snapshot/store.py` 90% → 94%; total (snapshot+control) 83% → 88%
+
 ### Thinking Display System
 - **Thinking inline display** — model reasoning content shown inline (first 5 lines) with `Ctrl+G` to expand full content
 - **`/thinking on|off|show`** — persistent toggle to control whether thinking auto-displays after each response

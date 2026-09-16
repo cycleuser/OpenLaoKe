@@ -150,6 +150,45 @@ class TestSnapshotStore:
         turns = store.all_turns("s1")
         assert [t.turn_index for t in turns] == [1, 2, 3]
 
+    def test_cache_is_bounded(self, tmp_path) -> None:
+        store = SnapshotStore(base_dir=str(tmp_path / "snap2"), max_cache_entries=2)
+        for i in range(5):
+            store.capture_conversation("s1", i, [{"role": "user", "content": str(i)}])
+        assert len(store._cache) <= 2
+
+    def test_evicted_turn_reloads_from_disk(self, tmp_path) -> None:
+        store = SnapshotStore(base_dir=str(tmp_path / "snap3"), max_cache_entries=1)
+        store.capture_conversation("s1", 0, [{"role": "user", "content": "zero"}])
+        store.capture_conversation("s1", 1, [{"role": "user", "content": "one"}])
+        assert len(store._cache) == 1
+        assert store.load_turn("s1", 0).conversation == [{"role": "user", "content": "zero"}]
+
+    def test_cache_dedup_still_works_with_bound(self, workspace: str, tmp_path) -> None:
+        store = SnapshotStore(base_dir=str(tmp_path / "snap4"), max_cache_entries=4)
+        target = os.path.join(workspace, "a.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("v1")
+        store.capture_file("s1", 0, target)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("v2")
+        assert store.capture_file("s1", 0, target).content == "v1"
+
+    def test_capture_directory_path_recorded_missing(
+        self, store: SnapshotStore, workspace: str
+    ) -> None:
+        # 目录路径触发 OSError 分支：记录为不存在内容
+        snap = store.capture_file("s1", 0, workspace)
+        assert snap.content is None
+        assert snap.existed is False
+
+    def test_all_turns_skips_corrupt_lines(self, store: SnapshotStore) -> None:
+        path = store.path_for("s1")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("this is not json\n")
+            f.write(json.dumps({"turn_index": 2, "files": {}, "conversation": []}) + "\n")
+        turns = store.all_turns("s1")
+        assert [t.turn_index for t in turns] == [2]
+
 
 class TestRewindOps:
     def test_rewind_code_report(self, store: SnapshotStore, workspace: str) -> None:

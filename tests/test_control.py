@@ -565,3 +565,126 @@ class TestCommandRouter:
         cmds = router.list_commands()
         for name in ("stop", "status", "help", "new", "dream"):
             assert name in cmds
+
+
+class TestAgentLoopEdgeCases:
+    def _tool_api(self, tool_name: str, tool_args: dict[str, Any] | None = None) -> Any:
+        import json
+
+        from openlaoke.types.core_types import StreamChunk, StreamEventType
+
+        class FakeStreamAPI:
+            def __init__(self) -> None:
+                self._calls = 0
+
+            async def stream_message(
+                self,
+                system_prompt: str = "",
+                messages: list[dict[str, Any]] | None = None,
+                tools: list[dict[str, Any]] | None = None,
+                thinking_budget: int = 0,
+            ):
+                self._calls += 1
+                if self._calls == 1:
+                    yield StreamChunk(
+                        event_type=StreamEventType.TOOL_CALL_START,
+                        tool_call_id="call_e1",
+                        tool_call_name=tool_name,
+                        tool_call_arguments=json.dumps(tool_args or {}),
+                    )
+                else:
+                    yield StreamChunk(event_type=StreamEventType.TEXT, text="done")
+
+        return FakeStreamAPI()
+
+    def _registry(self) -> Any:
+        class FakeRegistry:
+            def is_readonly(self, name: str) -> bool:
+                return name == "read_file"
+
+            async def execute(self, name: str, args: dict[str, Any]) -> Any:
+                class Block:
+                    output = f"ran {name}"
+
+                return Block()
+
+        return FakeRegistry()
+
+    def test_run_agent_loop_without_api_returns_empty(self) -> None:
+        async def scenario() -> None:
+            orch = Orchestrator()
+            orch.configure(AgentLoopConfig())
+            assert await orch.run_agent_loop("s1") == []
+
+        asyncio.run(scenario())
+
+    def test_shutdown_marks_closed(self) -> None:
+        async def scenario() -> None:
+            orch = Orchestrator()
+            await orch.shutdown()
+            assert orch._closed is True
+
+        asyncio.run(scenario())
+
+    def test_gate_ask_approved_executes_tool(self) -> None:
+        from openlaoke.permission.policy import Decision
+
+        async def scenario() -> None:
+            orch = Orchestrator()
+
+            class AskingGate(Gate):
+                async def check(self, tool_name: str, tool_args: dict[str, Any]):
+                    return type("R", (), {"decision": Decision.ASK, "reason": "needs approval"})()
+
+            orch.configure(
+                AgentLoopConfig(
+                    api=self._tool_api("read_file"),
+                    registry=self._registry(),
+                    gate=AskingGate(),
+                )
+            )
+
+            async def approve_later() -> None:
+                await asyncio.sleep(0.05)
+                tickets = orch.pending_approvals()
+                if tickets:
+                    orch.resolve_approval("s1", tickets[0].ticket_id, "allow")
+
+            task = asyncio.create_task(orch.run_agent_loop("s1", tools=[{"name": "read_file"}]))
+            await approve_later()
+            messages = await task
+            assert any("ran read_file" in m.get("content", "") for m in messages)
+
+        asyncio.run(scenario())
+
+    def test_gate_ask_denied_blocks_tool(self) -> None:
+        from openlaoke.permission.policy import Decision
+
+        async def scenario() -> None:
+            orch = Orchestrator()
+
+            class AskingGate(Gate):
+                async def check(self, tool_name: str, tool_args: dict[str, Any]):
+                    return type("R", (), {"decision": Decision.ASK, "reason": "needs approval"})()
+
+            orch.configure(
+                AgentLoopConfig(
+                    api=self._tool_api("read_file"),
+                    registry=self._registry(),
+                    gate=AskingGate(),
+                )
+            )
+
+            async def deny_later() -> None:
+                await asyncio.sleep(0.05)
+                tickets = orch.pending_approvals()
+                if tickets:
+                    orch.resolve_approval("s1", tickets[0].ticket_id, "deny")
+
+            task = asyncio.create_task(orch.run_agent_loop("s1", tools=[{"name": "read_file"}]))
+            await deny_later()
+            messages = await task
+            assert any("denied this tool call" in m.get("content", "") for m in messages)
+            assert not any("ran read_file" in m.get("content", "") for m in messages)
+
+        asyncio.run(scenario())

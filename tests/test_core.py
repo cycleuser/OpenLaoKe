@@ -168,6 +168,30 @@ class TestMessageRoundTrip:
         assert all(m.get("role") != "tool" for m in rebuilt)
         assert rebuilt == []
 
+    def test_session_manager_preserves_tool_use_id(self):
+        from openlaoke.core.sessions import SessionManager
+
+        with tempfile.TemporaryDirectory() as d:
+            mgr = SessionManager(session_dir=d)
+            state = create_app_state(cwd=d)
+            state.session_id = "sess_roundtrip"
+            state.add_message(UserMessage(role=MessageRole.USER, content="hi"))
+            state.add_message(
+                SystemMessage(
+                    role=MessageRole.SYSTEM,
+                    content="tool out",
+                    subtype="tool_result",
+                    tool_use_id="call_5",
+                )
+            )
+            mgr.save_session(state)
+            loaded = mgr.load_session("sess_roundtrip")
+            assert loaded is not None
+            sys_msgs = [m for m in loaded.messages if isinstance(m, SystemMessage)]
+            assert sys_msgs
+            assert sys_msgs[0].tool_use_id == "call_5"
+            assert sys_msgs[0].subtype == "tool_result"
+
 
 # ── TOOL REGISTRY ──────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import os
 import tempfile
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -41,20 +42,31 @@ class TurnSnapshot:
 class SnapshotStore:
     """Persists per-turn file snapshots for rewind and fork."""
 
-    def __init__(self, base_dir: str | None = None) -> None:
+    def __init__(self, base_dir: str | None = None, max_cache_entries: int = 128) -> None:
         self.base_dir = base_dir or os.path.expanduser("~/.openlaoke/snapshots")
         os.makedirs(self.base_dir, exist_ok=True)
-        self._cache: dict[tuple[str, int], TurnSnapshot] = {}
+        self._max_cache_entries = max(1, max_cache_entries)
+        self._cache: OrderedDict[tuple[str, int], TurnSnapshot] = OrderedDict()
 
     def path_for(self, session_id: str) -> str:
         return os.path.join(self.base_dir, f"{session_id}.jsonl")
 
+    def _cached_turn(self, session_id: str, turn_index: int) -> TurnSnapshot:
+        """Return the in-memory turn snapshot, loading it on miss and
+        evicting the least-recently-used entry past the cache bound."""
+        key = (session_id, turn_index)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        snap = self.load_turn(session_id, turn_index)
+        self._cache[key] = snap
+        while len(self._cache) > self._max_cache_entries:
+            self._cache.popitem(last=False)
+        return snap
+
     def capture_file(self, session_id: str, turn_index: int, file_path: str) -> FileSnapshot:
         """Snapshot a file's pre-edit content. Deduplicated per turn."""
-        key = (session_id, turn_index)
-        if key not in self._cache:
-            self._cache[key] = self.load_turn(session_id, turn_index)
-        snap = self._cache[key]
+        snap = self._cached_turn(session_id, turn_index)
         if file_path in snap.files:
             return snap.files[file_path]
 
@@ -90,10 +102,7 @@ class SnapshotStore:
         plain dicts. The recorded conversation is the rewind target for
         ``rewind_conversation``.
         """
-        key = (session_id, turn_index)
-        if key not in self._cache:
-            self._cache[key] = self.load_turn(session_id, turn_index)
-        snap = self._cache[key]
+        snap = self._cached_turn(session_id, turn_index)
         snap.conversation = self._serialize_messages(messages)
         self.save_turn(session_id, snap)
         return snap

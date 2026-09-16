@@ -50,6 +50,7 @@ def _message_from_dict(
         role=MessageRole.SYSTEM,
         content=msg_data.get("content", ""),
         subtype=msg_data.get("subtype", "info"),
+        tool_use_id=msg_data.get("tool_use_id", ""),
     )
 
 
