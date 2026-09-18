@@ -21,25 +21,6 @@ CONFIG_DIR = Path.home() / ".openlaoke"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
-def _get_local_builtin_model_ids() -> list[str]:
-    model_ids = []
-    try:
-        registry_path = CONFIG_DIR / "models" / "custom_models.json"
-        if registry_path.exists():
-            with open(registry_path) as f:
-                custom_models = json.load(f)
-            for model_id, model_data in custom_models.items():
-                if model_id in model_ids:
-                    continue
-                dl = model_data.get("downloaded", False)
-                path = model_data.get("path", "")
-                if dl and path and os.path.exists(path):
-                    model_ids.append(model_id)
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        pass
-    return model_ids
-
-
 @dataclass
 class AppConfig:
     """User configuration for OpenLaoKe."""
@@ -116,11 +97,8 @@ def load_config() -> AppConfig:
                             p.default_model = pdata.get("default_model", p.default_model)
                             p.enabled = pdata.get("enabled", True)
                             # Preserve is_local from defaults
-                            if name in ("ollama", "lm_studio", "local_builtin"):
+                            if name in ("ollama", "lm_studio"):
                                 p.is_local = True
-                            # Refresh local_builtin models from registry
-                            if name == "local_builtin":
-                                p.models = _get_local_builtin_model_ids()
 
             plans = PlanConfig.defaults()
             if "plans" in data:

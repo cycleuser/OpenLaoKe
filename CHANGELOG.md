@@ -23,6 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Added a pi-style prompt-template system** (`core/prompt_templates.py`) with
   `$1` / `$@` / `${1:-default}` / `${@:N:L}` argument expansion, wired to
   `/prompt` and to unknown `/name` commands.
+- **Simplified local models**: removed the built-in GGUF runtime
+  (`llama-cpp-python`, ModelScope download) and the `openlaoke model`
+  subcommand. Local models now use the same formats as cloud providers —
+  point `openai_compatible` (or `ollama` / `lm_studio`) at any
+  OpenAI-compatible server such as Ollama. Local endpoints no longer require
+  an API key.
 - **Slimmed dependencies**: dropped `fastapi`, `uvicorn`, `websockets`, `jieba`,
   and `watchfiles`.
 - **Result**: 286 files / 77,955 lines → 69 files / 19,349 lines; 7 runtime

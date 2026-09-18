@@ -24,7 +24,7 @@ from openlaoke.utils.config import load_config, save_config
 
 
 def main() -> None:
-    known_subcommands = {"model"}
+    known_subcommands: set[str] = set()
     prompt_parts: list[str] = []
     filtered_argv: list[str] = []
     args_iter = iter(sys.argv[1:])
@@ -69,25 +69,6 @@ def main() -> None:
         action="version",
         version=f"OpenLaoKe {__version__}",
     )
-
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    model_parser = subparsers.add_parser("model", help="Manage built-in GGUF models")
-    model_subparsers = model_parser.add_subparsers(dest="model_command", help="Model commands")
-
-    model_download_parser = model_subparsers.add_parser("download", help="Download a model")
-    model_download_parser.add_argument("model_id", nargs="?", help="Model ID to download")
-
-    _ = model_subparsers.add_parser("list", help="List available models")
-
-    model_remove_parser = model_subparsers.add_parser("remove", help="Remove a model")
-    model_remove_parser.add_argument("model_id", help="Model ID to remove")
-
-    model_info_parser = model_subparsers.add_parser("info", help="Show model information")
-    model_info_parser.add_argument("model_id", help="Model ID")
-
-    model_search_parser = model_subparsers.add_parser("search", help="Search ModelScope for models")
-    model_search_parser.add_argument("query", help="Search query")
 
     parser.add_argument(
         "-m",
@@ -209,29 +190,6 @@ def main() -> None:
     args.prompt = " ".join(prompt_parts) if prompt_parts else None
 
     console = Console(force_terminal=True)
-
-    if args.command == "model":
-        from openlaoke.core.model_cli import (
-            list_models,
-            remove_model,
-            run_download,
-            run_search,
-            show_model_info,
-        )
-
-        if args.model_command == "download":
-            run_download(args.model_id)
-        elif args.model_command == "list":
-            list_models()
-        elif args.model_command == "remove":
-            remove_model(args.model_id)
-        elif args.model_command == "info":
-            show_model_info(args.model_id)
-        elif args.model_command == "search":
-            run_search(args.query)
-        else:
-            model_parser.print_help()
-        return
 
     config = load_config()
 

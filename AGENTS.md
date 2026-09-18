@@ -22,7 +22,7 @@ pytest                        # 测试（asyncio_mode=auto）
 |------|------|
 | TUI（默认） | `openlaoke` |
 | 非交互 | `openlaoke "write a script"` |
-| 本地模型管理 | `openlaoke model download/list/search/remove` |
+| 本地模型 | 指向任意 OpenAI 兼容端点（Ollama / LM Studio 等）|
 | 配置向导 | `openlaoke --config` |
 
 ## 代码风格

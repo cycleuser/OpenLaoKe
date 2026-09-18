@@ -14,7 +14,7 @@ OpenLaoKe is a **faithful Python re-implementation of pi's design**. It keeps pi
 - **pi's 23 built-in commands**, plus prompt templates and skills.
 - **Session tree with branch / fork / clone / rewind**, backed by append-only files.
 - **Prompt templates** (`/name` and `/prompt <name>`), with `$1`, `$@`, `${1:-default}`, `${@:N:L}`.
-- **Zero-cost local models** via llama-cpp-python, plus 20+ cloud providers.
+- **API keys or local endpoints** — OpenAI and Anthropic (Claude) formats, plus any OpenAI-compatible server (Ollama, LM Studio, …).
 - ~19k lines of Python. No MCP, no sub-agents, no plan mode, no permission popups, no background bash.
 
 ### Tools
@@ -53,7 +53,7 @@ OpenLaoKe follows pi deliberately, and the philosophy is the point:
 
 **5. Opinionated omissions.** pi says *No MCP, no sub-agents, no permission popups, no plan mode, no built-in to-dos, no background bash.* OpenLaoKe inherits this list. These are not missing features; they are features you build when you actually want them.
 
-**6. Local-first, zero-cost capable.** A GGUF model on your own machine is a first-class provider, not a fallback.
+**6. Local-first, zero-cost capable.** Point OpenLaoKe at a model running on your own machine — an OpenAI-compatible endpoint is a first-class option, not a fallback.
 
 ## Why we pivoted
 
@@ -147,19 +147,35 @@ openlaoke
 
 Requires Python 3.11+.
 
-### Local models (zero API cost)
+### API keys
+
+Set a key and go:
 
 ```bash
-pip install llama-cpp-python
-openlaoke model search llama          # search ModelScope for GGUF models
-openlaoke model download <model-id>   # download one
-openlaoke model list                  # list downloaded models
-openlaoke --config                    # pick "Built-in GGUF Model"
+export OPENAI_API_KEY=sk-...         # OpenAI format
+export ANTHROPIC_API_KEY=sk-ant-...  # Claude format
+openlaoke --provider openai --model gpt-4o
 ```
+
+### Local models
+
+OpenLaoKe speaks the OpenAI and Anthropic formats. For a local model, run any OpenAI-compatible server and point OpenLaoKe at it — how you run that server is up to you. With [Ollama](https://ollama.com):
+
+```bash
+ollama serve
+ollama pull llama3.2
+
+openlaoke --provider openai_compatible \
+  --base-url http://127.0.0.1:11434/v1 \
+  --api-key not-needed \
+  --model llama3.2
+```
+
+Local endpoints need no real API key. LM Studio (port 1234), vLLM, and any other OpenAI-compatible server work the same way.
 
 ### Providers
 
-Cloud (API key): Anthropic, OpenAI, Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan, and any OpenAI-compatible endpoint. Free/local: OpenCode Zen, Ollama, LM Studio, and built-in GGUF.
+Cloud: OpenAI, Anthropic (Claude), Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan. Free/local: OpenCode Zen, and any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, …).
 
 ## Configuration
 
@@ -168,8 +184,8 @@ Cloud (API key): Anthropic, OpenAI, Azure OpenAI, Google, Google Vertex, AWS Bed
 ```json
 {
   "providers": {
-    "active_provider": "local_builtin",
-    "active_model": "custom:my-model",
+    "active_provider": "ollama",
+    "active_model": "llama3.2",
     "providers": {
       "ollama": { "base_url": "http://localhost:11434/v1", "default_model": "llama3.2", "enabled": true },
       "openai": { "api_key": "sk-...", "default_model": "gpt-4o", "enabled": false }

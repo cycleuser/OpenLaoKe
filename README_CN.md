@@ -14,7 +14,7 @@ OpenLaoKe 是 **pi 设计的一次忠实 Python 重写**。它保留了 pi 的�
 - **pi 的 23 个内置命令**，外加 prompt 模板与技能。
 - **树状会话，支持 branch / fork / clone / rewind**，底层是追加写文件。
 - **prompt 模板**（`/name` 与 `/prompt <name>`），支持 `$1`、`$@`、`${1:-default}`、`${@:N:L}`。
-- **零成本的本地模型**（llama-cpp-python），外加 20+ 云端提供商。
+- **API key 或本地端点** —— 支持 OpenAI 与 Anthropic（Claude）两种格式，以及任何 OpenAI 兼容服务（Ollama、LM Studio 等）。
 - 约 1.9 万行 Python。没有 MCP、没有子智能体、没有计划模式、没有权限弹窗、没有后台 bash。
 
 ### 工具
@@ -53,7 +53,7 @@ OpenLaoKe 是刻意跟随 pi 的，而这份哲学本身就是重点：
 
 **五、有主见的"不做"。** pi 的原话是：*没有 MCP、没有子智能体、没有权限弹窗、没有计划模式、没有内置待办、没有后台 bash。* OpenLaoKe 继承这份清单。这些不是缺失的功能，而是"真正需要时你自己去搭"的功能。
 
-**六、本地优先，能零成本。** 跑在自己机器上的 GGUF 模型是一等公民，不是备胎。
+**六、本地优先，能零成本。** 把 OpenLaoKe 指向你自己机器上的模型——一个 OpenAI 兼容端点是一等公民，不是备胎。
 
 ## 为什么突然转向
 
@@ -147,19 +147,35 @@ openlaoke
 
 需要 Python 3.11+。
 
-### 本地模型（零 API 费用）
+### API key
+
+设好 key 就能用：
 
 ```bash
-pip install llama-cpp-python
-openlaoke model search llama          # 在 ModelScope 上搜索 GGUF 模型
-openlaoke model download <model-id>   # 下载一个
-openlaoke model list                  # 列出已下载的模型
-openlaoke --config                    # 选择 "Built-in GGUF Model"
+export OPENAI_API_KEY=sk-...         # OpenAI 格式
+export ANTHROPIC_API_KEY=sk-ant-...  # Claude 格式
+openlaoke --provider openai --model gpt-4o
 ```
+
+### 本地模型
+
+OpenLaoKe 说 OpenAI 和 Anthropic 两种格式。要用本地模型，你自己起一个 OpenAI 兼容的服务，把它指过去就行——怎么起是你的事。以 [Ollama](https://ollama.com) 为例：
+
+```bash
+ollama serve
+ollama pull llama3.2
+
+openlaoke --provider openai_compatible \
+  --base-url http://127.0.0.1:11434/v1 \
+  --api-key not-needed \
+  --model llama3.2
+```
+
+本地端点不需要真的 API key。LM Studio（端口 1234）、vLLM，以及任何其它 OpenAI 兼容服务都一样。
 
 ### 提供商
 
-云端（API key）：Anthropic、OpenAI、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan，以及任何 OpenAI 兼容端点。免费/本地：OpenCode Zen、Ollama、LM Studio，以及内置 GGUF。
+云端：OpenAI、Anthropic（Claude）、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan。免费/本地：OpenCode Zen，以及任何 OpenAI 兼容端点（Ollama、LM Studio、vLLM 等）。
 
 ## 配置
 
@@ -168,8 +184,8 @@ openlaoke --config                    # 选择 "Built-in GGUF Model"
 ```json
 {
   "providers": {
-    "active_provider": "local_builtin",
-    "active_model": "custom:my-model",
+    "active_provider": "ollama",
+    "active_model": "llama3.2",
     "providers": {
       "ollama": { "base_url": "http://localhost:11434/v1", "default_model": "llama3.2", "enabled": true },
       "openai": { "api_key": "sk-...", "default_model": "gpt-4o", "enabled": false }

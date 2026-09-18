@@ -129,10 +129,7 @@ class REPL:
         """Register cleanup handlers for model unload on exit/crash/signal."""
 
         def _cleanup() -> None:
-            if self.api and self.api._builtin_client:
-                self.api._builtin_client.unload()
-                self.api._builtin_client = None
-                gc.collect()
+            gc.collect()
 
         atexit.register(_cleanup)
 
@@ -335,7 +332,6 @@ class REPL:
         self.app_state.session_config.model = model_name
 
         if self.api:
-            self.api._builtin_client = None
             self.api.config = config
 
         from openlaoke.utils.config import load_config, save_config
@@ -508,40 +504,17 @@ class REPL:
                     }
                 )
 
-        is_local_builtin = (
-            self.app_state.multi_provider_config
-            and self.app_state.multi_provider_config.active_provider == "local_builtin"
-        )
         runtime_blocks: list[str] = []
-        if is_local_builtin:
-            from openlaoke.core.system_prompt import build_compact_system_prompt
-
-            user_input = ""
-            for msg in reversed(messages):
-                if msg.get("role") == "user":
-                    user_input = msg.get("content", "")
-                    break
-            world_ctx = ""
-            if self._world_sensor:
-                world_ctx = self._world_sensor.to_summary()
-            system_prompt = build_compact_system_prompt(
-                self.app_state, user_input, world_context=world_ctx
-            )
-
-            tool_list = self._build_tool_list_for_small_model()
-            if tool_list:
-                system_prompt = system_prompt.rstrip() + tool_list
-        else:
-            system_prompt = self._cache_guard.system_prompt
-            session_ctx = self._cache_guard.ensure_session_context(
-                model=self.app_state.session_config.model,
-            )
-            if session_ctx:
-                runtime_blocks.append(session_ctx)
-            if self._world_sensor:
-                world_ctx = self._world_sensor.to_context_block()
-                if world_ctx:
-                    runtime_blocks.append(f"<sc:context>{world_ctx}</sc:context>")
+        system_prompt = self._cache_guard.system_prompt
+        session_ctx = self._cache_guard.ensure_session_context(
+            model=self.app_state.session_config.model,
+        )
+        if session_ctx:
+            runtime_blocks.append(session_ctx)
+        if self._world_sensor:
+            world_ctx = self._world_sensor.to_context_block()
+            if world_ctx:
+                runtime_blocks.append(f"<sc:context>{world_ctx}</sc:context>")
 
         from openlaoke.core.small_model_optimizations import (
             apply_structured_thinking_prefix,
@@ -553,22 +526,14 @@ class REPL:
         small_model_guidance = get_small_model_guidance(model_size)
         memory_prompt = ""
         thinking_prefix = apply_structured_thinking_prefix("code")
-        if not is_local_builtin:
-            runtime_parts: list[str] = []
-            if small_model_guidance:
-                runtime_parts.append(small_model_guidance)
-            if memory_prompt:
-                runtime_parts.append(memory_prompt)
-            if thinking_prefix:
-                runtime_parts.append(thinking_prefix)
-            runtime_blocks.extend(runtime_parts)
-        else:
-            if memory_prompt:
-                system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
-            if small_model_guidance:
-                system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
-            if thinking_prefix:
-                system_prompt = thinking_prefix + "\n" + system_prompt
+        runtime_parts: list[str] = []
+        if small_model_guidance:
+            runtime_parts.append(small_model_guidance)
+        if memory_prompt:
+            runtime_parts.append(memory_prompt)
+        if thinking_prefix:
+            runtime_parts.append(thinking_prefix)
+        runtime_blocks.extend(runtime_parts)
         if runtime_blocks:
             messages.append(
                 {
@@ -578,7 +543,7 @@ class REPL:
                 }
             )
 
-        needs_tool_hint = is_local_builtin or self._is_ollama_provider()
+        needs_tool_hint = self._is_ollama_provider()
         if needs_tool_hint:
             latest_user = next(
                 (
@@ -660,7 +625,7 @@ class REPL:
             tools = self.registry.get_all_for_prompt()
 
             # Apply cache_control markers for Anthropic providers
-            if not is_local_builtin and self.api:
+            if self.api:
                 provider = self.api.config.get_active_provider() if self.api.config else None
                 if provider and getattr(provider, "provider_type", None):
                     from openlaoke.types.providers import ProviderType
@@ -691,7 +656,7 @@ class REPL:
                 if iteration == 1 and self.app_state.verbose:
                     self.console.print(f"[{self._c('muted')}]Messages: {messages}[/]")
 
-                streaming_supported = not is_local_builtin
+                streaming_supported = True
                 response = None
                 usage = None
                 cost = None

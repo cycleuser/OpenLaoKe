@@ -80,28 +80,27 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
         providers = [
             ("1", "🟠 Ollama (Local)", "ollama", ollama_status),
             ("2", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
-            ("3", "💻 Built-in GGUF Model (Local)", "local_builtin", "local"),
-            ("4", "MiniMax", "minimax", "cloud"),
-            ("5", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("6", "Anthropic", "anthropic", "cloud"),
-            ("7", "OpenAI (GPT-4)", "openai", "cloud"),
-            ("8", "Azure OpenAI", "azure_openai", "cloud"),
-            ("9", "Google AI (Gemini)", "google", "cloud"),
-            ("10", "Google Vertex AI", "google_vertex", "cloud"),
-            ("11", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("12", "xAI Grok", "xai", "cloud"),
-            ("13", "Mistral AI", "mistral", "cloud"),
-            ("14", "Groq", "groq", "cloud"),
-            ("15", "Cerebras", "cerebras", "cloud"),
-            ("16", "Cohere", "cohere", "cloud"),
-            ("17", "DeepInfra", "deepinfra", "cloud"),
-            ("18", "Together AI", "togetherai", "cloud"),
-            ("19", "Perplexity", "perplexity", "cloud"),
-            ("20", "OpenRouter", "openrouter", "cloud"),
-            ("21", "GitHub Copilot", "github_copilot", "cloud"),
-            ("22", "LM Studio (Local)", "lm_studio", lm_status),
-            ("23", "OpenAI-Compatible (Custom)", "openai_compatible", "custom"),
-            ("24", "Skip (configure later)", "", ""),
+            ("3", "MiniMax", "minimax", "cloud"),
+            ("4", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
+            ("5", "Anthropic (Claude)", "anthropic", "cloud"),
+            ("6", "OpenAI", "openai", "cloud"),
+            ("7", "Azure OpenAI", "azure_openai", "cloud"),
+            ("8", "Google AI (Gemini)", "google", "cloud"),
+            ("9", "Google Vertex AI", "google_vertex", "cloud"),
+            ("10", "AWS Bedrock", "aws_bedrock", "cloud"),
+            ("11", "xAI Grok", "xai", "cloud"),
+            ("12", "Mistral AI", "mistral", "cloud"),
+            ("13", "Groq", "groq", "cloud"),
+            ("14", "Cerebras", "cerebras", "cloud"),
+            ("15", "Cohere", "cohere", "cloud"),
+            ("16", "DeepInfra", "deepinfra", "cloud"),
+            ("17", "Together AI", "togetherai", "cloud"),
+            ("18", "Perplexity", "perplexity", "cloud"),
+            ("19", "OpenRouter", "openrouter", "cloud"),
+            ("20", "GitHub Copilot", "github_copilot", "cloud"),
+            ("21", "LM Studio (Local)", "lm_studio", lm_status),
+            ("22", "OpenAI-Compatible / Local Server", "openai_compatible", "custom"),
+            ("23", "Skip (configure later)", "", ""),
         ]
 
         for opt, name, key, ptype in providers:
@@ -124,37 +123,36 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
 
         choice = Prompt.ask(
             "Select provider",
-            choices=[str(i) for i in range(1, 25)],
+            choices=[str(i) for i in range(1, 24)],
             default="1",
         )
 
         provider_map = {
             "1": "ollama",
             "2": "opencode",
-            "3": "local_builtin",
-            "4": "minimax",
-            "5": "aliyun_coding_plan",
-            "6": "anthropic",
-            "7": "openai",
-            "8": "azure_openai",
-            "9": "google",
-            "10": "google_vertex",
-            "11": "aws_bedrock",
-            "12": "xai",
-            "13": "mistral",
-            "14": "groq",
-            "15": "cerebras",
-            "16": "cohere",
-            "17": "deepinfra",
-            "18": "togetherai",
-            "19": "perplexity",
-            "20": "openrouter",
-            "21": "github_copilot",
-            "22": "lm_studio",
-            "23": "openai_compatible",
+            "3": "minimax",
+            "4": "aliyun_coding_plan",
+            "5": "anthropic",
+            "6": "openai",
+            "7": "azure_openai",
+            "8": "google",
+            "9": "google_vertex",
+            "10": "aws_bedrock",
+            "11": "xai",
+            "12": "mistral",
+            "13": "groq",
+            "14": "cerebras",
+            "15": "cohere",
+            "16": "deepinfra",
+            "17": "togetherai",
+            "18": "perplexity",
+            "19": "openrouter",
+            "20": "github_copilot",
+            "21": "lm_studio",
+            "22": "openai_compatible",
         }
 
-        if choice == "24":
+        if choice == "23":
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
@@ -376,9 +374,6 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
             console.print("\n[yellow]Reconfiguring...[/yellow]")
 
     console.print("[dim]Press Enter to use default value[/dim]\n")
-
-    if key == "local_builtin":
-        return _configure_builtin_provider(config, provider, console)
 
     if provider.is_local:
         base_url = Prompt.ask(
@@ -671,139 +666,6 @@ def _select_model_from_list(models: list[str], default: str) -> str:
     )
 
     return models[int(selection) - 1]
-
-
-def _configure_builtin_provider(
-    config: MultiProviderConfig,
-    provider: ProviderConfig,
-    console: Console,
-) -> MultiProviderConfig:
-    """Configure built-in GGUF model provider."""
-    try:
-        import llama_cpp  # noqa: F401
-
-        del llama_cpp
-    except ImportError:
-        console.print("[bold red]llama-cpp-python is not installed.[/bold red]")
-        console.print("[dim]Local GGUF models require llama-cpp-python.[/dim]")
-        install = Confirm.ask("Install it now? (requires C++ compiler)", default=True)
-        if install:
-            import subprocess
-            import sys
-
-            console.print("[dim]Installing llama-cpp-python...[/dim]")
-            try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "llama-cpp-python"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                console.print("[green]✓ llama-cpp-python installed![/green]")
-            except subprocess.CalledProcessError:
-                console.print("[red]✗ Installation failed.[/red]")
-                console.print("[dim]Try: pip install llama-cpp-python[/dim]")
-                console.print(
-                    "[dim]Linux: sudo apt install build-essential cmake && pip install llama-cpp-python[/dim]"
-                )
-                console.print(
-                    "[dim]Or use OpenCode Zen (free, no install needed) as an alternative.[/dim]"
-                )
-                return config
-
-    from openlaoke.core.local_model_manager import LocalModelManager
-
-    console.print("[bold]Local GGUF Models[/bold]")
-    console.print("[dim]Models downloaded from ModelScope[/dim]\n")
-
-    manager = LocalModelManager()
-    models = manager.list_models()
-    custom_models = [m for m in models if m.model_id.startswith("custom:")]
-
-    if not custom_models:
-        console.print("[yellow]No local models downloaded.[/yellow]")
-        console.print("[dim]Download one first: openlaoke model search <query>[/dim]")
-        console.print("[dim]Then run: openlaoke model download <model_id>[/dim]\n")
-        return config
-
-    table = Table(show_header=True, box=None)
-    table.add_column("Option", style="cyan")
-    table.add_column("Model", style="bold")
-    table.add_column("Size", style="dim")
-    table.add_column("Status", style="green")
-
-    idx = 1
-    all_models = []
-    for model in custom_models:
-        status = (
-            "[green]✓ downloaded[/green]" if model.downloaded else "[yellow]not downloaded[/yellow]"
-        )
-        table.add_row(
-            f"  [{idx}]",
-            f"{model.name}\n[dim]{model.description}[/dim]",
-            f"{model.size_mb:.0f} MB",
-            status,
-        )
-        all_models.append(model)
-        idx += 1
-
-    console.print(table)
-    console.print()
-
-    choice = Prompt.ask(
-        "Select model to use",
-        choices=[str(i) for i in range(1, len(all_models) + 1)],
-        default="1",
-    )
-
-    selected_model = all_models[int(choice) - 1]
-
-    if not selected_model.downloaded:
-        if selected_model.model_id.startswith("custom:"):
-            console.print(
-                f"\n[yellow]Custom model '{selected_model.name}' file not found.[/yellow]"
-            )
-            console.print("[yellow]Redownload with: openlaoke model download[/yellow]")
-            return config
-        console.print(f"\n[yellow]Model '{selected_model.name}' not downloaded.[/yellow]")
-        download = Confirm.ask(
-            f"Download now? ({selected_model.size_mb} MB)",
-            default=True,
-        )
-
-        if download:
-            import asyncio
-
-            async def do_download():
-                def progress(pct, downloaded, total):
-                    bars = int(pct / 5)
-                    bar_str = "█" * bars + "░" * (20 - bars)
-                    console.print(
-                        f"\r  Downloading: [{bar_str}] {pct:.0f}% ({downloaded / 1024 / 1024:.1f} MB)",
-                        end="",
-                    )
-
-                return await manager.download_model(selected_model.model_id, progress)
-
-            try:
-                asyncio.run(do_download())
-                console.print("\n[green]✓ Download complete![/green]")
-                selected_model.downloaded = True
-            except Exception as e:
-                console.print(f"\n[red]✗ Download failed: {e}[/red]")
-                console.print(
-                    "[yellow]You can download later with: openlaoke model download[/yellow]"
-                )
-                return config
-        else:
-            console.print("[yellow]Skipping download. You can download later.[/yellow]")
-            return config
-
-    provider.default_model = selected_model.model_id
-    provider.enabled = True
-    config.providers["local_builtin"] = provider
-
-    console.print(f"\n[green]✓ Configured built-in model: {selected_model.name}[/green]")
-    return config
 
 
 def show_current_config(config: AppConfig) -> None:

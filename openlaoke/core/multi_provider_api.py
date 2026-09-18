@@ -11,10 +11,10 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
-from openlaoke.core.builtin_model_provider import BuiltinModelProvider
 from openlaoke.types.core_types import (
     AssistantMessage,
     CostInfo,
@@ -100,15 +100,19 @@ MODEL_PRICES: dict[str, ModelPricing] = {
 }
 
 
+def _is_local_url(url: str) -> bool:
+    """True when the endpoint points at a local server (no API key expected)."""
+    host = (urlparse(url).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal")
+
+
 class MultiProviderClient:
     """HTTP client supporting multiple LLM providers."""
-
     def __init__(self, config: MultiProviderConfig, proxy: str | None = None) -> None:
         self.config = config
         self._proxy = proxy
         self._client: httpx.AsyncClient | None = None
         self._timeout = 300.0
-        self._builtin_client: BuiltinModelProvider | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -128,9 +132,6 @@ class MultiProviderClient:
         if self._client:
             await self._client.aclose()
             self._client = None
-        if self._builtin_client:
-            self._builtin_client.unload()
-            self._builtin_client = None
 
     def _retry_with_backoff(self, status: int, attempt: int = 0) -> tuple[bool, float]:
         if status not in _RETRYABLE_STATUS:
@@ -180,87 +181,6 @@ class MultiProviderClient:
                     "error": str(exc)[:200],
                 }
         return results
-
-    async def _send_builtin_message(
-        self,
-        system_prompt: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        model: str | None,
-        max_tokens: int,
-        temperature: float,
-    ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
-        """Send message to built-in GGUF model."""
-        if self._builtin_client is None:
-            from openlaoke.core.local_model_manager import LocalModelManager
-
-            manager = LocalModelManager()
-            model_id = model or self.config.get_active_model()
-            model_path = manager.get_model_path(model_id)
-
-            if not model_path:
-                raise ValueError(
-                    f"Built-in model '{model_id}' not downloaded. "
-                    f"Run: openlaoke model download {model_id}"
-                )
-
-            self._builtin_client = BuiltinModelProvider(
-                model_path=model_path,
-                n_ctx=self.config.local_n_ctx,
-                max_tokens=min(max_tokens, 1024),
-                temperature=self.config.local_temperature,
-                repetition_penalty=self.config.local_repetition_penalty,
-            )
-
-        return await self._builtin_client.send_message(
-            system_prompt=system_prompt,
-            messages=messages,
-            tools=tools,
-            model=model,
-            max_tokens=min(max_tokens, 1024),
-            temperature=temperature,
-        )
-
-    async def _stream_builtin_message(
-        self,
-        system_prompt: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        model: str | None,
-        max_tokens: int,
-        temperature: float,
-    ) -> AsyncIterator[tuple[str, TokenUsage | None, CostInfo | None]]:
-        """Stream message from built-in GGUF model."""
-        if self._builtin_client is None:
-            from openlaoke.core.local_model_manager import LocalModelManager
-
-            manager = LocalModelManager()
-            model_id = model or self.config.get_active_model()
-            model_path = manager.get_model_path(model_id)
-
-            if not model_path:
-                raise ValueError(
-                    f"Built-in model '{model_id}' not downloaded. "
-                    f"Run: openlaoke model download {model_id}"
-                )
-
-            self._builtin_client = BuiltinModelProvider(
-                model_path=model_path,
-                n_ctx=self.config.local_n_ctx,
-                max_tokens=min(max_tokens, 1024),
-                temperature=self.config.local_temperature,
-                repetition_penalty=self.config.local_repetition_penalty,
-            )
-
-        async for chunk in self._builtin_client.stream_message(
-            system_prompt=system_prompt,
-            messages=messages,
-            tools=tools,
-            model=model,
-            max_tokens=min(max_tokens, 1024),
-            temperature=temperature,
-        ):
-            yield chunk
 
     def _get_api_key(self, provider: ProviderConfig) -> str:
         env_key = ""
@@ -420,6 +340,11 @@ class MultiProviderClient:
             }
         else:
             if not api_key or not api_key.strip():
+                if _is_local_url(self._get_base_url(provider)):
+                    return {
+                        "Authorization": "Bearer not-needed",
+                        "Content-Type": "application/json",
+                    }
                 raise ValueError(
                     f"API key required for {provider.provider_type.value}. "
                     "Set the appropriate environment variable or configure the provider."
@@ -771,11 +696,6 @@ class MultiProviderClient:
         if not provider:
             raise ValueError("No active provider configured")
 
-        if provider.provider_type == ProviderType.LOCAL_BUILTIN:
-            return await self._send_builtin_message(
-                system_prompt, messages, tools, model, max_tokens, temperature
-            )
-
         model = model or self.config.get_active_model()
         base_url = self._get_base_url(provider)
         client = self._get_client()
@@ -921,19 +841,6 @@ class MultiProviderClient:
         provider = self.config.get_active_provider()
         if not provider:
             raise ValueError("No active provider configured")
-
-        if provider.provider_type == ProviderType.LOCAL_BUILTIN:
-            async for item in self._stream_builtin_message(
-                system_prompt, messages, tools, model, max_tokens, temperature
-            ):
-                text, usage, cost = item
-                yield StreamChunk(
-                    event_type=StreamEventType.TEXT if text else StreamEventType.USAGE,
-                    text=text,
-                    usage=usage,
-                    cost=cost,
-                )
-            return
 
         model = model or self.config.get_active_model()
         base_url = self._get_base_url(provider)

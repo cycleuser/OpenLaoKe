@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
 
 def _check_local_server(url: str) -> bool:
@@ -44,7 +43,6 @@ class ProviderType(StrEnum):
     OPENROUTER = "openrouter"
     GITHUB_COPILOT = "github_copilot"
     OPENCODE = "opencode"
-    LOCAL_BUILTIN = "local_builtin"
     CUSTOM = "custom"
 
 
@@ -62,15 +60,6 @@ class ProviderConfig:
 
     def is_configured(self) -> bool:
         if self.is_local:
-            if self.provider_type == ProviderType.LOCAL_BUILTIN:
-                from openlaoke.core.local_model_manager import LocalModelManager
-
-                manager = LocalModelManager()
-                model_id = self.default_model
-                if model_id.startswith("custom:"):
-                    path = manager.get_model_path(model_id)
-                    return path is not None
-                return manager.is_downloaded(model_id)
             if self.provider_type == ProviderType.OLLAMA:
                 return _check_local_server(self.base_url or "http://localhost:11434")
             if self.provider_type == ProviderType.LM_STUDIO:
@@ -96,7 +85,6 @@ class MultiProviderConfig:
     local_n_ctx: int = 262144
     local_repetition_penalty: float = 1.1
     local_temperature: float = 0.3
-    _builtin_client: Any = None
 
     # Fallback chain: provider names tried in order when the active one fails.
     # e.g. fallback_models = ["deepseek-flash", "openai-gpt4o-mini"]
@@ -108,13 +96,6 @@ class MultiProviderConfig:
 
     # Sub-agent model overrides per skill name.
     subagent_models: dict[str, str] = field(default_factory=dict)
-
-    @staticmethod
-    def _get_local_builtin_models() -> list[str]:
-        """Get builtin + custom local model IDs."""
-        from openlaoke.utils.config import _get_local_builtin_model_ids
-
-        return _get_local_builtin_model_ids()
 
     def get_active_provider(self) -> ProviderConfig | None:
         return self.providers.get(self.active_provider)
@@ -477,13 +458,6 @@ class MultiProviderConfig:
                         "glm-4.7-free",
                         "mimo-v2-pro-free",
                     ],
-                ),
-                "local_builtin": ProviderConfig(
-                    provider_type=ProviderType.LOCAL_BUILTIN,
-                    base_url="",
-                    default_model="qwen3:0.6b",
-                    models=cls._get_local_builtin_models(),
-                    is_local=True,
                 ),
             },
             active_provider="ollama",
