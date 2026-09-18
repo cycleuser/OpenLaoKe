@@ -1034,7 +1034,7 @@ class MultiProviderClient:
             if content:
                 text = content
 
-            reasoning_content = delta.get("reasoning_content")
+            reasoning_content = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning_content:
                 reasoning = reasoning_content
 
