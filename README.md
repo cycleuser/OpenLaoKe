@@ -241,7 +241,6 @@ Earlier iterations also drew on patterns from:
 
 - **[nanobot](https://github.com/HKUDS/nanobot)** — event-driven agent loop, AutoCompact
 - **[smallcode](https://github.com/Doorman11991/smallcode)** — tool-call parsing, read-before-write guard
-- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** — cache-stable prefix, plugin provider registry
 - **[OpenCode](https://github.com/opencode-ai/opencode)** — full-screen TUI, session fork/branch model
 
 ## License

@@ -241,7 +241,6 @@ OpenLaoKe 是 Mario Zechner 的 **[pi](https://github.com/earendil-works/pi)** �
 
 - **[nanobot](https://github.com/HKUDS/nanobot)** —— 事件驱动的智能体循环、AutoCompact
 - **[smallcode](https://github.com/Doorman11991/smallcode)** —— 工具调用解析、写前先读保护
-- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** —— 缓存稳定前缀、插件式提供商注册表
 - **[OpenCode](https://github.com/opencode-ai/opencode)** —— 全屏 TUI、会话分叉/分支模型
 
 ## 协议

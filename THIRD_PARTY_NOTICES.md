@@ -39,7 +39,6 @@ SOFTWARE.
 
 Earlier iterations of OpenLaoKe also drew design inspiration from
 [nanobot](https://github.com/HKUDS/nanobot),
-[smallcode](https://github.com/Doorman11991/smallcode),
-[DeepSeek-](https://github.com/esengine/DeepSeek-), and
+[smallcode](https://github.com/Doorman11991/smallcode), and
 [OpenCode](https://github.com/opencode-ai/opencode). These informed the
 project's history but are not part of the current pi-aligned implementation.
