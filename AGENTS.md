@@ -5,16 +5,17 @@ OpenLaoKe 是 [pi](https://github.com/earendil-works/pi) 的 Python 实现（Pyt
 
 ## 开发命令
 
+**始终使用 conda 的 `dev` 环境。不要使用 venv，永远不要。**
+
 ```bash
-uv pip install -e ".[dev]"   # 安装（推荐）
-pip install -e ".[dev]"
+DEV=/Users/fred/miniconda3/envs/dev/bin/python
 
-ruff check . && ruff format . # 检查+格式化
-mypy                          # 类型检查（非严格）
-pytest                        # 测试（asyncio_mode=auto）
+$DEV -m pytest                  # 测试（asyncio_mode=auto）
+$DEV -m pytest tests/test_pi_commands.py -v   # 单文件
+$DEV -m ruff check . && $DEV -m ruff format . # 检查+格式化
+$DEV -m mypy                    # 类型检查（非严格）
+$DEV -m openlaoke ...           # 运行
 ```
-
-单测试：`pytest tests/test_pi_commands.py -v`
 
 ## 运行模式
 
