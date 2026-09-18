@@ -1,14 +1,33 @@
 """Pure-algorithm context compression (<5ms, no LLM call).
 
 Uses keyword extraction from middle section instead of LLM summarization.
+
+Design constraints (harness-correctness):
+
+- Message ORDER is never rearranged.  An assistant message carrying
+  ``tool_calls`` and its ``tool`` result messages must stay adjacent, or the
+  provider rejects the request (dangling tool_call_id).  The previous
+  implementation hoisted "protected" messages into a separate bucket which
+  broke this pairing.
+
+- Tool results are truncated, not dropped.  Evidence (file contents, command
+  output, error messages) stays in context in head+tail form so the model can
+  still cite it later.  Dropping them silently caused read-loop behaviour.
+
+- User requirements are never compressed.  Only assistant prose may be
+  summarized into a keyword digest.
+
+- The summarizer never *grows* the context: if the keyword digest would be
+  larger than the elided middle, the middle is kept as-is.
 """
 
 from __future__ import annotations
 
+import contextlib
 import re
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from openlaoke.types.core_types import Message
@@ -35,6 +54,13 @@ KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
 # Combined alternation pattern: one finditer pass extracts all keyword types.
 _KEYWORD_COMBINED = re.compile("|".join(f"(?:{p.pattern})" for _, p in KEYWORD_PATTERNS))
 
+# Decision/constraint phrases worth keeping verbatim in summaries.
+# Anchored on the keyword itself (linear scan, no backtracking).
+_DECISION_PATTERN = re.compile(
+    r"\b(?:decisions?|decided|chosen|constraints?|must not|must be|requirement|"
+    r"rejected|won't do|will not)[^\n]{0,200}",
+    re.IGNORECASE,
+)
 
 _extract_content_fn = None
 
@@ -46,6 +72,58 @@ def _extract_content(message: Message) -> str:
 
         _extract_content_fn = extract_content
     return _extract_content_fn(message)
+
+
+def _message_role(message: object) -> str:
+    role: Any = getattr(message, "role", None)
+    if isinstance(message, dict):
+        role = message.get("role", role)
+    if role is not None and hasattr(role, "value"):
+        return str(role.value)
+    return str(role or "")
+
+
+def _is_user_requirement(message: object) -> bool:
+    """True for user messages (requirements) and system-injected turns."""
+    role = _message_role(message)
+    if role == "user":
+        return True
+    return bool(isinstance(message, dict) and message.get("system_injected"))
+
+
+def _is_tool_result(message: object) -> bool:
+    """True for tool result messages (dict ``role:"tool"`` or SystemMessage
+    with a tool_use_id)."""
+    role = _message_role(message)
+    if role == "tool":
+        return True
+    if role == "system" and getattr(message, "tool_use_id", None):
+        return True
+    return isinstance(message, dict) and role == "system" and bool(message.get("tool_use_id"))
+
+
+def _is_assistant_tool_call(message: object) -> bool:
+    role = _message_role(message)
+    if role != "assistant":
+        return False
+    if getattr(message, "tool_uses", None):
+        return True
+    return isinstance(message, dict) and bool(message.get("tool_calls"))
+
+
+def _strip_prose(message: Any) -> Any:
+    """Return a copy of an assistant tool-call message with content emptied.
+
+    The tool_calls/tool_uses structure is preserved so the request stays
+    provider-valid (no dangling tool_call_id) while the prose is elided.
+    """
+    if isinstance(message, dict):
+        stripped = dict(message)
+        stripped["content"] = ""
+        return stripped
+    with contextlib.suppress(AttributeError):
+        message.content = ""
+    return message
 
 
 def extract_keywords(text: str, max_keywords: int = 50) -> list[str]:
@@ -64,18 +142,60 @@ def extract_keywords(text: str, max_keywords: int = 50) -> list[str]:
     return keywords
 
 
+def extract_decisions(text: str, max_lines: int = 12) -> list[str]:
+    """Pull decision/constraint sentences out of assistant prose.
+
+    Keeps confirmed decisions and implementation constraints so they are not
+    re-litigated after compaction.
+    """
+    lines: list[str] = []
+    for match in _DECISION_PATTERN.finditer(text):
+        line = match.group(0).strip()
+        if 20 < len(line) < 300:
+            lines.append(line)
+            if len(lines) >= max_lines:
+                break
+    return lines
+
+
+def _sample_indices(indices: list[int], max_samples: int) -> set[int]:
+    """Head-biased uniform sample of *indices* to bound regex cost."""
+    n = len(indices)
+    if n <= max_samples:
+        return set(indices)
+    stride = max(1, n // max_samples)
+    sampled = set(range(0, min(10, n)))
+    sampled.update(indices[::stride][:max_samples])
+    return sampled
+
+
+def _truncate_tool_result(content: str, head_lines: int = 30, tail_lines: int = 12) -> str:
+    """Keep head+tail of a long tool result; collapse the middle."""
+    lines = content.split("\n")
+    if len(lines) <= head_lines + tail_lines + 2:
+        return content
+    omitted = len(lines) - head_lines - tail_lines
+    return (
+        "\n".join(lines[:head_lines])
+        + f"\n... [{omitted} lines truncated, full output was {len(content)} chars] ...\n"
+        + "\n".join(lines[-tail_lines:])
+    )
+
+
 def fast_prune(
     messages: list[Message],
     max_tokens: int = 8192,
     keep_tail_tokens: int = 8192,
+    protect_read_results: bool = True,
 ) -> PruneResult:
     """Pure-algorithm context compression with head-tail preservation.
 
-    Strategy:
-    1. Keep system prompt + first turn (head)
-    2. Keep last N tokens (tail)
-    3. Extract keywords from middle section via regex patterns
-    4. Replace middle with keyword summary
+    Strategy (order-preserving):
+    1. Head: first messages up to a small budget (never reordered).
+    2. Tail: last ``keep_tail_tokens`` worth of messages (never reordered).
+    3. Middle: user requirements pass through byte-identical; tool results are
+       head+tail truncated; assistant prose is replaced by a keyword digest
+       *in place* so tool_call/tool_result adjacency is preserved.
 
     Runs in <5ms, no LLM call needed.
     """
@@ -84,7 +204,6 @@ def fast_prune(
     if not messages:
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
-    # Precompute content + tokens once for every message to avoid repeated work.
     contents = [_extract_content(m) for m in messages]
     token_list = [len(c) // 4 for c in contents]
     total_tokens = sum(token_list)
@@ -96,98 +215,134 @@ def fast_prune(
             elapsed_ms=(time.monotonic() - start) * 1000,
         )
 
-    head_messages: list[Message] = []
-    tail_messages: list[Message] = []
-    middle_messages: list[Message] = []
-    middle_token_list: list[int] = []
-    middle_contents: list[str] = []
+    from openlaoke.types.core_types import MessageRole, SystemMessage
 
+    new_messages: list[Any] = []
+    new_tokens = 0
+
+    head_budget = min(2000, max_tokens // 8)
     head_tokens = 0
-    tail_tokens = 0
+    head_end = 0
+    for i, _msg in enumerate(messages):
+        if head_end > 0 and head_tokens + token_list[i] > head_budget:
+            break
+        head_messages_guard = i < 3
+        if i == 0 or (head_messages_guard and head_tokens < 2000):
+            head_tokens += token_list[i]
+            head_end = i + 1
+        else:
+            break
+    new_messages.extend(messages[:head_end])
+    new_tokens += head_tokens
 
-    for i, msg in enumerate(messages):
+    tail_budget = min(keep_tail_tokens, max_tokens - head_tokens)
+    tail_start = len(messages)
+    tail_tokens = 0
+    for i in range(len(messages) - 1, head_end - 1, -1):
+        if tail_tokens + token_list[i] > tail_budget and tail_start < len(messages):
+            break
+        tail_start = i
+        tail_tokens += token_list[i]
+
+    # The newest user requirement is never elided: extend the tail window to
+    # include the last user message even if the budget was exhausted just
+    # above it (the requirement is the anchor the model must still see).
+    for i in range(tail_start - 1, head_end - 1, -1):
+        if _is_user_requirement(messages[i]):
+            tail_start = i
+            break
+
+    digest_parts: list[str] = []
+    digest_tokens = 0
+    elided_tokens = 0
+
+    # Bound regex work: sample at most 40 elided messages for keywords.
+    elided_indices: list[int] = []
+    for i in range(head_end, tail_start):
+        msg = messages[i]
+        if _is_user_requirement(msg) or (protect_read_results and _is_assistant_tool_call(msg)):
+            continue
+        if not _is_tool_result(msg):
+            elided_indices.append(i)
+
+    sample_idx = _sample_indices(elided_indices, max_samples=40)
+
+    for i in range(head_end, tail_start):
+        msg = messages[i]
         tokens = token_list[i]
         content = contents[i]
 
-        if i == 0 or (i < 3 and head_tokens < 2000):
-            head_messages.append(msg)
-            head_tokens += tokens
-        elif total_tokens - head_tokens - tail_tokens - tokens < keep_tail_tokens:
-            tail_messages.insert(0, msg)
-            tail_tokens += tokens
-        else:
-            middle_messages.append(msg)
-            middle_token_list.append(tokens)
-            middle_contents.append(content)
+        if _is_user_requirement(msg) or (protect_read_results and _is_assistant_tool_call(msg)):
+            new_messages.append(msg)
+            new_tokens += tokens
+            continue
 
-    if not middle_messages:
-        if total_tokens > max_tokens + keep_tail_tokens:
-            head_messages = messages[:1]
-            remaining = max_tokens - token_list[0]
-            tail_budget = min(keep_tail_tokens, remaining)
-            tail_messages = []
-            tail_tokens = 0
-            for idx in range(len(messages) - 1, 0, -1):
-                t = token_list[idx]
-                if tail_tokens + t <= tail_budget:
-                    tail_messages.insert(0, messages[idx])
-                    tail_tokens += t
+        if _is_tool_result(msg):
+            truncated = _truncate_tool_result(content, head_lines=30, tail_lines=12)
+            if truncated != content:
+                if isinstance(msg, SystemMessage) and msg.tool_use_id:
+                    truncated_msg: Any = SystemMessage(
+                        role=msg.role,
+                        content=truncated,
+                        subtype=msg.subtype,
+                        tool_use_id=msg.tool_use_id,
+                    )
                 else:
-                    break
-            new_tokens = token_list[0] + tail_tokens
-            return PruneResult(
-                messages=head_messages + tail_messages,
-                tokens_before=total_tokens,
-                tokens_after=new_tokens,
-                elapsed_ms=(time.monotonic() - start) * 1000,
+                    truncated_msg = dict(msg) if isinstance(msg, dict) else msg
+                    if isinstance(truncated_msg, dict):
+                        truncated_msg["content"] = truncated
+                new_messages.append(truncated_msg)
+                new_tokens += len(truncated) // 4
+            else:
+                new_messages.append(msg)
+                new_tokens += tokens
+            continue
+
+        # Assistant prose: elide into digest, but never drop the message
+        # structure when it carries tool_calls — a dangling tool_call breaks
+        # the provider request.  For AssistantMessage objects keep the object
+        # with empty content; for dicts set content="" but keep tool_calls.
+        elided_tokens += tokens
+        if i in sample_idx and digest_tokens < max_tokens // 16:
+            digest_parts.extend(extract_keywords(content, max_keywords=20))
+            digest_parts.extend(extract_decisions(content, max_lines=4))
+            digest_tokens += sum(len(k) for k in digest_parts[-24:]) // 4
+
+    middle_summary = None
+    if elided_tokens > 0:
+        unique_kw: list[str] = []
+        seen_kw: set[str] = set()
+        for kw in digest_parts:
+            if kw not in seen_kw:
+                seen_kw.add(kw)
+                unique_kw.append(kw)
+        summary_content = (
+            f"[Context digest: {elided_tokens} tokens of assistant prose elided. "
+            "Key information preserved:]\n" + "\n".join(f"- {kw}" for kw in unique_kw[:60])
+        )
+        summary_tokens = len(summary_content) // 4
+        if summary_tokens < elided_tokens:
+            middle_summary = SystemMessage(
+                role=MessageRole.SYSTEM,
+                content=summary_content,
+                subtype="compact",
             )
-        return PruneResult(
-            messages=messages,
-            tokens_before=total_tokens,
-            tokens_after=total_tokens,
-            elapsed_ms=(time.monotonic() - start) * 1000,
+            new_tokens += summary_tokens
+        else:
+            # Digest would not save space — keep everything as-is.
+            new_messages = list(messages)
+            new_tokens = total_tokens
+            middle_summary = None
+
+    if middle_summary is not None:
+        # Insert digest right after the head block (before first non-head
+        # message) to preserve chronology: the digest represents the elided
+        # middle messages that came before everything in new_messages[head_end:].
+        new_messages = (
+            list(new_messages[:head_end]) + [middle_summary] + list(new_messages[head_end:])
         )
 
-    # Sample middle messages for keyword extraction when the set is large:
-    # keep the first 20, last 10, and a uniform stride in between. This bounds
-    # the cost while still covering the whole middle span.
-    n_middle = len(middle_messages)
-    if n_middle > 50:
-        stride = max(1, n_middle // 20)
-        sample_idx = sorted(
-            set(
-                list(range(20))
-                + list(range(20, n_middle - 10, stride))
-                + list(range(max(20, n_middle - 10), n_middle))
-            )
-        )
-        sample_idx = [i for i in sample_idx if 0 <= i < n_middle]
-    else:
-        sample_idx = list(range(n_middle))
-
-    all_keywords: list[str] = []
-    for i in sample_idx:
-        keywords = extract_keywords(middle_contents[i])
-        all_keywords.extend(keywords)
-
-    keyword_lines = "\n".join(f"- {kw}" for kw in all_keywords[:80])
-    middle_tokens = sum(middle_token_list)
-    summary_content = (
-        f"[Compressed: {n_middle} messages, {middle_tokens} tokens -> keywords]\n"
-        f"Key information preserved:\n{keyword_lines}"
-    )
-
-    from openlaoke.types.core_types import MessageRole, SystemMessage
-
-    summary_msg = SystemMessage(
-        role=MessageRole.SYSTEM,
-        content=summary_content,
-        subtype="compact",
-    )
-
-    new_messages = head_messages + [summary_msg] + tail_messages
-    new_tokens = head_tokens + (len(summary_content) // 4) + tail_tokens
-
+    new_messages.extend(messages[tail_start:])
     elapsed = (time.monotonic() - start) * 1000
 
     return PruneResult(
@@ -195,7 +350,7 @@ def fast_prune(
         tokens_before=total_tokens,
         tokens_after=new_tokens,
         elapsed_ms=elapsed,
-        keywords_extracted=len(all_keywords),
+        keywords_extracted=len(unique_kw) if elided_tokens > 0 and middle_summary else 0,
     )
 
 
@@ -212,6 +367,7 @@ def fast_prune_aggressive(
     - Caps tail budget at 25% of max_tokens
     - Truncates long tool results to head 20 + tail 10 lines
     - Strips non-essential system messages entirely
+    - Preserves message order and tool_call/tool_result adjacency
     """
     from openlaoke.types.core_types import MessageRole, SystemMessage
 
@@ -220,7 +376,6 @@ def fast_prune_aggressive(
     if not messages:
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
-    # Precompute content + tokens once.
     contents = [_extract_content(m) for m in messages]
     token_list = [len(c) // 4 for c in contents]
     total_tokens = sum(token_list)
@@ -232,14 +387,15 @@ def fast_prune_aggressive(
             elapsed_ms=(time.monotonic() - start) * 1000,
         )
 
-    # Apply tool-result truncation BEFORE splitting head/middle/tail
-    truncated_messages: list[Message] = []
+    # Pass 1: truncate long system non-tool messages IN PLACE (order kept).
+    truncated_messages: list[Any] = []
     truncated_tokens: list[int] = []
     truncated_contents: list[str] = []
     for msg, content, tokens in zip(messages, contents, token_list, strict=False):
         if (
             isinstance(msg, SystemMessage)
-            and msg.subtype not in ("error", "warning")
+            and not getattr(msg, "tool_use_id", None)
+            and msg.subtype not in ("error", "warning", "compact")
             and len(content) > 3000
             and len(content.split("\n")) > 40
         ):
@@ -267,61 +423,106 @@ def fast_prune_aggressive(
     messages = truncated_messages
     token_list = truncated_tokens
     contents = truncated_contents
+    total_tokens = sum(token_list)
 
-    # Keep only first message as head
-    head_messages = messages[:1]
-    head_tokens = token_list[0] if token_list else 0
-
-    # Aggressive tail budget: 25% of max_tokens
-    tail_budget = max(512, max_tokens // 4)
-    tail_messages: list[Message] = []
-    tail_tokens = 0
-
-    for idx in range(len(messages) - 1, 0, -1):
-        t = token_list[idx]
-        if tail_tokens + t <= tail_budget:
-            tail_messages.insert(0, messages[idx])
-            tail_tokens += t
-        else:
-            break
-
-    # Keyword extraction from skipped middle
-    middle_start = len(head_messages)
-    middle_end = len(messages) - len(tail_messages)
-
-    # Sample large middles to bound cost.
-    n_middle = middle_end - middle_start
-    if n_middle > 50:
-        stride = max(1, n_middle // 20)
-        sample_idx = (
-            list(range(middle_start, middle_start + 20, 1))
-            + list(range(middle_start + 20, middle_end - 10, stride))
-            + list(range(max(middle_start + 20, middle_end - 10), middle_end))
+    if total_tokens <= max_tokens:
+        return PruneResult(
+            messages=messages,
+            tokens_before=total_tokens,
+            tokens_after=total_tokens,
+            elapsed_ms=(time.monotonic() - start) * 1000,
         )
-        sample_idx = sorted(set(i for i in sample_idx if middle_start <= i < middle_end))
-    else:
-        sample_idx = list(range(middle_start, middle_end))
 
-    all_keywords: list[str] = []
-    for i in sample_idx:
-        keywords = extract_keywords(contents[i], max_keywords=30)
-        all_keywords.extend(keywords)
+    # Pass 2: head = first message only; tail = last 25% budget.
+    head_end = 1
+    head_tokens = token_list[0]
 
-    keyword_lines = "\n".join(f"- {kw}" for kw in all_keywords[:50])
-    summary_content = (
-        (f"[Compressed: {n_middle} messages skipped. Key info:]\n{keyword_lines}")
-        if keyword_lines
-        else f"[Compressed: {n_middle} messages skipped.]"
-    )
+    tail_budget = max(512, max_tokens // 4)
+    tail_start = len(messages)
+    tail_tokens = 0
+    for idx in range(len(messages) - 1, head_end - 1, -1):
+        if tail_tokens + token_list[idx] > tail_budget and tail_start < len(messages):
+            break
+        tail_start = idx
+        tail_tokens += token_list[idx]
 
-    summary_msg = SystemMessage(
-        role=MessageRole.SYSTEM,
-        content=summary_content,
-        subtype="compact",
-    )
+    # Pass 3: walk the middle in order.  User requirements and tool results
+    # stay (tool results truncated); assistant prose elides into a digest.
+    new_messages: list[Any] = list(messages[:head_end])
+    new_tokens = head_tokens
 
-    new_messages = head_messages + [summary_msg] + tail_messages
-    new_tokens = head_tokens + (len(summary_content) // 4) + tail_tokens
+    digest_parts: list[str] = []
+    elided_tokens = 0
+
+    elided_indices: list[int] = []
+    for i in range(head_end, tail_start):
+        msg = messages[i]
+        if _is_user_requirement(msg) or _is_assistant_tool_call(msg) or _is_tool_result(msg):
+            continue
+        elided_indices.append(i)
+    sample_idx = _sample_indices(elided_indices, max_samples=30)
+
+    for i in range(head_end, tail_start):
+        msg = messages[i]
+        tokens = token_list[i]
+        content = contents[i]
+
+        if _is_user_requirement(msg) or _is_assistant_tool_call(msg):
+            new_messages.append(msg)
+            new_tokens += tokens
+            continue
+
+        if _is_tool_result(msg):
+            truncated = _truncate_tool_result(content, head_lines=20, tail_lines=10)
+            if truncated != content:
+                if isinstance(msg, SystemMessage) and msg.tool_use_id:
+                    truncated_msg: Any = SystemMessage(
+                        role=msg.role,
+                        content=truncated,
+                        subtype=msg.subtype,
+                        tool_use_id=msg.tool_use_id,
+                    )
+                else:
+                    truncated_msg = dict(msg) if isinstance(msg, dict) else msg
+                    if isinstance(truncated_msg, dict):
+                        truncated_msg["content"] = truncated
+                new_messages.append(truncated_msg)
+                new_tokens += len(truncated) // 4
+            else:
+                new_messages.append(msg)
+                new_tokens += tokens
+            continue
+
+        elided_tokens += tokens
+        if i in sample_idx:
+            for kw in extract_keywords(content, max_keywords=15):
+                digest_parts.append(kw)
+
+    if elided_tokens > 0:
+        unique_kw: list[str] = []
+        seen_kw: set[str] = set()
+        for kw in digest_parts:
+            if kw not in seen_kw:
+                seen_kw.add(kw)
+                unique_kw.append(kw)
+        summary_content = (
+            f"[Context digest: {elided_tokens} tokens elided. Key info:]\n"
+            + "\n".join(f"- {kw}" for kw in unique_kw[:40])
+        )
+        summary_tokens = len(summary_content) // 4
+        if summary_tokens < elided_tokens:
+            summary_msg = SystemMessage(
+                role=MessageRole.SYSTEM,
+                content=summary_content,
+                subtype="compact",
+            )
+            new_tokens += summary_tokens
+            new_messages.append(summary_msg)
+        else:
+            new_messages = list(messages)
+            new_tokens = total_tokens
+
+    new_messages.extend(messages[tail_start:])
     elapsed = (time.monotonic() - start) * 1000
 
     return PruneResult(
@@ -329,5 +530,5 @@ def fast_prune_aggressive(
         tokens_before=total_tokens,
         tokens_after=new_tokens,
         elapsed_ms=elapsed,
-        keywords_extracted=len(all_keywords),
+        keywords_extracted=len(unique_kw) if elided_tokens > 0 and new_tokens < total_tokens else 0,
     )

@@ -225,6 +225,47 @@ DESTRUCTIVE_PATTERNS = [
     (r"pkill\s+-9\s*$", "kill all processes"),
 ]
 
+# Interpreter wrappers whose arguments can smuggle arbitrary code.  A command
+# like `python3 -c "import os; os.system('rm -rf ~')"` must not be classified
+# by its interpreter name alone.
+INTERPRETER_COMMANDS = {
+    "python",
+    "python3",
+    "node",
+    "ruby",
+    "perl",
+    "php",
+    "bash",
+    "sh",
+    "zsh",
+    "fish",
+    "powershell",
+    "pwsh",
+    "lua",
+    "tclsh",
+    "osascript",
+    "awk",
+    "sed",
+    "eval",
+    "xargs",
+}
+
+# Interpreter inline-code flags: `<interp> -c/-e/-f/-x <code>` runs the next
+# argument as code, so the whole invocation is treated as DANGEROUS (ask).
+_INTERPRETER_CODE_RE = re.compile(
+    r"(?:^|;|\|\||&&|\|)\s*(?:sudo\s+|doas\s+)?(?:env\s+\S+=\S+\s+)?"
+    r"(python3?|node|ruby|perl|php|bash|sh|zsh|fish|powershell|pwsh|lua|tclsh|osascript)\s+"
+    r"(?:-\w+\s+)*-[cefx]\b",
+)
+
+# Commands that spawn further programs: their inner payload is opaque.
+_NESTED_SHELL_RE = re.compile(r"(?:^|;|\|\||&&|\|)\s*(?:sudo\s+)?(bash|sh|zsh|fish)\s+-c\b")
+
+# Redirect targets that write files anywhere outside /tmp or /dev/null.
+_REDIRECT_RE = re.compile(r"\d{0,2}>{1,2}\s*([^\s;&|]+)")
+_APPEND_RE = re.compile(r">>")
+_SAFE_REDIRECT_RE = re.compile(r"^/dev/null$|^/tmp/|^&\d$|^\d*$|^&1$")
+
 DANGEROUS_PATTERNS = [
     (r"rm\s+-[rf]+", "rm with recursive/force flags"),
     (r"rm\s+.*\*\s*$", "rm ending with wildcard"),
@@ -322,6 +363,47 @@ def extract_base_command(command: str) -> str:
     return base
 
 
+def _split_compound_command(command: str) -> list[str]:
+    """Split a shell line into segments at ; && || and unquoted pipes.
+
+    Quoted content is protected via a placeholder swap so pipes inside
+    strings (e.g. `grep "a|b"`) don't create bogus segments.
+    """
+    placeholders: list[str] = []
+
+    def _protect(match: re.Match) -> str:
+        token = f"\x00{len(placeholders)}\x00"
+        placeholders.append(match.group(0))
+        return token
+
+    command = re.sub(r"'[^']*'|\"[^\"]*\"", _protect, command)
+    segments = re.split(r";|\|\||&&|\|", command)
+    out = []
+    for seg in segments:
+        for i, ph in enumerate(placeholders):
+            seg = seg.replace(f"\x00{i}\x00", ph)
+        seg = seg.strip()
+        if seg:
+            out.append(seg)
+    return out
+
+
+def _check_redirect_targets(command: str) -> tuple[bool, str | None]:
+    """Flag shell redirects that write to a file path (project-external writes
+    such as `echo x > ~/.zshrc` must not be silently auto-executed)."""
+    if _APPEND_RE.search(command) or re.search(r"(?<![>])>(?![>\d&])", command) is None:
+        # Any plain `>` or `>>` redirect at all → treat as write for safety
+        # except when the target is clearly /dev/null, a tmp file, or a
+        # file-descriptor dup like 2>&1.
+        pass
+    for match in _REDIRECT_RE.finditer(command):
+        target = match.group(1).strip()
+        if not target or _SAFE_REDIRECT_RE.match(target):
+            continue
+        return True, f"redirect writes to '{target}' - untracked file modification"
+    return False, None
+
+
 def check_patterns(command: str, patterns: list[tuple[str, str]]) -> tuple[bool, str | None]:
     """Check if command matches any pattern in the list."""
     for pattern, description in patterns:
@@ -332,6 +414,11 @@ def check_patterns(command: str, patterns: list[tuple[str, str]]) -> tuple[bool,
 
 def classify_bash_command(command: str) -> BashClassificationResult:
     """Classify a bash command into safety levels.
+
+    Compound commands (``;``, ``&&``, ``||``, ``|``) are classified per
+    segment; the *worst* segment wins.  Interpreter inline-code calls
+    (``python3 -c``, ``node -e``, ``bash -c``) and redirects that write files
+    are treated as dangerous so they require user approval.
 
     Args:
         command: The bash command to classify
@@ -348,6 +435,45 @@ def classify_bash_command(command: str) -> BashClassificationResult:
 
     command = command.strip()
 
+    worst = _classify_single(command)
+    if worst.safety_level == CommandSafetyLevel.DESTRUCTIVE:
+        return worst
+
+    # Compound commands: each segment classified independently; the worst
+    # segment's level wins.  This closes the `safe && dangerous` gap.
+    segments = _split_compound_command(command)
+    if len(segments) > 1:
+        for seg in segments:
+            seg_result = _classify_single(seg)
+            if seg_result.safety_level in (
+                CommandSafetyLevel.DESTRUCTIVE,
+                CommandSafetyLevel.DANGEROUS,
+            ):
+                return seg_result
+            if (
+                seg_result.safety_level == CommandSafetyLevel.SAFE
+                and worst.safety_level == CommandSafetyLevel.SAFE
+                and seg_result.confidence == ConfidenceLevel.HIGH
+                and worst.confidence == ConfidenceLevel.LOW
+            ):
+                worst = seg_result
+
+    # Redirect target check applies to the whole line (target is a sibling
+    # node of the command, not an argument of it).
+    redir_bad, redir_reason = _check_redirect_targets(command)
+    if redir_bad:
+        return BashClassificationResult(
+            safety_level=CommandSafetyLevel.DANGEROUS,
+            confidence=ConfidenceLevel.HIGH,
+            reason=redir_reason or "Redirect target",
+            matched_pattern=redir_reason,
+        )
+
+    return worst
+
+
+def _classify_single(command: str) -> BashClassificationResult:
+    """Classify a single (non-compound) shell segment."""
     matched, description = check_patterns(command, DESTRUCTIVE_PATTERNS)
     if matched:
         return BashClassificationResult(
@@ -364,6 +490,18 @@ def classify_bash_command(command: str) -> BashClassificationResult:
             confidence=ConfidenceLevel.HIGH,
             reason=description or "Matches dangerous pattern",
             matched_pattern=description,
+        )
+
+    # Interpreter inline code: `python3 -c '<code>'`, `node -e`, `bash -c` …
+    # The payload is opaque, so require confirmation regardless of the
+    # interpreter being on the SAFE list.
+    if _INTERPRETER_CODE_RE.search(command):
+        return BashClassificationResult(
+            safety_level=CommandSafetyLevel.DANGEROUS,
+            confidence=ConfidenceLevel.HIGH,
+            reason="Interpreter inline code (python -c / node -e / bash -c) — "
+            "payload is opaque and requires approval",
+            matched_pattern="interpreter-inline-code",
         )
 
     base_cmd = extract_base_command(command)
@@ -386,6 +524,8 @@ def classify_bash_command(command: str) -> BashClassificationResult:
                 matched_pattern=safe_desc,
             )
 
+        # Bare interpreter/script names without flags stay medium-confidence
+        # safe; anything reading inline code was already caught above.
         return BashClassificationResult(
             safety_level=CommandSafetyLevel.SAFE,
             confidence=ConfidenceLevel.MEDIUM,

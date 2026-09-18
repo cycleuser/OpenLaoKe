@@ -3,58 +3,38 @@
 from __future__ import annotations
 
 from openlaoke.commands.base import (
-    AgentsCommand,
-    AtomicCommand,
-    CavemanCommand,
     ClearCommand,
-    CommandsCommand,
     CompactCommand,
-    CostCommand,
-    CwdCommand,
-    DistillCommand,
-    DoctorCommand,
-    DualModelCommand,
-    DualModelConfigCommand,
     ExitCommand,
     ExportCommand,
     HelpCommand,
-    HistoryCommand,
-    HooksCommand,
-    InitCommand,
-    InsomniaCommand,
-    LangCommand,
-    LocalConfigCommand,
-    McpCommand,
-    MemoryCommand,
     ModelCommand,
-    ModelRecommendCommand,
-    ModelStatusCommand,
-    PermissionCommand,
-    PreloadModelsCommand,
-    ProviderCommand,
     ResumeCommand,
     SettingsCommand,
     SlashCommand,
     ThemeCommand,
     ThinkingCommand,
-    UndoCommand,
-    UsageCommand,
-    VimCommand,
 )
-from openlaoke.commands.hyperauto_command import HyperAutoCommand
-from openlaoke.commands.research_commands import (
-    DeepResearchCommand,
-    LitReviewCommand,
-    OutputsCommand,
-    ReviewCommand,
+from openlaoke.commands.pi_commands import (
+    ChangelogCommand,
+    CloneCommand,
+    CopyCommand,
+    ForkCommand,
+    HotkeysCommand,
+    ImportCommand,
+    LoginCommand,
+    LogoutCommand,
+    NameCommand,
+    NewCommand,
+    PromptCommand,
+    ReloadCommand,
+    ScopedModelsCommand,
+    SessionCommand,
+    ShareCommand,
+    TreeCommand,
+    TrustCommand,
 )
-from openlaoke.commands.scaffold_commands import (
-    KnowledgeDownloadCommand,
-    QuickStartCommand,
-    ScaffoldCommand,
-)
-from openlaoke.commands.skill_commands import SkillCommand, UseSkillCommand
-from openlaoke.commands.skill_shortcuts import register_skill_shortcuts
+from openlaoke.commands.skill_commands import SkillCommand
 
 _commands: dict[str, SlashCommand] = {}
 
@@ -62,60 +42,39 @@ _commands: dict[str, SlashCommand] = {}
 def register_all() -> None:
     """Register all built-in slash commands."""
     commands = [
-        AgentsCommand(),
-        AtomicCommand(),
         ClearCommand(),
-        CommandsCommand(),
         CompactCommand(),
-        CavemanCommand(),
-        CostCommand(),
-        CwdCommand(),
-        DistillCommand(),
-        DoctorCommand(),
-        DualModelCommand(),
-        DualModelConfigCommand(),
         ExitCommand(),
         ExportCommand(),
         HelpCommand(),
-        HistoryCommand(),
-        HooksCommand(),
-        HyperAutoCommand(),
-        InitCommand(),
-        InsomniaCommand(),
-        LangCommand(),
-        LocalConfigCommand(),
-        McpCommand(),
-        MemoryCommand(),
         ModelCommand(),
-        ModelRecommendCommand(),
-        ModelStatusCommand(),
-        PermissionCommand(),
-        PreloadModelsCommand(),
-        ProviderCommand(),
         ResumeCommand(),
-        ScaffoldCommand(),
-        KnowledgeDownloadCommand(),
-        QuickStartCommand(),
         SettingsCommand(),
         ThemeCommand(),
         ThinkingCommand(),
-        UndoCommand(),
-        UsageCommand(),
-        VimCommand(),
+        ChangelogCommand(),
+        CloneCommand(),
+        CopyCommand(),
+        ForkCommand(),
+        HotkeysCommand(),
+        ImportCommand(),
+        LoginCommand(),
+        LogoutCommand(),
+        NameCommand(),
+        NewCommand(),
+        PromptCommand(),
+        ReloadCommand(),
+        ScopedModelsCommand(),
+        SessionCommand(),
+        ShareCommand(),
+        TreeCommand(),
+        TrustCommand(),
         SkillCommand(),
-        UseSkillCommand(),
-        DeepResearchCommand(),
-        LitReviewCommand(),
-        ReviewCommand(),
-        OutputsCommand(),
     ]
     for cmd in commands:
         _commands[cmd.name] = cmd
         for alias in cmd.aliases:
             _commands[alias] = cmd
-
-    # Register skill shortcuts like /browse, /qa, etc.
-    register_skill_shortcuts(_commands)
 
 
 def get_command(name: str) -> SlashCommand | None:

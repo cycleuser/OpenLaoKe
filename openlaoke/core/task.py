@@ -149,6 +149,7 @@ class TaskManager:
         description: str,
         tool_use_id: str | None = None,
         subagent_type: str = "local",
+        resume_from: str | None = None,
     ) -> str:
         state = self.create_task_state(TaskType.LOCAL_AGENT, description, tool_use_id)
         state.status = TaskStatus.RUNNING
@@ -162,6 +163,7 @@ class TaskManager:
                 description=description,
                 app_state=self.app_state,
                 task_state=state,
+                resume_from=resume_from,
             )
 
             state.status = TaskStatus.COMPLETED

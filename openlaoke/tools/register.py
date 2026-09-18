@@ -1,303 +1,43 @@
-"""Tool registration with lazy loading support."""
+"""Tool registration — the pi tool set: read, write, edit, bash, grep, find, ls, powershell."""
 
 from __future__ import annotations
 
-import importlib
-from collections.abc import Callable
-
-from openlaoke.core.tool import Tool, ToolRegistry
-
-_DEFERRED_TOOLS: dict[str, tuple[str, str, str, str]] = {
-    "AppendFile": (
-        "openlaoke.tools.append_tool",
-        "AppendFileTool",
-        "Append content to end of file, creating if not exists",
-        "append file log",
-    ),
-    "CodeRunner": (
-        "openlaoke.tools.code_runner",
-        "CodeRunnerTool",
-        "Run code in a sandboxed environment with optional tests",
-        "code run python c rust sandbox execute",
-    ),
-    "Agent": (
-        "openlaoke.tools.agent_tool",
-        "AgentTool",
-        "Run a subagent for complex tasks",
-        "subagent task delegation",
-    ),
-    "ApplyPatch": (
-        "openlaoke.tools.apply_patch_tool",
-        "ApplyPatchTool",
-        "Apply a patch to files",
-        "patch apply diff",
-    ),
-    "Batch": (
-        "openlaoke.tools.batch_tool",
-        "BatchTool",
-        "Execute multiple tool calls in parallel",
-        "parallel batch concurrent",
-    ),
-    "Git": (
-        "openlaoke.tools.git_tool",
-        "GitTool",
-        "Git operations",
-        "git repository version control",
-    ),
-    "ListDirectory": (
-        "openlaoke.tools.ls_tool",
-        "ListDirectoryTool",
-        "List directory contents",
-        "ls list directory",
-    ),
-    "LSP": (
-        "openlaoke.tools.lsp_tool",
-        "LSPTool",
-        "Language server protocol operations",
-        "lsp language server ide",
-    ),
-    "NotebookWrite": (
-        "openlaoke.tools.notebook_write_tool",
-        "NotebookWriteTool",
-        "Edit Jupyter notebooks",
-        "jupyter notebook cell",
-    ),
-    "Plan": (
-        "openlaoke.tools.plan_tool",
-        "PlanTool",
-        "Create execution plans",
-        "plan strategy steps",
-    ),
-    "Question": (
-        "openlaoke.tools.question_tool",
-        "QuestionTool",
-        "Ask user questions",
-        "ask question user input",
-    ),
-    "TaskKill": (
-        "openlaoke.tools.taskkill_tool",
-        "TaskKillTool",
-        "Kill running tasks",
-        "kill stop terminate task",
-    ),
-    "TodoWrite": (
-        "openlaoke.tools.todo_tool",
-        "TodoWriteTool",
-        "Manage todo list",
-        "todo task checklist",
-    ),
-    "WebFetch": (
-        "openlaoke.tools.webfetch_tool",
-        "WebFetchTool",
-        "Fetch web page content",
-        "web fetch url http",
-    ),
-    "WebSearch": (
-        "openlaoke.tools.websearch_tool",
-        "WebSearchTool",
-        "Search the web",
-        "web search duckduckgo",
-    ),
-    "Sleep": (
-        "openlaoke.tools.sleep_tool",
-        "SleepTool",
-        "Pause execution for specified duration",
-        "sleep wait delay pause",
-    ),
-    "Brief": (
-        "openlaoke.tools.brief_tool",
-        "BriefTool",
-        "Enable brief response mode",
-        "brief concise short response",
-    ),
-    "WebBrowser": (
-        "openlaoke.tools.web_browser_tool",
-        "WebBrowserTool",
-        "Browser automation using Playwright",
-        "browser playwright automation navigate click screenshot",
-    ),
-    "Tmux": (
-        "openlaoke.tools.tmux_tool",
-        "TmuxTool",
-        "Manage tmux sessions",
-        "tmux session terminal split pane",
-    ),
-    "PowerShell": (
-        "openlaoke.tools.powershell_tool",
-        "PowerShellTool",
-        "Execute PowerShell commands",
-        "powershell windows scripting pwsh",
-    ),
-    "Cron": (
-        "openlaoke.tools.cron_tool",
-        "CronTool",
-        "Manage cron jobs",
-        "cron schedule job timer",
-    ),
-    "REPL": (
-        "openlaoke.tools.repl_tool",
-        "REPLTool",
-        "Interactive REPL environment",
-        "repl interactive python node ruby",
-    ),
-    "ToolSearch": (
-        "openlaoke.tools.tool_search_tool",
-        "ToolSearchTool",
-        "Search and discover available tools",
-        "tool search suggest discover",
-    ),
-    "DownloadReference": (
-        "openlaoke.tools.reference_downloader",
-        "ReferenceDownloader",
-        "Download academic papers as PDFs",
-        "reference paper pdf download arxiv doi",
-    ),
-    "BatchDownloadReferences": (
-        "openlaoke.tools.reference_downloader",
-        "BatchDownloadReferences",
-        "Download multiple academic papers",
-        "batch download papers references",
-    ),
-    "SearchAndDownloadPapers": (
-        "openlaoke.tools.reference_downloader",
-        "SearchAndDownloadPapers",
-        "Search and download academic papers",
-        "search download academic papers semantic scholar",
-    ),
-    "MemoryStore": (
-        "openlaoke.core.memory.memory_tools",
-        "MemoryStoreTool",
-        "Store a memory for cross-session recall",
-        "memory store persist save context",
-    ),
-    "MemoryRecall": (
-        "openlaoke.core.memory.memory_tools",
-        "MemoryRecallTool",
-        "Recall memories matching a query",
-        "memory recall search retrieve context",
-    ),
-    "MemoryTimeline": (
-        "openlaoke.core.memory.memory_tools",
-        "MemoryTimelineTool",
-        "Query the event timeline for a session",
-        "memory timeline history events",
-    ),
-    "MemoryStats": (
-        "openlaoke.core.memory.memory_tools",
-        "MemoryStatsTool",
-        "Show memory database statistics",
-        "memory stats statistics database",
-    ),
-    "MemorySearch": (
-        "openlaoke.core.memory.memory_tools",
-        "MemorySearchTool",
-        "Search memories by type",
-        "memory search list type",
-    ),
-    "ContractCreate": (
-        "openlaoke.core.contract_tools",
-        "ContractCreateTool",
-        "Declare a Definition-of-Done contract with testable assertions",
-        "contract done assertion verify",
-    ),
-    "ContractAssertPass": (
-        "openlaoke.core.contract_tools",
-        "ContractAssertPassTool",
-        "Mark a contract assertion as passed with evidence",
-        "contract pass assertion evidence",
-    ),
-    "ContractAssertFail": (
-        "openlaoke.core.contract_tools",
-        "ContractAssertFailTool",
-        "Mark a contract assertion as failed with evidence",
-        "contract fail assertion evidence",
-    ),
-    "ContractAssertSkip": (
-        "openlaoke.core.contract_tools",
-        "ContractAssertSkipTool",
-        "Mark a contract assertion as skipped (out of scope)",
-        "contract skip assertion scope",
-    ),
-    "ContractStatus": (
-        "openlaoke.core.contract_tools",
-        "ContractStatusTool",
-        "Show active contract assertions, states, and blockers",
-        "contract status assertion list",
-    ),
-    "ReadAndPatch": (
-        "openlaoke.tools.compound_tools",
-        "ReadAndPatchTool",
-        "Read a file and apply a patch in a single operation",
-        "read patch edit file replace",
-    ),
-    "FindAndRead": (
-        "openlaoke.tools.compound_tools",
-        "FindAndReadTool",
-        "Find files by glob pattern and read contents in one operation",
-        "find glob read file search",
-    ),
-    "SearchAndRead": (
-        "openlaoke.tools.compound_tools",
-        "SearchAndReadTool",
-        "Search code with regex and read matching files in one operation",
-        "grep search read code regex",
-    ),
-    "InvokeSkill": (
-        "openlaoke.tools.invoke_skill_tool",
-        "InvokeSkillTool",
-        "Invoke an installed skill by name — skills loaded at runtime",
-        "skill invoke plugin extension capability",
-    ),
-}
-
-
-def _make_loader(module_name: str, class_name: str) -> Callable[[], Tool]:
-    def loader() -> Tool:
-        module = importlib.import_module(module_name)
-        cls = getattr(module, class_name)
-        tool: Tool = cls()
-        return tool
-
-    return loader
+from openlaoke.core.tool import ToolRegistry
 
 
 def register_all_tools(registry: ToolRegistry) -> None:
-    """Register all built-in tools with essential tools loaded immediately."""
-    register_essential_tools(registry)
-    register_deferred_tools(registry)
-
-
-def register_essential_tools(registry: ToolRegistry) -> None:
-    """Register essential tools that are always loaded."""
+    """Register the built-in tools."""
     from openlaoke.tools.bash_tool import BashTool
     from openlaoke.tools.edit_tool import EditTool
     from openlaoke.tools.glob_tool import GlobTool
     from openlaoke.tools.grep_tool import GrepTool
+    from openlaoke.tools.invoke_skill_tool import InvokeSkillTool
+    from openlaoke.tools.ls_tool import ListDirectoryTool
+    from openlaoke.tools.powershell_tool import PowerShellTool
     from openlaoke.tools.read_tool import ReadTool
     from openlaoke.tools.write_tool import WriteTool
 
-    registry.register(BashTool())
-    registry.register(ReadTool())
-    registry.register(WriteTool())
-    registry.register(EditTool())
-    registry.register(GlobTool())
-    registry.register(GrepTool())
+    for tool in (
+        ReadTool(),
+        WriteTool(),
+        EditTool(),
+        BashTool(),
+        GrepTool(),
+        GlobTool(),
+        ListDirectoryTool(),
+        PowerShellTool(),
+        InvokeSkillTool(),
+    ):
+        registry.register(tool)
+
+
+def register_essential_tools(registry: ToolRegistry) -> None:
+    register_all_tools(registry)
 
 
 def register_deferred_tools(registry: ToolRegistry) -> None:
-    """Register deferred tools with lazy loading."""
-    for name, (module_name, class_name, description, search_hint) in _DEFERRED_TOOLS.items():
-        registry.register_deferred_with_info(
-            name=name,
-            loader=_make_loader(module_name, class_name),
-            description=description,
-            search_hint=search_hint,
-        )
+    return None
 
 
-def get_tool_loader(tool_name: str) -> Callable[[], Tool] | None:
-    """Get a loader function for a deferred tool."""
-    if tool_name in _DEFERRED_TOOLS:
-        module_name, class_name, _, _ = _DEFERRED_TOOLS[tool_name]
-        return _make_loader(module_name, class_name)
+def get_tool_loader(tool_name: str):
     return None

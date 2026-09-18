@@ -71,16 +71,19 @@ class BashTool(Tool):
                 is_error=True,
             )
 
-        if (
-            perm_mode == PermissionMode.AUTO
-            and classification.safety_level != CommandSafetyLevel.SAFE
-            and classification.confidence != "high"
+        if perm_mode == PermissionMode.AUTO and (
+            classification.safety_level != CommandSafetyLevel.SAFE
         ):
+            # AUTO mode still gates dangerous commands: high-confidence
+            # DANGEROUS matches (rm -rf, curl|sh, interpreter inline code,
+            # file-writing redirects) require an explicit approval turn —
+            # they are reported back so the harness can ask the user.
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
                 content=f"Command needs confirmation in auto mode: {classification.reason}\n"
                 f"Safety level: {classification.safety_level.value}\n"
-                f"Confidence: {classification.confidence.value}",
+                f"Confidence: {classification.confidence.value}\n"
+                "Ask the user to approve or adjust the permission mode.",
                 is_error=True,
             )
 

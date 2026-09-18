@@ -21,11 +21,6 @@ from openlaoke.types.core_types import (
 from openlaoke.types.permissions import PermissionConfig
 
 if TYPE_CHECKING:
-    from openlaoke.bus.queue import MessageBus
-    from openlaoke.channels.manager import ChannelManager
-    from openlaoke.control.orchestrator import Orchestrator
-    from openlaoke.cron.scheduler import CronScheduler
-    from openlaoke.knowledge import KnowledgeLoader
     from openlaoke.snapshot.store import SnapshotStore
     from openlaoke.types.providers import MultiProviderConfig
 
@@ -94,12 +89,7 @@ class AppState:
     max_tool_history: int = 4096
     max_steps: int = 100
 
-    _bus: MessageBus | None = field(default=None, repr=False)
-    _orchestrator: Orchestrator | None = field(default=None, repr=False)
-    _cron_scheduler: CronScheduler | None = field(default=None, repr=False)
     _snapshot_store: SnapshotStore | None = field(default=None, repr=False)
-    _knowledge_loader: KnowledgeLoader | None = field(default=None, repr=False)
-    _channel_manager: ChannelManager | None = field(default=None, repr=False)
 
     _listeners: list[Callable[[AppState], None]] = field(default_factory=list, repr=False)
     _persist_path: str | None = None
@@ -255,52 +245,12 @@ class AppState:
             logger.warning("Failed to persist state to %s", self._persist_path, exc_info=True)
 
     @property
-    def bus(self) -> MessageBus:
-        if self._bus is None:
-            from openlaoke.bus.queue import MessageBus
-
-            self._bus = MessageBus()
-        return self._bus
-
-    @property
-    def orchestrator(self) -> Orchestrator:
-        if self._orchestrator is None:
-            from openlaoke.control.orchestrator import Orchestrator
-
-            self._orchestrator = Orchestrator()
-        return self._orchestrator
-
-    @property
-    def cron_scheduler(self) -> CronScheduler:
-        if self._cron_scheduler is None:
-            from openlaoke.cron.scheduler import CronScheduler
-
-            self._cron_scheduler = CronScheduler(bus=self.bus)
-        return self._cron_scheduler
-
-    @property
     def snapshot_store(self) -> SnapshotStore:
         if self._snapshot_store is None:
             from openlaoke.snapshot.store import SnapshotStore
 
             self._snapshot_store = SnapshotStore()
         return self._snapshot_store
-
-    @property
-    def knowledge_loader(self) -> KnowledgeLoader:
-        if self._knowledge_loader is None:
-            from openlaoke.knowledge import KnowledgeLoader
-
-            self._knowledge_loader = KnowledgeLoader()
-        return self._knowledge_loader
-
-    @property
-    def channel_manager(self) -> ChannelManager:
-        if self._channel_manager is None:
-            from openlaoke.channels.manager import ChannelManager
-
-            self._channel_manager = ChannelManager(bus=self.bus)
-        return self._channel_manager
 
     def to_dict(self) -> dict[str, Any]:
         return {

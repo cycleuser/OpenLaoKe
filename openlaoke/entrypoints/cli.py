@@ -24,7 +24,7 @@ from openlaoke.utils.config import load_config, save_config
 
 
 def main() -> None:
-    known_subcommands = {"model", "server", "web", "auth"}
+    known_subcommands = {"model"}
     prompt_parts: list[str] = []
     filtered_argv: list[str] = []
     args_iter = iter(sys.argv[1:])
@@ -88,51 +88,6 @@ def main() -> None:
 
     model_search_parser = model_subparsers.add_parser("search", help="Search ModelScope for models")
     model_search_parser.add_argument("query", help="Search query")
-
-    auth_parser = subparsers.add_parser("auth", help="Authentication management")
-    auth_parser.add_argument("provider", nargs="?", help="Provider to authenticate")
-    auth_parser.add_argument("--list", action="store_true", help="List authenticated providers")
-    auth_parser.add_argument("--remove", metavar="PROVIDER", help="Remove authentication")
-    auth_parser.add_argument("--show", metavar="PROVIDER", help="Show auth details")
-    auth_parser.add_argument("--test", metavar="PROVIDER", help="Test authentication")
-
-    server_parser = subparsers.add_parser("server", help="Start HTTP API server")
-    server_parser.add_argument(
-        "--host",
-        default="localhost",
-        help="Server host (default: localhost)",
-    )
-    server_parser.add_argument(
-        "--port",
-        type=int,
-        default=3000,
-        help="Server port (default: 3000)",
-    )
-    server_parser.add_argument(
-        "--cors",
-        nargs="*",
-        default=None,
-        help="Additional CORS origins",
-    )
-
-    web_parser = subparsers.add_parser("web", help="Start full-featured web UI (LAN-friendly)")
-    web_parser.add_argument(
-        "--host",
-        default="0.0.0.0",
-        help="Server host (default: 0.0.0.0 for LAN access)",
-    )
-    web_parser.add_argument(
-        "--port",
-        type=int,
-        default=8080,
-        help="Server port (default: 8080)",
-    )
-    web_parser.add_argument(
-        "--cors",
-        nargs="*",
-        default=None,
-        help="Additional CORS origins",
-    )
 
     parser.add_argument(
         "-m",
@@ -276,87 +231,6 @@ def main() -> None:
             run_search(args.query)
         else:
             model_parser.print_help()
-        return
-
-    if args.command == "server":
-        from openlaoke.server import Server
-
-        server = Server(
-            host=args.host,
-            port=args.port,
-            cors_origins=args.cors,
-        )
-        console.print(f"[green]Starting OpenLaoKe server on {args.host}:{args.port}[/green]")
-        server.run()
-        return
-
-    if args.command == "web":
-        from openlaoke.server.web_ui import WebUI
-
-        webui = WebUI(
-            host=args.host,
-            port=args.port,
-            cors_origins=args.cors,
-        )
-        console.print(f"[green]Starting OpenLaoKe Web UI on http://{args.host}:{args.port}[/green]")
-        if args.host == "0.0.0.0":
-            console.print(f"[dim]Access from LAN at http://<your-ip>:{args.port}[/dim]")
-        webui.run()
-        return
-
-    if args.command == "auth":
-        from openlaoke.core.extended_web import BrowserAuthManager
-
-        auth_manager = BrowserAuthManager()
-
-        if args.list:
-            auths = auth_manager.list_saved_auths()
-            if not auths:
-                console.print("[yellow]No authenticated providers.[/yellow]")
-            else:
-                console.print(f"[bold]Authenticated providers ({len(auths)})[/bold]")
-                for provider_type in auths:
-                    console.print(f"  ✓ {provider_type}")
-            return
-
-        if args.remove:
-            if auth_manager.delete_auth(args.remove):
-                console.print(f"[green]Removed auth for {args.remove}[/green]")
-            else:
-                console.print(f"[yellow]No auth found for {args.remove}[/yellow]")
-            return
-
-        if args.show:
-            auth_data = auth_manager.load_auth(args.show)
-            if not auth_data:
-                console.print(f"[yellow]No auth for {args.show}[/yellow]")
-            else:
-                cookie = auth_data.get("cookie", "")
-                console.print(f"[bold]{args.show}[/bold]")
-                console.print(
-                    f"  Cookie: {cookie[:20]}...{cookie[-20:] if len(cookie) > 40 else ''}"
-                )
-                console.print(f"  Length: {len(cookie)}")
-            return
-
-        if args.test:
-            console.print(f"[dim]Testing {args.test}...[/dim]")
-            auth_data = auth_manager.load_auth(args.test)
-            if not auth_data:
-                console.print(f"[red]No auth for {args.test}[/red]")
-                return
-            console.print(
-                f"[green]✓ Auth loaded (cookie length: {len(auth_data.get('cookie', ''))})[/green]"
-            )
-            return
-
-        if args.provider:
-            console.print(f"[dim]Authenticating {args.provider}...[/dim]")
-            console.print("[yellow]Note: Use browser-based auth command for full flow.[/yellow]")
-        else:
-            console.print(
-                "[dim]Use 'openlaoke auth extended-web login <provider>' for browser auth.[/dim]"
-            )
         return
 
     config = load_config()
@@ -505,16 +379,6 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
                 print(response.content)
 
             if not response.tool_uses:
-                from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
-
-                if should_continue_for_promised_tool_use(response.content or ""):
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                        }
-                    )
-                    continue
                 break
 
             # Record the assistant's tool-call turn so the next API request

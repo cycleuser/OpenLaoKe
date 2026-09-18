@@ -138,67 +138,6 @@ class TestPromptResultLanguageAction:
         assert result.is_text is True
 
 
-class TestLangCommand:
-    @pytest.mark.asyncio
-    async def test_lang_command_shows_current_language(self):
-        from openlaoke.commands.base import CommandContext, LangCommand
-        from openlaoke.core.state import create_app_state
-
-        state = create_app_state()
-        state.language = "en"
-        ctx = CommandContext(app_state=state, args="")
-        cmd = LangCommand()
-
-        result = await cmd.execute(ctx)
-        assert result.success is not False
-        assert "Current language:" in result.message or "English" in result.message
-
-    @pytest.mark.asyncio
-    async def test_lang_command_switches_to_chinese(self):
-        from openlaoke.commands.base import CommandContext, LangCommand
-        from openlaoke.core.state import create_app_state
-
-        with tempfile.TemporaryDirectory() as tmp:
-            config_dir = os.path.join(tmp, ".openlaoke")
-            config_path = os.path.join(config_dir, "config.json")
-
-            with (
-                patch("openlaoke.utils.config.CONFIG_DIR", Path(config_dir)),
-                patch("openlaoke.utils.config.CONFIG_PATH", Path(config_path)),
-            ):
-                os.makedirs(config_dir, exist_ok=True)
-
-                state = create_app_state()
-                state.language = "en"
-                ctx = CommandContext(app_state=state, args="zh")
-                cmd = LangCommand()
-
-                result = await cmd.execute(ctx)
-                assert result.success is not False
-                assert state.language == "zh"
-
-    @pytest.mark.asyncio
-    async def test_lang_command_rejects_invalid_language(self):
-        from openlaoke.commands.base import CommandContext, LangCommand
-        from openlaoke.core.state import create_app_state
-
-        state = create_app_state()
-        state.language = "en"
-        ctx = CommandContext(app_state=state, args="fr")
-        cmd = LangCommand()
-
-        result = await cmd.execute(ctx)
-        assert result.success is False
-        assert state.language == "en"
-
-    @pytest.mark.asyncio
-    async def test_lang_command_aliases(self):
-        from openlaoke.commands.base import LangCommand
-
-        cmd = LangCommand()
-        assert "language" in cmd.aliases
-
-
 class TestRunLangPickerAsync:
     @pytest.mark.asyncio
     async def test_returns_en_when_user_selects_english(self):

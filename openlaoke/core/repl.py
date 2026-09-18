@@ -38,15 +38,14 @@ from openlaoke.core.prompt_input import (
     run_model_picker_async,
 )
 from openlaoke.core.state import AppState
-from openlaoke.core.supervisor import TaskSupervisor
 from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
-from openlaoke.core.world_sensor import SensorData, sense_world
 from openlaoke.tools.register import register_all_tools
 from openlaoke.types.core_types import (
     AssistantMessage,
     MessageRole,
     PermissionResult,
     StreamEventType,
+    SystemMessage,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -88,16 +87,10 @@ class REPL:
         self.app_config: Any = None
         self._proxy: str | None = None
         self._prompt_manager = PromptSessionManager(multiline=False)
-        self.supervisor = TaskSupervisor(app_state)
         self._current_task_id: str | None = None
-        self._insomnia_engine: Any = None
         self._theme = ThemeManager(app_state.theme)
 
-        from openlaoke.core.bitter_lesson_tracker import BitterLessonTracker
-        from openlaoke.core.file_state import FileStateStore
-        from openlaoke.core.gitstore import GitStore
         from openlaoke.core.hook_system import HookRegistry
-        from openlaoke.core.memory import get_memory_manager
         from openlaoke.core.prompt_cache_split import PromptCacheSplit
         from openlaoke.core.small_model_optimizations import (
             ReadLoopTracker,
@@ -110,25 +103,26 @@ class REPL:
         self._guard: SmallModelGuard | None = None
         self._output_compressor = TerminalOutputCompressor()
         self._tool_validator = ToolCallValidator()
-        self._lesson_tracker = BitterLessonTracker()
         self._hook_system = HookRegistry.get()
-        self._memory = get_memory_manager()
-        self._memory.load()
-        self._file_state = FileStateStore()
-        self._git_store: GitStore | None = None
-        self._world_sensor: SensorData | None = None
+        self._world_sensor: Any = None
         self._cache_guard = CacheGuard(app_state)
         app_state._cache_guard = self._cache_guard
         self._cache_split = PromptCacheSplit()
 
-        self._register_memory_hooks()
+        # Interrupt + queued-input state (B1/B2 harness fixes):
+        # - _agent_task: the running agent loop, cancellable via Ctrl+C
+        # - _interrupt_requested: set by Ctrl+C, honoured between iterations
+        # - _input_queue: messages typed while the agent runs; drained at
+        #   safe points (after tool batches) so mid-run corrections land.
+        self._agent_task: asyncio.Task | None = None
+        self._interrupt_requested = False
+        self._input_queue: list[str] = []
 
         register_all()
         register_all_tools(self.registry)
         self.registry.freeze()  # Byte-stable tool schemas for the session
         self._tool_validator.set_tools(self.registry)
 
-        self._sense_world()
         self._register_cleanup()
 
     def _register_cleanup(self) -> None:
@@ -143,6 +137,11 @@ class REPL:
         atexit.register(_cleanup)
 
         def _signal_handler(signum: int, frame: Any) -> None:
+            if signum == signal.SIGINT and self._agent_task and not self._agent_task.done():
+                # First Ctrl+C while an agent runs: interrupt it, keep the REPL.
+                self._interrupt_requested = True
+                self._agent_task.cancel()
+                return
             _cleanup()
             os._exit(0)
 
@@ -176,38 +175,10 @@ class REPL:
         return get_tui_text(key, getattr(self.app_state, "language", "en"))
 
     def _register_memory_hooks(self) -> None:
-        from openlaoke.core.memory.memory_hooks import (
-            session_start_memory_hook,
-            tool_execute_after_memory_hook,
-            user_prompt_memory_hook,
-        )
-
-        self._hook_system.register(
-            "tool_execute_after",
-            "memory_extractor",
-            tool_execute_after_memory_hook,
-            priority=10,
-            plugin_name="memory",
-        )
-        self._hook_system.register(
-            "session_start",
-            "memory_session_start",
-            session_start_memory_hook,
-            priority=10,
-            plugin_name="memory",
-        )
-        self._hook_system.register(
-            "message_transform",
-            "memory_user_prompt",
-            user_prompt_memory_hook,
-            priority=5,
-            plugin_name="memory",
-        )
+        return None
 
     def _sense_world(self) -> None:
-        """Collect environment context for the AI's world awareness."""
-        with contextlib.suppress(Exception):
-            self._world_sensor = sense_world()
+        return None
 
     async def run(self) -> None:
         self._running = True
@@ -229,19 +200,6 @@ class REPL:
 
         self.api = MultiProviderClient(config, proxy=self._proxy)
 
-        from openlaoke.core.insomnia_engine import InsomniaEngine
-
-        self._insomnia_engine = InsomniaEngine(self.app_state)
-        self.app_state._insomnia_engine = self._insomnia_engine
-
-        if self.app_state.insomnia_mode:
-            self.console.print(f"[bold {self._c('primary')}]{self._t('insomnia_resuming')}[/]")
-            await self._insomnia_engine.start()
-            if self.app_state.insomnia_task_queue:
-                task = asyncio.create_task(self._insomnia_engine._process_queue())
-                self._active_tasks.add(task)
-                task.add_done_callback(self._active_tasks.discard)
-
         try:
             while self._running:
                 await self._handle_input()
@@ -250,8 +208,6 @@ class REPL:
         finally:
             for task in self._active_tasks:
                 task.cancel()
-            if self._insomnia_engine and self.app_state.insomnia_mode:
-                self._insomnia_engine._save_state()
             if self.api:
                 await self.api.close()
             self._reset_terminal()
@@ -327,10 +283,17 @@ class REPL:
 
     async def _handle_command(self, name: str, args: str) -> None:
         from openlaoke.commands.base import CommandContext
-        from openlaoke.commands.skill_shortcuts import SkillActivationResult
 
         command = get_command(name)
         if not command:
+            from openlaoke.core.prompt_templates import expand_prompt_template
+
+            expanded = expand_prompt_template(name, args)
+            if expanded is not None:
+                self.console.print(expanded)
+                self.console.print()
+                await self._handle_chat(expanded)
+                return
             self.console.print(f"[{self._c('error')}]{self._t('unknown_command')} /{name}[/]")
             self.console.print(self._t("type_help"))
             return
@@ -346,9 +309,10 @@ class REPL:
         if result.should_clear:
             self.console.clear()
 
-        if isinstance(result, SkillActivationResult) and result.should_continue_chat:
+        submit_text = getattr(result, "submit_text", "")
+        if submit_text:
             self.console.print()
-            await self._handle_chat(args)
+            await self._handle_chat(submit_text)
 
     def _handle_model_switch(self, selection: str) -> None:
         if "/" not in selection:
@@ -408,179 +372,42 @@ class REPL:
         )
 
     async def _handle_chat(self, user_input: str) -> None:
-        # Resolve @-mentions: inline file/directory content into the prompt.
-        from openlaoke.agent.references import resolve_references
-        from openlaoke.core.intent_parser import IntentParser, IntentType
-
-        user_input = resolve_references(user_input, cwd=self.app_state.get_cwd())
-
-        if self.app_state.local_mode:
-            parser = IntentParser()
-            intent = parser.parse(user_input)
-
-            if intent.intent_type in [
-                IntentType.WRITE_PROGRAM,
-                IntentType.WRITE_FUNCTION,
-                IntentType.WRITE_CLASS,
-            ]:
-                await self._handle_command("atomic", user_input)
-                return
+        if self._agent_task and not self._agent_task.done():
+            self._input_queue.append(user_input)
+            self.console.print(
+                f"  [{self._c('muted')}]Queued — will be processed after the current step.[/]"
+            )
+            return
 
         self.app_state.is_running = True
         self.app_state.set_error(None)
-
-        self._sense_world()
-
-        if self.app_state.local_mode:
-            self.supervisor.parse_request(user_input)
-            self._current_task_id = (
-                list(self.supervisor.tasks.keys())[-1] if self.supervisor.tasks else None
-            )
-        else:
-            self._current_task_id = None
+        self._current_task_id = None
+        self._interrupt_requested = False
 
         user_msg = UserMessage(role=MessageRole.USER, content=user_input)
         self.app_state.add_message(user_msg)
         self.app_state._persist()
 
-        self._memory.on_user_message(
-            user_input,
-            self.app_state.session_id,
-        )
-
-        if self.app_state.insomnia_mode:
-            self.app_state.auto_accept = True
-            if self._insomnia_engine:
-                task_id = await self._insomnia_engine.add_task(user_input)
+        try:
+            self._agent_task = asyncio.current_task()
+            await self._run_api_loop()
+            if self._interrupt_requested:
+                self._patch_dangling_tool_calls()
                 self.console.print(
-                    f"[bold {self._c('primary')}]Task queued in insomnia mode: {task_id}[/]"
+                    f"[{self._c('warning')}]Interrupted — context preserved.[/]"
                 )
-                if not self._insomnia_engine._current_task:
-                    task = asyncio.create_task(self._insomnia_engine._process_queue())
-                    self._active_tasks.add(task)
-                    task.add_done_callback(self._active_tasks.discard)
-                self.app_state.is_running = False
-                return
+        except Exception as e:
+            self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
+            self.app_state.set_error(str(e))
+        finally:
+            self._agent_task = None
+            self.app_state.is_running = False
 
-        max_retry_attempts = 3
-        retry_count = 0
-
-        while retry_count < max_retry_attempts:
-            try:
-                await self._run_api_loop()
-
-                artifacts = self._collect_artifacts()
-
-                if self._current_task_id:
-                    result = await self.supervisor.check_completion(
-                        self._current_task_id, artifacts
-                    )
-
-                    if result.is_complete:
-                        self.console.print(
-                            f"\n[{self._c('success')}]Task completed ({result.completion_percentage:.0f}%)[/]"
-                        )
-
-                        from openlaoke.core.small_model_optimizations import (
-                            estimate_model_size_from_name,
-                        )
-
-                        model_size = estimate_model_size_from_name(
-                            self.app_state.session_config.model
-                        )
-                        self._lesson_tracker.record_outcome(
-                            strategy_name="supervisor_check",
-                            model_size=model_size,
-                            success=True,
-                            tokens_used=self.app_state.token_usage.total_tokens,
-                        )
-                        self._lesson_tracker.save()
-                        break
-
-                    if result.should_retry:
-                        retry_count += 1
-                        self.console.print(
-                            f"\n[{self._c('warning')}]Task incomplete ({result.completion_percentage:.0f}%)[/]"
-                        )
-
-                        if result.feedback:
-                            self.console.print(
-                                Panel(
-                                    result.feedback,
-                                    title="Supervisor Feedback",
-                                    border_style=self._c("warning"),
-                                )
-                            )
-
-                        retry_prompt = self.supervisor.get_retry_prompt(
-                            self._current_task_id, result
-                        )
-
-                        if retry_count < max_retry_attempts:
-                            self.console.print(
-                                f"\n[{self._c('primary')}]Retrying... (attempt {retry_count}/{max_retry_attempts})[/]"
-                            )
-
-                            user_msg = UserMessage(role=MessageRole.USER, content=retry_prompt)
-                            self.app_state.add_message(user_msg)
-                            continue
-                        else:
-                            self.console.print(
-                                f"\n[{self._c('error')}]Max retries reached. Task incomplete.[/]"
-                            )
-                            self.console.print(
-                                f"[{self._c('muted')}]Missing: {', '.join(result.missing_requirements[:3])}[/]"
-                            )
-
-                            from openlaoke.core.small_model_optimizations import (
-                                estimate_model_size_from_name,
-                            )
-
-                            model_size = estimate_model_size_from_name(
-                                self.app_state.session_config.model
-                            )
-                            self._lesson_tracker.record_outcome(
-                                strategy_name="supervisor_check",
-                                model_size=model_size,
-                                success=False,
-                                error_type="max_retries_reached",
-                                tokens_used=self.app_state.token_usage.total_tokens,
-                            )
-                            self._lesson_tracker.save()
-                            break
-                    else:
-                        break
-                else:
-                    break
-
-            except Exception as e:
-                self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
-                self.app_state.set_error(str(e))
-                retry_count += 1
-
-                if retry_count >= max_retry_attempts:
-                    from openlaoke.core.small_model_optimizations import (
-                        estimate_model_size_from_name,
-                    )
-
-                    model_size = estimate_model_size_from_name(self.app_state.session_config.model)
-                    self._lesson_tracker.record_outcome(
-                        strategy_name="error_retry",
-                        model_size=model_size,
-                        success=False,
-                        error_type=type(e).__name__,
-                        tokens_used=self.app_state.token_usage.total_tokens,
-                    )
-                    self._lesson_tracker.save()
-                    break
-
-                self.console.print(f"\n[{self._c('warning')}]Retrying after error...[/]")
-        else:
-            self.console.print(
-                f"\n[{self._c('error')}]Failed to complete task after {max_retry_attempts} attempts[/]"
-            )
-
-        self.app_state.is_running = False
+        while self._input_queue and not self._interrupt_requested:
+            queued = self._input_queue.pop(0)
+            self.console.print(f"[{self._c('muted')}]Processing queued message...[/]")
+            await self._handle_chat(queued)
+            return
 
     def _collect_artifacts(self) -> dict[str, Any]:
         artifacts: dict[str, Any] = {
@@ -606,6 +433,40 @@ class REPL:
             artifacts["output_files"].extend(files)
 
         return artifacts
+
+    def _record_tool_result(self, tool_use_id: str, content: str) -> None:
+        """Persist tool output so later turns keep its evidence."""
+        self.app_state.add_message(
+            SystemMessage(
+                role=MessageRole.SYSTEM,
+                content=content,
+                subtype="tool_result",
+                tool_use_id=tool_use_id,
+            ),
+            persist=False,
+        )
+
+    def _patch_dangling_tool_calls(self) -> None:
+        """After an interrupt, synthesise tool results for any tool_call that
+        never received one, so the message history stays provider-valid."""
+        from openlaoke.types.core_types import MessageRole
+
+        tool_call_ids: dict[str, bool] = {}
+        for msg in self.app_state.messages:
+            if msg.role == MessageRole.ASSISTANT:
+                for tu in getattr(msg, "tool_uses", None) or []:
+                    tool_call_ids[tu.id] = False
+            elif isinstance(msg, SystemMessage) and msg.tool_use_id:
+                tool_call_ids[msg.tool_use_id] = True
+
+        for tool_use_id, answered in tool_call_ids.items():
+            if not answered:
+                self._record_tool_result(
+                    tool_use_id,
+                    "[Interrupted by user before this tool ran. State on disk may "
+                    "be mid-change; re-check with Read/Bash before continuing.]",
+                )
+        self.app_state._persist()
 
     async def _run_api_loop(self) -> None:
         max_iterations = 100
@@ -634,7 +495,11 @@ class REPL:
                         for tu in msg.tool_uses
                     ]
                 messages.append(assistant_msg)
-            elif msg.role == MessageRole.SYSTEM and hasattr(msg, "tool_use_id") and msg.tool_use_id:
+            elif (
+                msg.role == MessageRole.SYSTEM
+                and isinstance(msg, SystemMessage)
+                and msg.tool_use_id
+            ):
                 messages.append(
                     {
                         "role": "tool",
@@ -643,8 +508,121 @@ class REPL:
                     }
                 )
 
+        is_local_builtin = (
+            self.app_state.multi_provider_config
+            and self.app_state.multi_provider_config.active_provider == "local_builtin"
+        )
+        runtime_blocks: list[str] = []
+        if is_local_builtin:
+            from openlaoke.core.system_prompt import build_compact_system_prompt
+
+            user_input = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    user_input = msg.get("content", "")
+                    break
+            world_ctx = ""
+            if self._world_sensor:
+                world_ctx = self._world_sensor.to_summary()
+            system_prompt = build_compact_system_prompt(
+                self.app_state, user_input, world_context=world_ctx
+            )
+
+            tool_list = self._build_tool_list_for_small_model()
+            if tool_list:
+                system_prompt = system_prompt.rstrip() + tool_list
+        else:
+            system_prompt = self._cache_guard.system_prompt
+            session_ctx = self._cache_guard.ensure_session_context(
+                model=self.app_state.session_config.model,
+            )
+            if session_ctx:
+                runtime_blocks.append(session_ctx)
+            if self._world_sensor:
+                world_ctx = self._world_sensor.to_context_block()
+                if world_ctx:
+                    runtime_blocks.append(f"<sc:context>{world_ctx}</sc:context>")
+
+        from openlaoke.core.small_model_optimizations import (
+            apply_structured_thinking_prefix,
+            estimate_model_size_from_name,
+            get_small_model_guidance,
+        )
+
+        model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+        small_model_guidance = get_small_model_guidance(model_size)
+        memory_prompt = ""
+        thinking_prefix = apply_structured_thinking_prefix("code")
+        if not is_local_builtin:
+            runtime_parts: list[str] = []
+            if small_model_guidance:
+                runtime_parts.append(small_model_guidance)
+            if memory_prompt:
+                runtime_parts.append(memory_prompt)
+            if thinking_prefix:
+                runtime_parts.append(thinking_prefix)
+            runtime_blocks.extend(runtime_parts)
+        else:
+            if memory_prompt:
+                system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
+            if small_model_guidance:
+                system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
+            if thinking_prefix:
+                system_prompt = thinking_prefix + "\n" + system_prompt
+        if runtime_blocks:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "\n\n".join(runtime_blocks),
+                    "system_injected": True,
+                }
+            )
+
+        needs_tool_hint = is_local_builtin or self._is_ollama_provider()
+        if needs_tool_hint:
+            latest_user = next(
+                (
+                    msg.get("content", "")
+                    for msg in reversed(messages)
+                    if msg.get("role") == "user" and not msg.get("system_injected")
+                ),
+                "",
+            ).strip()
+            if not _CONVERSATION_ONLY.match(latest_user) and (
+                len(latest_user) >= 30 or _CODING_TRIGGERS.search(latest_user)
+            ):
+                if model_size == "tiny":
+                    tool_hint = (
+                        "[Use ONE tool now. Simple format: "
+                        "Write file_path=name content=code  OR  "
+                        "Bash command=cmd  OR  Read file_path=name  OR  "
+                        "Glob pattern=*.py. Do NOT describe, just OUTPUT the tool line.]"
+                    )
+                else:
+                    lt = chr(60)
+                    gt = chr(62)
+                    tool_hint = (
+                        f"[Use tools: output {lt}tool_call{gt} {lt}function=FUNC{gt} "
+                        f"{lt}parameter=KEY{gt} value {lt}/parameter{gt} "
+                        f"{lt}/function{gt} {lt}/tool_call{gt} for each action. "
+                        "Do NOT describe, just DO. Available: "
+                        "Write(file_path,content) Read(file_path) "
+                        "Glob(pattern) Bash(command)]"
+                    )
+                messages.append({"role": "user", "content": tool_hint, "system_injected": True})
+
         while iteration < max_iterations and self._running:
             iteration += 1
+
+            # Mid-run queued input (B2): flush user corrections between
+            # iterations so the model sees them on the next call.
+            while self._input_queue:
+                queued = self._input_queue.pop(0)
+                self.console.print(f"  [{self._c('muted')}]Injecting queued message...[/]")
+                self.app_state.add_message(
+                    UserMessage(role=MessageRole.USER, content=queued), persist=False
+                )
+                messages.append({"role": "user", "content": queued})
 
             from openlaoke.core.compact.fast_pruner import fast_prune, fast_prune_aggressive
             from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
@@ -679,111 +657,6 @@ class REPL:
                             f"({prune_result.elapsed_ms:.1f}ms)[/]"
                         )
 
-            is_local_builtin = (
-                self.app_state.multi_provider_config
-                and self.app_state.multi_provider_config.active_provider == "local_builtin"
-            )
-            if is_local_builtin:
-                from openlaoke.core.system_prompt import build_compact_system_prompt
-
-                user_input = ""
-                for msg in reversed(messages):
-                    if msg.get("role") == "user":
-                        user_input = msg.get("content", "")
-                        break
-                world_ctx = ""
-                if self._world_sensor:
-                    world_ctx = self._world_sensor.to_summary()
-                system_prompt = build_compact_system_prompt(
-                    self.app_state, user_input, world_context=world_ctx
-                )
-
-                tool_list = self._build_tool_list_for_small_model()
-                if tool_list:
-                    system_prompt = system_prompt.rstrip() + tool_list
-            else:
-                # Cache-stable path: use CacheGuard for byte-stable system prompt
-                system_prompt = self._cache_guard.system_prompt
-
-                # Inject session context block into user message stream
-                session_ctx = self._cache_guard.ensure_session_context(
-                    model=self.app_state.session_config.model,
-                )
-                if session_ctx:
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": session_ctx,
-                            "system_injected": True,
-                        }
-                    )
-
-                # Merge world_context into the last user message (not system prompt)
-                world_ctx = ""
-                if self._world_sensor:
-                    world_ctx = self._world_sensor.to_context_block()
-                if world_ctx and messages:
-                    for i in range(len(messages) - 1, -1, -1):
-                        if messages[i].get("role") == "user" and not messages[i].get(
-                            "system_injected"
-                        ):
-                            messages[i]["content"] = (
-                                messages[i]["content"]
-                                + "\n\n<sc:context>"
-                                + world_ctx
-                                + "</sc:context>"
-                            )
-                            break
-
-            # Small-model guidance and memory — inject into user message stream
-            # (not system prompt) to keep system prompt byte-stable
-            from openlaoke.core.small_model_optimizations import (
-                apply_structured_thinking_prefix,
-                estimate_model_size_from_name,
-                get_small_model_guidance,
-            )
-
-            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
-            small_model_guidance = get_small_model_guidance(model_size)
-            memory_prompt = self._memory.inject_into_system_prompt()
-
-            # For non-local providers, inject guidance into last user message
-            if not is_local_builtin and (small_model_guidance or memory_prompt):
-                extra_parts = []
-                if small_model_guidance:
-                    extra_parts.append(small_model_guidance)
-                if memory_prompt:
-                    extra_parts.append(memory_prompt)
-                extra = "\n\n".join(extra_parts)
-                if extra and messages:
-                    for i in range(len(messages) - 1, -1, -1):
-                        if messages[i].get("role") == "user" and not messages[i].get(
-                            "system_injected"
-                        ):
-                            messages[i]["content"] = extra + "\n" + messages[i]["content"]
-                            break
-            elif is_local_builtin:
-                if memory_prompt:
-                    system_prompt = system_prompt.rstrip() + "\n\n" + memory_prompt
-                if small_model_guidance:
-                    system_prompt = system_prompt.rstrip() + "\n\n" + small_model_guidance
-
-            # Structured thinking prefix for small/local models
-            user_input_for_thinking = ""
-            for msg in reversed(messages):
-                if msg.get("role") == "user" and not msg.get("system_injected"):
-                    user_input_for_thinking = msg.get("content", "")
-                    break
-            thinking_prefix = apply_structured_thinking_prefix("code")
-            if thinking_prefix and user_input_for_thinking and is_local_builtin:
-                system_prompt = thinking_prefix + "\n" + system_prompt
-            elif thinking_prefix and user_input_for_thinking and not is_local_builtin:
-                # Inject into user message for cloud providers
-                for i in range(len(messages) - 1, -1, -1):
-                    if messages[i].get("role") == "user" and not messages[i].get("system_injected"):
-                        messages[i]["content"] = thinking_prefix + "\n" + messages[i]["content"]
-                        break
-
             tools = self.registry.get_all_for_prompt()
 
             # Apply cache_control markers for Anthropic providers
@@ -794,33 +667,6 @@ class REPL:
 
                     if provider.provider_type == ProviderType.ANTHROPIC:
                         messages = CacheGuard.apply_cache_markers(messages)
-
-            needs_tool_hint = is_local_builtin or self._is_ollama_provider()
-            if needs_tool_hint:
-                for i in range(len(messages) - 1, -1, -1):
-                    if messages[i].get("role") == "user":
-                        content = messages[i].get("content", "")
-                        stripped = content.strip()
-                        if _CONVERSATION_ONLY.match(stripped) or (
-                            len(stripped) < 30 and not _CODING_TRIGGERS.search(stripped)
-                        ):
-                            break
-                        if model_size == "tiny":
-                            ti = (
-                                "\n\n[Use ONE tool now. Simple format: "
-                                "Write file_path=name content=code  OR  "
-                                "Bash command=cmd  OR  Read file_path=name  OR  "
-                                "Glob pattern=*.py. Do NOT describe, just OUTPUT the tool line.]"
-                            )
-                        else:
-                            ti = (
-                                "\n\n[Use tools: output <tool_call> <function=FUNC> <parameter=KEY> value "
-                                "</tool_call> for each action. Do NOT describe, just DO. "
-                                "Available: Write(file_path,content) Read(file_path) Glob(pattern) Bash(command)]"
-                            )
-                        if ti not in content:
-                            messages[i]["content"] = content + ti
-                        break
 
             from openlaoke.core.small_model_optimizations import sanitize_tool_schema
 
@@ -1032,20 +878,6 @@ class REPL:
                         ):
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                             break
-                        # Anti-stall: check if model wrote plan and intends to use tools
-                        from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
-
-                        if should_continue_for_promised_tool_use(content_text):
-                            self.console.print(
-                                f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
-                            )
-                            messages.append(
-                                {
-                                    "role": "user",
-                                    "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                                }
-                            )
-                            continue
                         break
 
                     # Parallel dispatch for read-only tool batches
@@ -1071,6 +903,7 @@ class REPL:
                                     "content": result_content,
                                 }
                             )
+                            self._record_tool_result(tool_use.id, result_content)
                     else:
                         for tool_use in tool_uses:
                             if not self._running:
@@ -1125,6 +958,7 @@ class REPL:
                                     "content": result_content,
                                 }
                             )
+                            self._record_tool_result(tool_use.id, result_content)
 
                     self.app_state._persist()
 
@@ -1200,26 +1034,21 @@ class REPL:
                             for tu in response.tool_uses
                         ]
                     messages.append(response_dict)
+                    self.app_state.add_message(
+                        AssistantMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=response.content or "",
+                            tool_uses=response.tool_uses,
+                            thinking=response.thinking or "",
+                        ),
+                        persist=False,
+                    )
 
                     if not response.tool_uses:
                         rc = (response.content or "").strip().upper()
                         if rc.startswith("DONE") or "\nDONE" in rc:
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                             break
-                        # Anti-stall: check if model wrote plan and intends to use tools
-                        from openlaoke.core.anti_stall import should_continue_for_promised_tool_use
-
-                        if should_continue_for_promised_tool_use(response.content or ""):
-                            self.console.print(
-                                f"  [{self._c('muted')}](auto-continue: plan detected, nudging...)[/]"
-                            )
-                            messages.append(
-                                {
-                                    "role": "user",
-                                    "content": "Proceed now by using the appropriate tool calls, then provide the answer.",
-                                }
-                            )
-                            continue
                         break
 
                     for tool_use in response.tool_uses:
@@ -1270,11 +1099,14 @@ class REPL:
                                 "content": result_content,
                             }
                         )
+                        self._record_tool_result(tool_use.id, result_content)
 
                     self.app_state._persist()
 
             except asyncio.CancelledError:
-                self.console.print(f"\n[{self._c('warning')}]Interrupted.[/]")
+                self._interrupt_requested = True
+                self._patch_dangling_tool_calls()
+                self.console.print(f"\n[{self._c('warning')}]Interrupted — context preserved.[/]")
                 break
             except httpx.HTTPStatusError as e:
                 self.console.print(
@@ -1347,11 +1179,30 @@ class REPL:
             self.app_state.permission_config,
         )
 
+        if perm_result != PermissionResult.DENY:
+            subject = self._approval_subject(tool_use.name, tool_input)
+            subject_result = self.app_state.permission_config.check_tool_subject(
+                tool_use.name, subject
+            )
+            if subject_result == PermissionResult.DENY:
+                perm_result = PermissionResult.DENY
+            elif subject_result == PermissionResult.ALLOW:
+                perm_result = PermissionResult.ALLOW
+
         if perm_result == PermissionResult.DENY:
             self.console.print(f"  [{self._c('error')}]Denied:[/] {tool_use.name}")
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Permission denied for {tool_use.name}",
+                is_error=True,
+            )
+
+        if perm_result == PermissionResult.ASK and self._is_denied_subject(
+            tool_use.name, tool_input
+        ):
+            return ToolResultBlock(
+                tool_use_id=tool_use.id,
+                content=f"Permission denied for {tool_use.name} (subject deny rule)",
                 is_error=True,
             )
 
@@ -1371,8 +1222,6 @@ class REPL:
         ctx = ToolContext(
             app_state=self.app_state,
             tool_use_id=tool_use.id,
-            file_state=self._file_state,
-            git_store=self._get_git_store(),
         )
 
         validation = tool.validate_input(tool_input)
@@ -1388,13 +1237,6 @@ class REPL:
 
         if tool_use.name in ("Write", "Edit", "NotebookWrite"):
             self._verify_file_written(tool_input, result)
-
-        if result.is_error:
-            self._memory.on_tool_error(
-                tool_use.name,
-                str(result.content)[:200],
-                self.app_state.session_id,
-            )
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
 
@@ -1540,7 +1382,10 @@ class REPL:
         choices.append("]o  ", style=self._theme.style("muted"))
         choices.append("[", style=self._theme.style("muted"))
         choices.append("a", style=self._theme.style("primary"))
-        choices.append("]lways", style=self._theme.style("muted"))
+        choices.append("]lways  ", style=self._theme.style("muted"))
+        choices.append("[", style=self._theme.style("muted"))
+        choices.append("v", style=self._theme.style("error"))
+        choices.append("]never", style=self._theme.style("muted"))
         self.console.print(choices)
 
         try:
@@ -1551,9 +1396,43 @@ class REPL:
 
         if answer in ("n", "no"):
             return False
+        if answer in ("v", "never"):
+            self.app_state.permission_config.deny_subject(
+                tool_name, self._approval_subject(tool_name, tool_input)
+            )
+            self.console.print(
+                f"  [{self._c('muted')}]Saved permanent deny for {tool_name}. "
+                "Remove it via /permission rules to re-enable.[/]"
+            )
+            return False
         if answer in ("a", "always"):
-            self.app_state.permission_config.approve_tool(tool_name, remember=True)
+            self.app_state.permission_config.approve_subject(
+                tool_name, self._approval_subject(tool_name, tool_input), remember=True
+            )
         return True
+
+    @staticmethod
+    def _approval_subject(tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Narrow approval key for 'Always allow': base command for Bash,
+        target path for file writers, tool-wide when no narrower subject."""
+        if tool_name == "Bash":
+            return str(tool_input.get("command", ""))[:200]
+        if tool_name in ("Write", "Edit", "NotebookWrite", "AppendFile"):
+            path = str(tool_input.get("file_path", ""))
+            return path[:200]
+        return ""
+
+    def _is_denied_subject(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """True when a deny_subject rule stored via 'never' matches this call."""
+        subject = self._approval_subject(tool_name, tool_input)
+        if not subject:
+            return False
+        from openlaoke.types.core_types import PermissionResult
+
+        return (
+            self.app_state.permission_config.check_tool_subject(tool_name, subject)
+            == PermissionResult.DENY
+        )
 
     def _print_tool_result(self, rendered: str, tool_name: str, is_error: bool) -> None:
         if is_error:
@@ -1571,14 +1450,7 @@ class REPL:
             self.console.print(f"  [{self._c('muted')}]{prefix}   ({len(rendered)} chars total)[/]")
 
     def _get_git_store(self) -> Any | None:
-        if self._git_store is None:
-            from openlaoke.core.gitstore import GitStore
-
-            cwd = self.app_state.get_cwd()
-            if not os.path.exists(os.path.join(cwd, ".git")):
-                return None
-            self._git_store = GitStore(cwd)
-        return self._git_store
+        return None
 
     def _build_tool_list_for_small_model(self) -> str:
         try:
