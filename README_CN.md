@@ -1,442 +1,233 @@
 # OpenLaoKe
 
-> 开源终端AI编程助手，支持本地模型、高级自动化和智能监督。
+> [pi](https://github.com/earendil-works/pi) 的 Python 实现 —— 一个极简、快速、可扩展的终端编程智能体。
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-## 简介
+## 现在的 OpenLaoKe 是什么
 
-OpenLaoKe 是一款功能强大的终端AI编程助手，支持 **24+ AI提供商**、**本地GGUF模型**（零API费用）和**高级自动化**功能。无论你需要云端智能还是完全离线的AI编程，OpenLaoKe 都能满足。
+OpenLaoKe 是 **pi 设计的一次忠实 Python 重写**。它保留了 pi 的核心想法——一个很小的、有主见的智能体循环，其余的由你自己扩展——然后把其它几乎所有东西都砍掉了。
 
-## 核心特性
+- **9 个工具**，与 pi 的能力面一致：`Read`、`Write`、`Edit`、`Bash`、`Grep`、`Glob`、`ListDirectory`、`PowerShell`，外加用于按需加载技能的 `InvokeSkill`。
+- **pi 的 23 个内置命令**，外加 prompt 模板与技能。
+- **树状会话，支持 branch / fork / clone / rewind**，底层是追加写文件。
+- **prompt 模板**（`/name` 与 `/prompt <name>`），支持 `$1`、`$@`、`${1:-default}`、`${@:N:L}`。
+- **零成本的本地模型**（llama-cpp-python），外加 20+ 云端提供商。
+- 约 1.9 万行 Python。没有 MCP、没有子智能体、没有计划模式、没有权限弹窗、没有后台 bash。
 
-### 基础功能
-- **交互式REPL** — 丰富的终端UI，命令历史（↑/↓、Ctrl+R），智能补全（Tab）
-- **多提供商支持** — 24个AI提供商，涵盖云端、本地和免费选项
-- **本地GGUF模型** — 零API费用、零网络需求运行Qwen模型
-- **Ctrl+P模型选择器** — VS Code风格的模型切换弹窗，即时切换提供商/模型
-- **30+内置工具** — Read、Write、Edit、Glob、Grep、Bash、LSP、Git、WebSearch等
-- **MCP支持** — 连接外部MCP工具服务器
-- **权限系统** — 三种模式：默认、自动、绕过
-- **会话持久化** — 自动保存和恢复对话
-- **成本追踪** — 实时显示token使用量和费用
-- **20+斜杠命令** — 模型切换、配置、调试等
-- **钩子系统** — 可扩展的前后执行钩子
-- **代理支持** — 无代理、系统代理或自定义代理
+### 工具
 
-### 高级功能
-- **HyperAuto模式** — 完全自主运行，自我改进和技能生成
-- **任务监督** — 自动重试、完成验证和质量检查
-- **模型评估** — 5层自适应任务分解，基于模型能力
-- **反AI检测** — 确保生成内容像人类撰写，带真实引用
-- **蒸馏提示词模板** — 79个预置Q&A模板，覆盖31个类别，支持8种语言触发（中/英/日/韩/法/德/西/俄）
-- **参考文献下载** — 学术写作自动下载PDF
-- **技能系统** — 39+基于YAML的专业工作流技能
-- **小模型优化** — 工具参数类型强制、JSON Schema清理、读循环预防、终端输出压缩、模型尺寸自适应行为，专为GGUF模型（0.6B-8B）优化
-- **快速上下文修剪** — 纯算法上下文压缩（<5ms，无需LLM），头尾保护+关键词提取
-- **钩子系统** — 15个扩展点，支持工具执行前后、消息转换、错误处理等
-- **自我反思追踪器** — 基于实证数据的策略追踪，自动禁用失败方法并推荐更优方案
+| 工具 | 用途 |
+|------|------|
+| `Read` | 读文件（文本、图片、PDF） |
+| `Write` | 新建或覆盖文件 |
+| `Edit` | 精确的字符串替换修改 |
+| `Bash` | 执行 shell 命令（流式输出） |
+| `Grep` | 跨文件正则搜索 |
+| `Glob` | 按模式查找文件 |
+| `ListDirectory` | 列目录 |
+| `PowerShell` | Windows 命令执行 |
+| `InvokeSkill` | 运行时加载已安装的技能 |
+
+### 斜杠命令
+
+pi 的内置命令一一对应地实现了：
+
+`/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
+
+另有几个符合同样哲学的新增命令：`/prompt`（展开 prompt 模板）、`/skill`（列出或激活技能）、`/theme`、`/help`。
+
+## 设计哲学
+
+OpenLaoKe 是刻意跟随 pi 的，而这份哲学本身就是重点：
+
+**一、内核要小，能力向外长。** 默认的工具集小而稳定。新能力通过技能、prompt 模板、钩子，以及你自己的代码接入，而不是靠不断堆内置功能。内核小，才容易理清、启动快、运行便宜。
+
+**二、速度由"固定上下文基线"决定。** 每一次请求都要重发系统提示词、工具定义和技能元数据。这份固定开销乘以每一个模型回合，就是延迟和成本的主项。功能多的助手，是每一次调用都在为它付这笔钱。把基线压小，是一个设计决策，不是事后优化——见下面「速度与复杂度」。
+
+**三、渐进披露。** 技能正文在未被调用前不进上下文。随提示词走的只有名字和简短描述，真正的指令等模型确实需要时再加载。
+
+**四、会话是树，不是线。** 每个会话都是带父子链接的追加日志，所以可以原地分叉、克隆、回退，都不丢历史。
+
+**五、有主见的"不做"。** pi 的原话是：*没有 MCP、没有子智能体、没有权限弹窗、没有计划模式、没有内置待办、没有后台 bash。* OpenLaoKe 继承这份清单。这些不是缺失的功能，而是"真正需要时你自己去搭"的功能。
+
+**六、本地优先，能零成本。** 跑在自己机器上的 GGUF 模型是一等公民，不是备胎。
+
+## 为什么突然转向
+
+这一段是诚实的项目史，因为转向本身才是最有意思的部分。
+
+OpenLaoKe 一开始并不是 pi。它 2026 年 4 月起步时，是一个功能齐全、OpenCode 风格的助手：30+ 工具、MCP、子智能体、一个 supervisor、一个计划模式、权限系统、记忆、反 AI 检测层、双模型协作、Web UI、FastAPI 服务端……一路长到了大约 **78,000 行**、286 个模块。
+
+然后我们做了测量。同一个模型、同一个任务，换不同的外壳去跑，结果显示：**每次请求的固定开销**（系统提示词加工具定义）才是压倒性的主项。在一次受控对比里，极简外壳的基线是每次请求约 1.5k token，而功能齐全的外壳约 7.3k。而每装一个技能，两边都大约增加 210 token——一模一样，因为两边都遵循同一套 Agent Skills 标准。结论不太舒服，但很清楚：
+
+> 功能齐全的外壳所谓的"强大"，大部分是每一个回合都要交的固定税，换来的却是你常常用不到的功能。
+
+于是我们做了决定：**保住那些我们引以为傲的工程，但采用那个能产生这些数字的设计。** 现在的 OpenLaoKe 就是 pi 的设计，用 Python 写。
+
+| | 之前 | 现在 |
+|---|---:|---:|
+| Python 文件 | 286 | **69** |
+| 代码行数 | 77,955 | **19,349** |
+| 运行时依赖 | 11 | **7** |
+| 测试 | — | **147 通过** |
+| 内置命令 | 40+ | **23（与 pi 对齐）** |
+
+删掉的东西都保留在 `codex/harness-hardening` 分支上。什么也没丢，只是从默认路径上挪开了。
+
+## 一段简史
+
+提交记录讲的是四个阶段的故事：**长大 → 专精 → 收敛 → 简化**。
+
+**第一阶段——造引擎（2026 年 4 月）。** 首次提交落地了一个与提供商无关的智能体循环。它很快就长出了模型侧的机械：CPU/GPU 混合推理、智能模型选择、批量操作、双模型协作、模型预热、原子生成，以及 HyperAuto（一个自主的自我改进模式）。
+
+**第二阶段——触到边缘（2026 年 4–5 月）。** 浏览器式的提供商认证（Chrome/Firefox）、`Ctrl+P` 模型选择器，以及很关键的一步——通过 llama-cpp-python 支持本地 GGUF 模型，让"零 API 成本"真正可用。随后是记忆工具和不断膨胀的工具集。
+
+**第三阶段——收敛（2026 年 5–8 月）。** 各部分逐渐成熟：思考显示系统、带字节稳定前缀的缓存感知提示词引擎、`InvokeSkill` 元工具（无论装多少技能，工具定义都保持稳定）、会话中途切换显示语言，以及一个 OpenCode 风格的工作流内核——回退 / 分叉 / 分支，加上计划模式闸门。我们补上了架构图，也给那些被借鉴过的项目写上了公开致谢。依赖已经瘦身过一轮。
+
+**第四阶段——简化（2026 年 9 月）。** 转向。在上面那次测量之后，整个功能面被拿到同一个问题下重新审视：*pi 有这个吗？* 没有的，就离开默认路径。仓库从 7.8 万行降到 1.9 万行，工具从 30+ 降到 9 个，命令降到 pi 的 23 个。现在这份代码读起来，就像它所实现的那个东西：小、清楚、快。
+
+## 速度与复杂度
+
+这里说的速度，是从按下回车到拿到答案的真实等待时间。它几乎完全由三件事决定。
+
+**固定上下文基线。** 每一轮都要重发系统提示词、工具定义和技能元数据。极简外壳大约 1.5k token，功能重的外壳在还没算上用户那句话说，就可能越过 7k。在多轮任务里，这个数要乘以回合数。OpenLaoKe 的默认路径是刻意压在偏小一侧的。
+
+**每个技能的开销。** 技能在被调用前只有元数据。实测下来，无论哪个外壳，每个技能大约占 210 token 的固定上下文，因为两边都遵循 Agent Skills 标准。启示是：技能数量线性放大成本，装你真正用的就好。
+
+**回合数与工具往返。** 工具更少更利落，往返就更少。九个模型能一眼看懂的工具，胜过三十个它还得去分辨的工具。
+
+复杂度是这笔交易的另一半。一个 1.9 万行、模块摊平的代码库，是你能装进脑子、能做安全审计、能放心扩展的体量。在我们看来，这份"看得懂"比一长串功能列表更值钱——也正是转向的原因。
+
+## 会话
+
+`~/.openlaoke/sessions/` 存放追加写的会话 JSON；`~/.openlaoke/snapshot/`（由 `SnapshotStore` 管理）按回合记录文件与对话状态。由此支持：
+
+- `/tree` —— 列出已记录的回合，并回退到任意一个（代码 + 对话）
+- `/fork [turn]` —— 在某个回合分叉，继承该点的历史
+- `/clone` —— 在当前位置复制一份会话
+- `/compact` —— 用纯算法的快速剪枝压缩上下文（不调用 LLM）
+
+## 技能
+
+技能遵循 [Agent Skills](https://agentskills.io) 标准：一个目录，里面放一个带 YAML frontmatter 和 Markdown 指令的 `SKILL.md`。
+
+```text
+~/.openlaoke/skills/<name>/SKILL.md   # 项目级：.openlaoke/skills/<name>/SKILL.md
+```
+
+只有名字和描述进系统提示词，正文在 `InvokeSkill` 被调用时才读取。`/skill` 可以列出已安装的技能并激活其中一个。
+
+## prompt 模板
+
+pi 风格的可复用 Markdown 提示词。在 `~/.openlaoke/prompts/review.md` 放一个文件，然后调用它：
+
+```markdown
+---
+description: 审查暂存的改动
+argument-hint: "<path>"
+---
+审查暂存的改动。先关注 $1，再看 ${2:-正确性}。
+```
+
+```text
+/review src/app.py        # 或者：/prompt review src/app.py
+```
+
+支持的参数语法：`$1`、`$2`… 位置参数；`$@` / `$ARGUMENTS` 表示全部；`${1:-default}` 与 `${@:-default}` 表示默认值；`${@:N}` 与 `${@:N:L}` 表示切片。
 
 ## 快速开始
 
 ```bash
-# 使用pip安装
-pip install -e .
-
-# 或使用uv（推荐）
-uv pip install -e ".[dev]"
-
-# 安装本地GGUF模型支持（llama-cpp-python）
-pip install -e ".[local]"
-
-# 启动OpenLaoKe
+pip install openlaoke
 openlaoke
 ```
 
-## 支持的提供商
+需要 Python 3.11+。
 
-### 免费模型（无需API密钥）
-| 提供商 | 模型 | 说明 |
-|--------|------|------|
-| **OpenCode Zen** | `big-pickle`, `gpt-5-nano` | 完全免费，无需注册 |
-| **内置GGUF** | `qwen3:0.6b`, `qwen2.5:0.5b/1.5b/3b` | 本地CPU推理，零费用 |
-
-### 云端提供商
-| 提供商 | 模型 | API密钥 |
-|--------|------|---------|
-| Anthropic | Claude 4 Sonnet/Opus, Claude 3.5 | 是 |
-| OpenAI | GPT-4o, GPT-4o-mini, o1-preview | 是 |
-| MiniMax | MiniMax-M2.7, M2.5, M2.1 | 是 |
-| 阿里云编程计划 | Qwen3.5-plus, Kimi-k2.5, GLM-5 | 是 |
-| Azure OpenAI | GPT-4o, GPT-4o-mini, GPT-35-turbo | 是 |
-| Google AI | Gemini 2.0 Flash/Pro, 1.5 Flash/Pro | 是 |
-| Google Vertex AI | 通过GCP访问Gemini | 是 |
-| AWS Bedrock | Claude 3.5, Llama 3.1, Amazon Nova | 是 |
-| xAI Grok | Grok-2-latest, Grok-beta | 是 |
-| Mistral AI | Mistral-large, Mistral-small, Codestral | 是 |
-| Groq | Llama 3.3 70B, Llama 3.1 8B | 是 |
-| Cerebras | Llama 3.3 70B, Llama 3.1 8B/70B | 是 |
-| Cohere | Command-r-plus, Command-r | 是 |
-| DeepInfra | Llama 3.3/3.1, Mistral-small | 是 |
-| Together AI | Llama 3.3/3.1, Mistral, Qwen 2.5 | 是 |
-| Perplexity | Sonar系列模型 | 是 |
-| OpenRouter | 多提供商访问 | 是 |
-| GitHub Copilot | GPT-4o, GPT-4o-mini, o1 | 是 |
-
-### 本地提供商
-| 提供商 | 模型 | 设置 |
-|--------|------|------|
-| Ollama | Gemma 3/4, Llama 3.1/3.2, CodeLlama | 安装Ollama |
-| LM Studio | 任意本地模型 | 安装LM Studio |
-| **内置GGUF** | Qwen模型, 任意ModelScope GGUF | `pip install -e ".[local]"` |
-| OpenAI兼容 | 任意OpenAI兼容端点 | 自定义URL |
-
-## 本地GGUF模型（零API费用）
-
-完全在本地运行AI模型，无需API密钥或网络连接。基于 [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)。
-
-### 安装
-```bash
-pip install -e ".[local]"
-```
-
-### 内置模型
-| 模型 | 大小 | 最小内存 | 描述 |
-|------|------|----------|------|
-| Qwen3 0.6B | 610 MB | 1 GB | 阿里Qwen3，中英文支持优秀 |
-| Qwen2.5 0.5B | 469 MB | 512 MB | 超小模型，资源占用最低 |
-| Qwen2.5 1.5B | 1 GB | 2 GB | 速度与质量的良好平衡 |
-| Qwen2.5 3B | 1.9 GB | 4 GB | 更好的推理和编码能力 |
-
-### 下载模型
-```bash
-# 下载内置模型
-openlaoke model download qwen3:0.6b
-
-# 搜索ModelScope上的任意GGUF模型
-openlaoke model search qwen3.5
-
-# 下载自定义模型
-openlaoke model download "unsloth/Qwen3.5-0.8B-GGUF"
-
-# 列出所有模型及状态
-openlaoke model list
-
-# 删除已下载的模型
-openlaoke model remove custom:unsloth-Qwen3.5-0.8B-GGUF
-```
-
-### 配置方法
-1. 运行 `openlaoke --config`，选择选项 **3**（Built-in GGUF Model）
-2. 从列表中选择模型（内置或自定义下载）
-3. 如需下载，可直接在向导中完成
-
-### 本地模型参数
-通过REPL中的 `/localconfig` 或 `~/.openlaoke/config.json` 配置：
-
-| 参数 | 默认值 | 描述 |
-|------|--------|------|
-| `n_ctx` | 262144 | 上下文窗口大小（模型最大值） |
-| `temperature` | 0.3 | 采样温度（越低越确定） |
-| `repetition_penalty` | 1.1 | 重复惩罚（减少复读） |
+### 本地模型（零 API 费用）
 
 ```bash
-# 在REPL中调整
-/localconfig n_ctx 32768
-/localconfig temperature 0.5
-/localconfig repetition_penalty 1.2
+pip install llama-cpp-python
+openlaoke model search llama          # 在 ModelScope 上搜索 GGUF 模型
+openlaoke model download <model-id>   # 下载一个
+openlaoke model list                  # 列出已下载的模型
+openlaoke --config                    # 选择 "Built-in GGUF Model"
 ```
 
-### 本地模型特性
-- **自定义模型注册持久化** — 模型信息跨重启保存，存储在 `~/.openlaoke/models/custom_models.json`
-- **蒸馏提示词模板** — 79个Q&A模板自动作为few-shot上下文注入，提升小模型表现
-- **量化版本自动替换** — 从同一仓库下载新版本时自动替换旧量化
-- **精简版系统提示词** — 小模型约30 token vs 完整版约800 token
-- **`
-</think>
+### 提供商
 
-` 思考内容显示** — Qwen3.5的思考过程解析并显示
-- **上下文感知截断** — 自动截断消息以适应上下文窗口
-- **Ctrl+P模型选择器** — REPL中即时切换模型
-
-## 工具系统（30+工具）
-
-### 文件操作
-| 工具 | 描述 |
-|------|------|
-| **Read** | 读取文件内容，支持行范围 |
-| **Write** | 创建/覆盖文件 |
-| **Edit** | 精确查找替换，带diff输出 |
-| **Glob** | 快速文件模式匹配（遵循.gitignore） |
-| **Grep** | 跨文件正则搜索 |
-| **LS** | 列出目录内容 |
-
-### 代码智能
-| 工具 | 描述 |
-|------|------|
-| **LSP** | 语言服务器协议集成 |
-| **Git** | Git操作（status, diff, log, blame） |
-| **Bash** | 执行shell命令，支持流式输出 |
-
-### 网络与搜索
-| 工具 | 描述 |
-|------|------|
-| **WebSearch** | 搜索网络信息 |
-| **WebFetch** | 获取网页内容 |
-| **SearchAndDownloadPapers** | 搜索学术论文 |
-
-### 任务管理
-| 工具 | 描述 |
-|------|------|
-| **TodoWrite** | 管理任务列表 |
-| **Taskkill** | 终止运行中的任务 |
-| **Batch** | 并行执行多个工具 |
-| **Agent** | 派生子代理并行工作 |
-
-### 其他工具
-Notebook支持（Read/Write）、Cron计划任务、Memory存储、Hook配置、参考文献管理（Download/Batch/Manager）。
-
-## 斜杠命令
-
-### 模型与提供商管理
-| 命令 | 描述 |
-|------|------|
-| `/model` | 显示当前模型和可用模型 |
-| `/model <name>` | 切换到指定模型 |
-| `/model <1-N>` | 通过序号选择模型 |
-| `/model <provider>/<model>` | 切换提供商和模型 |
-| `/model -l` | 列出所有提供商的所有模型 |
-| `/model -p` | 列出所有提供商 |
-| `/provider` | 显示当前提供商 |
-| `/provider <name>` | 切换到不同提供商 |
-| `/localconfig` | 配置本地模型参数 |
-| **Ctrl+P** | **模型选择器弹窗** |
-
-### 本地模型管理（CLI）
-| 命令 | 描述 |
-|------|------|
-| `openlaoke model download [id]` | 下载内置或ModelScope GGUF模型 |
-| `openlaoke model list` | 列出所有模型及状态 |
-| `openlaoke model search <关键词>` | 搜索ModelScope上的GGUF模型 |
-| `openlaoke model remove <id>` | 删除已下载的模型 |
-| `openlaoke model info <id>` | 查看模型详情 |
-
-### 会话与配置
-| 命令 | 描述 |
-|------|------|
-| `/help` | 显示可用命令 |
-| `/exit` | 退出OpenLaoKe |
-| `/clear` | 清除屏幕和对话 |
-| `/resume` | 恢复上次会话 |
-| `/compact` | 压缩对话以节省上下文 |
-| `/permission [mode]` | 更改权限模式 |
-| `/settings` | 显示当前设置 |
-| `/theme [name]` | 更改颜色主题 |
-| `/cwd [path]` | 显示或切换工作目录 |
-
-### 信息与高级
-| 命令 | 描述 |
-|------|------|
-| `/cost` | 显示会话费用和使用量 |
-| `/usage` | 显示详细使用统计 |
-| `/commands` | 显示示例命令 |
-| `/doctor` | 诊断配置问题 |
-| `/hooks` | 管理钩子 |
-| `/mcp` | 管理MCP服务器 |
-| `/hyperauto` | 启动HyperAuto的模式 |
-| `/skill <name>` | 执行技能 |
-| `/memory` | 管理持久化内存 |
-| `/agents` | 管理子代理 |
-| `/lessons` | 查看跨项目经验教训和策略统计 |
-
-## 蒸馏提示词模板
-
-79个预置Q&A模板，覆盖31个类别，支持 **8种语言触发**（中/英/日/韩/法/德/西/俄）。匹配用户输入时自动作为few-shot上下文注入。
-
-### 类别覆盖
-| 类别 | 模板数 | 覆盖内容 |
-|------|--------|----------|
-| **系统命令** | 9 | 系统信息、进程、网络、磁盘、用户、服务、日志、安全、包管理 |
-| **Shell脚本** | 10 | 基础、条件、循环、函数、文本处理、错误处理、I/O、数组、字符串、数学 |
-| **工具调用** | 5 | 何时使用Bash、Read、Write、Edit、Glob/Grep |
-| **算法** | 10 | 排序、查找、树、图、动态规划、链表、栈、哈希、递归、贪心 |
-| **文件操作** | 6 | 读取、写入、CSV、路径、JSON、YAML |
-| **数据库** | 4 | SQL、SQLite、ORM、Redis |
-| **网络** | 3 | HTTP请求、网页爬取、WebSocket |
-| **Python高级** | 3 | 装饰器、异步编程、上下文管理器 |
-| **其他** | 29 | Git、测试、调试、OOP、DevOps、CLI、Web、数学、代码审查、机器学习等 |
-
-### 工作原理
-```
-用户输入: "用Python写一个快速排序"
-→ 匹配 "code_sort" 模板（触发词: "排序"）
-→ 将快速排序示例注入系统提示词
-→ 小模型参考示例生成更好的代码
-```
-
-## 技能系统（39+技能）
-
-基于YAML的专业工作流技能：
-
-| 技能 | 描述 |
-|------|------|
-| `/academic-writer` | 学术论文写作（AAAI, IJCAI, IEEE） |
-| `/browse` | 用于QA测试的无头浏览器 |
-| `/qa` | 系统性QA测试和bug修复 |
-| `/debug` | 根本原因调查的系统性调试 |
-| `/design-review` | 视觉QA和设计打磨 |
-| `/ship` | 发布工作流（合并、测试、创建PR） |
-| `/retro` | 每周工程回顾 |
-| `/office-hours` | YC风格创业咨询 |
-| `/brief-write` | 简洁写作风格 |
-| `/humanizer` | 人性化AI生成的文本 |
-| `/power-iterate` | 持续自主迭代 |
-| `/skill-refiner` | 改进和完善技能 |
-
-## 架构
-
-![OpenLaoKe 架构图](docs/architecture_zh.svg)
-
-## 运行模式
-
-### 在线模式（默认）
-```bash
-openlaoke
-```
-直接调用云端API。适合GPT-4o、Claude 4等强大模型。
-
-### 本地模式
-```bash
-openlaoke --local
-```
-原子任务分解 + 监督。适合小型本地模型。
-
-### Web UI
-```bash
-openlaoke web --host 0.0.0.0 --port 8080
-```
-完整Web界面，支持局域网访问。
-
-### API Server
-```bash
-openlaoke server
-```
-FastAPI后端，localhost:3000。
-
-## 命令行选项
-
-```bash
-# 非交互模式
-openlaoke "写一个排序列表的Python脚本"
-
-# 指定模型和提供商
-openlaoke -m gpt-4o --provider openai
-openlaoke --provider ollama -m llama3.2
-
-# 使用代理
-openlaoke --proxy http://127.0.0.1:7890
-
-# 设置工作目录
-openlaoke --cwd /path/to/project
-
-# 恢复上次会话
-openlaoke --resume
-
-# 重新配置
-openlaoke --config
-
-# 本地模式，用于小型模型
-openlaoke --local --provider ollama -m gemma3:1b
-```
+云端（API key）：Anthropic、OpenAI、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan，以及任何 OpenAI 兼容端点。免费/本地：OpenCode Zen、Ollama、LM Studio，以及内置 GGUF。
 
 ## 配置
 
-配置存储在 `~/.openlaoke/config.json`：
+`~/.openlaoke/config.json`：
 
 ```json
 {
   "providers": {
     "active_provider": "local_builtin",
-    "active_model": "custom:unsloth-Qwen3.5-0.8B-GGUF",
-    "local_n_ctx": 262144,
-    "local_temperature": 0.3,
-    "local_repetition_penalty": 1.1,
+    "active_model": "custom:my-model",
     "providers": {
-      "local_builtin": {
-        "default_model": "custom:unsloth-Qwen3.5-0.8B-GGUF",
-        "enabled": true
-      },
-      "ollama": {
-        "base_url": "http://localhost:11434/v1",
-        "default_model": "gemma3:1b",
-        "enabled": true
-      }
+      "ollama": { "base_url": "http://localhost:11434/v1", "default_model": "llama3.2", "enabled": true },
+      "openai": { "api_key": "sk-...", "default_model": "gpt-4o", "enabled": false }
     }
   },
   "proxy_mode": "none",
   "max_tokens": 8192,
-  "temperature": 1.0,
   "theme": "dark"
 }
 ```
 
-自定义模型注册信息存储在 `~/.openlaoke/models/custom_models.json`，重启后自动加载。会话文件存储在 `~/.openlaoke/sessions/`。
+### 环境变量
 
-## 环境变量
+`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`、`DEEPSEEK_API_KEY`、`MINIMAX_API_KEY`、`XAI_API_KEY`、`MISTRAL_API_KEY`、`GROQ_API_KEY`、`OPENROUTER_API_KEY`、`GITHUB_TOKEN`、`OPENLAOKE_MODEL`、`HTTP_PROXY` / `HTTPS_PROXY`。
 
-| 变量 | 描述 |
-|------|------|
-| `ANTHROPIC_API_KEY` | Anthropic API密钥 |
-| `OPENAI_API_KEY` | OpenAI API密钥 |
-| `MINIMAX_API_KEY` | MiniMax API密钥 |
-| `ALIYUN_API_KEY` | 阿里云编程计划API密钥 |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API密钥 |
-| `GOOGLE_API_KEY` | Google AI API密钥 |
-| `XAI_API_KEY` | xAI API密钥 |
-| `MISTRAL_API_KEY` | Mistral API密钥 |
-| `GROQ_API_KEY` | Groq API密钥 |
-| `CEREBRAS_API_KEY` | Cerebras API密钥 |
-| `COHERE_API_KEY` | Cohere API密钥 |
-| `DEEPINFRA_API_KEY` | DeepInfra API密钥 |
-| `TOGETHERAI_API_KEY` | Together AI API密钥 |
-| `PERPLEXITY_API_KEY` | Perplexity API密钥 |
-| `OPENROUTER_API_KEY` | OpenRouter API密钥 |
-| `GITHUB_TOKEN` | GitHub个人访问令牌 |
-| `OPENLAOKE_MODEL` | 默认模型 |
-| `HTTP_PROXY` / `HTTPS_PROXY` | 代理设置 |
+## 架构
+
+```text
+openlaoke/
+├── entrypoints/cli.py     # argparse CLI + 配置向导入口
+├── core/
+│   ├── repl.py            # 交互循环、流式输出、工具分发
+│   ├── agent_runner.py    # 与提供商无关的智能体回合
+│   ├── multi_provider_api.py
+│   ├── sessions.py        # 会话持久化
+│   ├── snapshot/          # 按回合的文件 + 对话快照
+│   ├── compact/           # 快速剪枝 + 摘要
+│   ├── skill_system.py    # Agent Skills 加载器
+│   ├── prompt_templates.py
+│   ├── hook_system.py     # 扩展点
+│   └── tool.py            # Tool / ToolRegistry
+├── tools/                 # read, write, edit, bash, grep, glob, ls, powershell, invoke_skill
+├── commands/              # pi 命令集 + prompt/skill 命令
+├── types/                 # 核心类型、提供商、钩子
+└── utils/                 # 配置、主题、diff、路径安全
+```
 
 ## 开发
 
 ```bash
-# 安装开发依赖
 pip install -e ".[dev]"
-
-# 代码检查和格式化
 ruff check . && ruff format .
-
-# 类型检查
-mypy
-
-# 运行测试
 pytest
-pytest --cov
-pytest tests/test_tools.py::TestBashTool::test_simple_command
-
-# 构建包
-python -m build
 ```
+
+147 个测试覆盖了 pi 兼容命令、prompt 模板、会话、快照、工具、diff 与 i18n。
 
 ## 致谢
 
-OpenLaoKe 的架构设计受以下优秀开源 AI 编程助手项目启发：
+OpenLaoKe 是 Mario Zechner 的 **[pi](https://github.com/earendil-works/pi)** 的 Python 实现，并紧密跟随其设计。pi 采用 MIT 协议；OpenLaoKe 采用 GPLv3。
 
-- **[nanobot](https://github.com/HKUDS/nanobot)** — 事件驱动 Agent 循环、多渠道会话模型、AutoCompact 自动压缩、Dream 记忆合并模式
-- **[smallcode](https://github.com/Doorman11991/smallcode)** — 多格式工具调用解析、分类评分的工具路由、Thinking Budget 思考预算控制、步骤锚定的 Plan Tracker、先读后写守卫
-- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** — 传输无关的 Controller 模式、基于前缀缓存的上下文管理、Tool Previewer 预览接口、配置驱动的 Provider/Plugin 注册、MCP 客户端架构
-- **[OpenCode](https://github.com/opencode-ai/opencode)** — 全屏 TUI 设计、Git 原生工作流、会话分支/检查点模型、零配置多模型路由
+早期迭代还借鉴了以下项目的模式：
 
-## 许可证
+- **[nanobot](https://github.com/HKUDS/nanobot)** —— 事件驱动的智能体循环、AutoCompact
+- **[smallcode](https://github.com/Doorman11991/smallcode)** —— 工具调用解析、写前先读保护
+- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** —— 缓存稳定前缀、插件式提供商注册表
+- **[OpenCode](https://github.com/opencode-ai/opencode)** —— 全屏 TUI、会话分叉/分支模型
 
-GPLv3
+## 协议
+
+GPLv3。pi 采用 MIT，与 GPLv3 兼容；其版权声明保留在 `THIRD_PARTY_NOTICES.md` 中。

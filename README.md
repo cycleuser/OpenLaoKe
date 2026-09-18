@@ -1,222 +1,165 @@
 # OpenLaoKe
 
-> Open-source terminal AI coding assistant with advanced automation, local model support, and intelligent supervision.
+> A Python implementation of [pi](https://github.com/earendil-works/pi) — a minimal, fast, extensible terminal coding agent.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-## Overview
+## What OpenLaoKe is now
 
-OpenLaoKe is a terminal-based AI coding assistant that supports **24+ AI providers** and **local GGUF models** with zero API cost. Works with any model you choose — cloud API, local Ollama/LM Studio, or raw GGUF files.
+OpenLaoKe is a **faithful Python re-implementation of pi's design**. It keeps pi's core idea — a tiny, opinionated agent loop that you extend yourself — and drops almost everything else.
 
-## Quick Start
+- **9 tools**, matching pi's surface: `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `ListDirectory`, `PowerShell`, plus `InvokeSkill` for on-demand skills.
+- **pi's 23 built-in commands**, plus prompt templates and skills.
+- **Session tree with branch / fork / clone / rewind**, backed by append-only files.
+- **Prompt templates** (`/name` and `/prompt <name>`), with `$1`, `$@`, `${1:-default}`, `${@:N:L}`.
+- **Zero-cost local models** via llama-cpp-python, plus 20+ cloud providers.
+- ~19k lines of Python. No MCP, no sub-agents, no plan mode, no permission popups, no background bash.
+
+### Tools
+
+| Tool | Purpose |
+|------|---------|
+| `Read` | Read files (text, images, PDFs) |
+| `Write` | Create or overwrite files |
+| `Edit` | Targeted string replacement edits |
+| `Bash` | Run shell commands (streaming) |
+| `Grep` | Regex search across files |
+| `Glob` | Find files by pattern |
+| `ListDirectory` | List directory contents |
+| `PowerShell` | Windows command execution |
+| `InvokeSkill` | Load an installed skill at runtime |
+
+### Slash commands
+
+pi's built-in command set is implemented one-to-one:
+
+`/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
+
+Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list or activate a skill), `/theme`, `/help`.
+
+## Design philosophy
+
+OpenLaoKe follows pi deliberately, and the philosophy is the point:
+
+**1. A minimal core, extended outward.** The default tool set is small and stable. Capabilities arrive through skills, prompt templates, hooks, and your own code — not through a growing pile of built-in features. A small core is easier to reason about, faster to start, and cheaper to run.
+
+**2. Speed is a function of the fixed context baseline.** Every request re-sends the system prompt, tool schemas, and skill metadata. That fixed cost, multiplied by every model turn, is the dominant latency and cost term. Feature-rich harnesses pay it on every call. Keeping the baseline small is a design decision, not an optimization afterthought — see *Speed and complexity* below.
+
+**3. Progressive disclosure.** Skill bodies are not in context until invoked. Only names and short descriptions travel with the prompt; the full instructions load when the model actually needs them.
+
+**4. Sessions are trees, not lines.** Every session is an append-only log with parent links, so you can fork, clone, or rewind in place without losing history.
+
+**5. Opinionated omissions.** pi says *No MCP, no sub-agents, no permission popups, no plan mode, no built-in to-dos, no background bash.* OpenLaoKe inherits this list. These are not missing features; they are features you build when you actually want them.
+
+**6. Local-first, zero-cost capable.** A GGUF model on your own machine is a first-class provider, not a fallback.
+
+## Why we pivoted
+
+This section is honest project history, because the pivot is the interesting part.
+
+OpenLaoKe did not start as pi. It began in April 2026 as a feature-rich, OpenCode-style assistant: 30+ tools, MCP, sub-agents, a supervisor, a plan mode, permissions, memory, an anti-AI-detection layer, dual-model collaboration, a web UI, a FastAPI server, and more. It grew to roughly **78,000 lines** and 286 modules.
+
+Then we measured. Running the same model on the same task across harnesses showed that the *fixed* per-request overhead — system prompt plus tool schemas — dominated everything. In one controlled comparison, a minimal harness sent ~1.5k tokens per request at the baseline; a feature-rich one sent ~7.3k. Adding skills cost roughly 210 tokens each on both sides, identically, because both used the same Agent Skills standard. The conclusion was uncomfortable but clear:
+
+> Most of the "power" of a feature-rich harness is a constant tax paid on every single turn, and it buys you features you often do not use.
+
+So we made a decision: **keep the engineering we were proud of, but adopt the design that produces the numbers.** OpenLaoKe is now pi's design, in Python. The result:
+
+| | Before | After |
+|---|---:|---:|
+| Python files | 286 | **69** |
+| Lines of code | 77,955 | **19,349** |
+| Runtime deps | 11 | **7** |
+| Tests | — | **147 passing** |
+| Built-in commands | 40+ | **23 (pi parity)** |
+
+Everything removed is preserved on the `codex/harness-hardening` branch. Nothing was lost; it was moved out of the default path.
+
+## A short history
+
+The commit log tells the story in four phases: **grow → specialize → consolidate → simplify.**
+
+**Phase 1 — Build the engine (April 2026).** The initial commit landed a provider-agnostic agent loop. Very quickly it grew model-side machinery: CPU/GPU hybrid inference, intelligent model selection, batch operations, dual-model collaboration, model preloading, atomic generation, and HyperAuto (an autonomous self-improvement mode).
+
+**Phase 2 — Reach the edges (April–May 2026).** Browser-based provider authentication (Chrome/Firefox), a `Ctrl+P` model picker, and — importantly — local GGUF models via llama-cpp-python, making zero-API-cost operation real. Memory tools and a growing tool set followed.
+
+**Phase 3 — Consolidate (May–August 2026).** The pieces matured: a thinking display system, a cache-aware prompt engine with a byte-stable prefix, the `InvokeSkill` meta-tool (keeping the tool schema stable no matter how many skills are installed), mid-session display-language switching, and an OpenCode-style workflow core with rewind / fork / branch and plan-mode gating. We added architecture diagrams and public acknowledgements to the projects whose patterns we borrowed. Dependencies were trimmed once already.
+
+**Phase 4 — Simplify (September 2026).** The pivot. After the benchmark above, the whole feature surface was re-examined against a single question: *does pi have this?* If not, it left the default path. The repository went from 78k to 19k lines, the tool set from 30+ to 9, and the command set to pi's 23. The codebase now reads like the thing it implemented: small, legible, and fast.
+
+## Speed and complexity
+
+Speed here means wall-clock time from hitting Enter to getting an answer, and it is shaped almost entirely by three things.
+
+**The fixed context baseline.** Every turn re-sends the system prompt, tool schemas, and skill metadata. A minimal harness sits around 1.5k tokens; a feature-heavy one can pass 7k before the user's message is even counted. On a multi-turn task this multiplies by the number of turns. OpenLaoKe's default path is deliberately on the small side.
+
+**Per-skill cost.** Skills are metadata-only until invoked. In measurement, each skill costs roughly 210 tokens of fixed context regardless of the harness, because both implement the Agent Skills standard. The lesson: skill count scales cost linearly, so install what you use.
+
+**Turn count and tool round-trips.** Fewer, sharper tools mean fewer round-trips. Nine tools that the model understands well beat thirty tools it has to disambiguate.
+
+Complexity is the other half of the trade. A 19k-line codebase with a flat module layout is something you can hold in your head, audit for safety, and extend without fear. That legibility is worth more, in our view, than a long feature list — and it is the reason the pivot happened.
+
+## Sessions
+
+`~/.openlaoke/sessions/` holds append-only session JSON; `~/.openlaoke/snapshot/` (via `SnapshotStore`) records per-turn file and conversation state. That enables:
+
+- `/tree` — list recorded turns and rewind to any of them (code + conversation)
+- `/fork [turn]` — branch at a turn, inheriting that point's history
+- `/clone` — duplicate the session at the current position
+- `/compact` — prune context with a pure-algorithm fast pruner (no LLM call)
+
+## Skills
+
+Skills follow the [Agent Skills](https://agentskills.io) standard: a directory with a `SKILL.md` containing YAML frontmatter and Markdown instructions.
+
+```text
+~/.openlaoke/skills/<name>/SKILL.md   # project: .openlaoke/skills/<name>/SKILL.md
+```
+
+Only the name and description enter the system prompt; the body is read when `InvokeSkill` is called. `/skill` lists what is installed and activates one.
+
+## Prompt templates
+
+Reusable Markdown prompts, pi-style. Drop a file in `~/.openlaoke/prompts/review.md` and invoke it:
+
+```markdown
+---
+description: Review staged changes
+argument-hint: "<path>"
+---
+Review the staged changes. Focus on $1, then ${2:-correctness}.
+```
+
+```text
+/review src/app.py        # or: /prompt review src/app.py
+```
+
+Supported argument syntax: `$1`, `$2`, … positional; `$@` / `$ARGUMENTS` for all; `${1:-default}` and `${@:-default}` for defaults; `${@:N}` and `${@:N:L}` for slicing.
+
+## Quick start
 
 ```bash
 pip install openlaoke
 openlaoke
 ```
 
-## Key Features
+Requires Python 3.11+.
 
-- **Interactive REPL** — rich terminal UI, command history, smart autocomplete
-- **Multi-Provider** — 24 cloud/local providers, any OpenAI-compatible endpoint
-- **Local GGUF Models** — run any GGUF model locally via llama-cpp-python, zero API cost
-- **Ctrl+P Model Picker** — instant provider/model switching overlay
-- **30+ Tools** — Read, Write, Edit, Glob, Grep, Bash, LSP, Git, WebSearch, compound tools
-- **MCP Support** — connect to external Model Context Protocol servers
-- **Permission System** — default / auto / bypass modes
-- **Session Persistence** — auto-save and resume conversations
-- **Cost Tracking** — real-time token usage and cost display
-- **20+ Slash Commands** — model switching, configuration, debugging
-- **Hook System** — 15 extensible pre/post execution hooks
-- **Proxy Support** — no proxy, system proxy, or custom proxy
-
-### Advanced
-
-- **HyperAuto** — fully autonomous mode with self-improvement
-- **Task Supervision** — automatic retry, completion verification, quality checking
-- **Model Assessment** — 5-tier adaptive task decomposition
-- **Anti-AI Detection** — human-appearing content with real citations
-- **Distilled Templates** — 79 Q&A templates across 31 categories, multi-language triggers
-- **Skill System** — 27+ YAML-based skills for specialized workflows
-- **Small Model Optimizations** — type coercion, schema sanitization, read-loop prevention, output compression
-- **Fast Context Pruning** — pure-algorithm compression (<5ms, no LLM call)
-- **Self-Reflection Tracker** — auto-disables failing strategies, learns from outcomes
-- **Compound Tools** — ReadAndPatch, FindAndRead, SearchAndRead reduce sequential calls
-- **Adaptive Router** — auto-promotes to stronger models on failure
-- **Execution Traces** — record/replay agent turns with regression test generation
-
-## Supported Providers
-
-### Free
-| Provider | Notes |
-|----------|-------|
-| **OpenCode Zen** | Completely free, no registration |
-
-### Cloud
-| Provider | Examples | API Key |
-|----------|----------|---------|
-| Anthropic | Claude Sonnet 4, Opus 4 | Yes |
-| OpenAI | GPT-4o, o3, o4-mini | Yes |
-| MiniMax | MiniMax-M2.7, M2.5 | Yes |
-| Aliyun Coding Plan | Qwen3.5-plus, Kimi-k2.5, GLM-5 | Yes |
-| Google AI | Gemini 2.5 Pro/Flash | Yes |
-| AWS Bedrock | Claude, Llama, Nova | Yes |
-| xAI | Grok-3 | Yes |
-| Mistral | Mistral Large, Codestral | Yes |
-| Groq | Llama 3.3 70B, Llama 4 | Yes |
-| Cerebras | Llama 3.3 70B | Yes |
-| Cohere | Command-r-plus | Yes |
-| DeepInfra | Llama 3.3, Mistral | Yes |
-| Together AI | Llama 3.3, Mistral | Yes |
-| Perplexity | Sonar | Yes |
-| OpenRouter | Multi-provider | Yes |
-| GitHub Copilot | GPT-4o, o3 | Yes |
-
-### Local
-| Provider | Setup |
-|----------|-------|
-| Ollama | Install Ollama, run any model |
-| LM Studio | Install LM Studio, run any model |
-| GGUF (llama-cpp-python) | Any GGUF file, zero API cost |
-| Custom OpenAI-Compatible | Any HTTP endpoint |
-
-## Local GGUF Models
-
-Run any GGUF model locally with [llama-cpp-python](https://github.com/abetlen/llama-cpp-python). No API key, no network required.
+### Local models (zero API cost)
 
 ```bash
-pip install openlaoke
-# llama-cpp-python is auto-detected; install manually if needed:
 pip install llama-cpp-python
+openlaoke model search llama          # search ModelScope for GGUF models
+openlaoke model download <model-id>   # download one
+openlaoke model list                  # list downloaded models
+openlaoke --config                    # pick "Built-in GGUF Model"
 ```
 
-### Download & Use Models
+### Providers
 
-```bash
-# Search ModelScope for any GGUF model
-openlaoke model search llama
-
-# Download a specific model
-openlaoke model download unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF
-
-# List downloaded models
-openlaoke model list
-
-# Remove a model
-openlaoke model remove custom:unsloth-Llama-4-Scout-17B-16E-Instruct-GGUF
-```
-
-### Configure
-
-```bash
-openlaoke --config
-# Select "Built-in GGUF Model" → choose from downloaded models
-```
-
-Or edit `~/.openlaoke/config.json`:
-
-```json
-{
-  "providers": {
-    "active_provider": "local_builtin",
-    "active_model": "custom:unsloth-Llama-4-Scout-17B-16E-Instruct-GGUF"
-  }
-}
-```
-
-### Local Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `n_ctx` | 262144 | Context window size |
-| `temperature` | 0.3 | Lower = more deterministic |
-| `repetition_penalty` | 1.1 | Reduces repetition loops |
-
-```bash
-# In REPL
-/localconfig n_ctx 32768
-/localconfig temperature 0.5
-```
-
-## Tools
-
-### File Operations
-Read, Write, Edit, Glob, Grep, LS
-
-### Compound Tools
-ReadAndPatch (read + edit in one call), FindAndRead (glob + read), SearchAndRead (grep + read)
-
-### Code Intelligence
-LSP, Git, Bash (streaming), CodeRunner (sandboxed)
-
-### Web
-WebSearch, WebFetch, WebBrowser (Playwright)
-
-### Task Management
-TodoWrite, TaskKill, Batch, Agent (sub-agents)
-
-### Other
-Notebook, Cron, Memory, REPL, Tmux, PowerShell
-
-## Slash Commands
-
-| Command | Description |
-|---------|-------------|
-| `/model <name>` | Switch model |
-| `/provider <name>` | Switch provider |
-| `/clear` | Clear conversation |
-| `/compact` | Compact context |
-| `/cost` | Show token usage & cost |
-| `/thinking` | Show model reasoning |
-| `/permission [mode]` | auto / default / bypass |
-| `/theme [name]` | Change theme |
-| `/hyperauto` | Autonomous mode |
-| `/skill <name>` | Execute a skill |
-| `/localconfig` | Configure local model |
-| `/help` | All commands |
-
-CLI model management:
-
-```bash
-openlaoke model download [id]   # Download GGUF from ModelScope
-openlaoke model list             # List downloaded models
-openlaoke model search <query>   # Search ModelScope
-openlaoke model remove <id>      # Remove model
-```
-
-## Running Modes
-
-```bash
-openlaoke                              # Interactive TUI (default)
-openlaoke --local                      # Local mode (atomic decomposition)
-openlaoke web --host 0.0.0.0 --port 8080  # Web UI
-openlaoke server                       # FastAPI backend (localhost:3000)
-openlaoke "Write a Python script"      # Non-interactive
-openlaoke --config                     # Configuration wizard
-openlaoke --resume                     # Resume last session
-```
-
-## Skill System
-
-27+ YAML-based skills loaded from `~/.config/opencode/skills/`:
-
-| Skill | Description |
-|-------|-------------|
-| `/academic-writer` | Academic paper writing |
-| `/an-jian` | Security audit for skills |
-| `/ba-guan` | Pre-publish code review |
-| `/brief-write` | Concise writing style |
-| `/humanizer` | Humanize AI text |
-| `/power-iterate` | Autonomous iteration |
-| `/skill-refiner` | Improve skills |
-| `/sleepless` | Non-stop execution |
-| `/master-architect` | Architecture design |
-
-## Architecture
-
-![OpenLaoKe Architecture](docs/architecture_en.svg)
+Cloud (API key): Anthropic, OpenAI, Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan, and any OpenAI-compatible endpoint. Free/local: OpenCode Zen, Ollama, LM Studio, and built-in GGUF.
 
 ## Configuration
 
@@ -225,19 +168,11 @@ openlaoke --resume                     # Resume last session
 ```json
 {
   "providers": {
-    "active_provider": "ollama",
-    "active_model": "llama3.2",
+    "active_provider": "local_builtin",
+    "active_model": "custom:my-model",
     "providers": {
-      "ollama": {
-        "base_url": "http://localhost:11434/v1",
-        "default_model": "llama3.2",
-        "enabled": true
-      },
-      "openai": {
-        "api_key_env": "OPENAI_API_KEY",
-        "default_model": "gpt-4o",
-        "enabled": false
-      }
+      "ollama": { "base_url": "http://localhost:11434/v1", "default_model": "llama3.2", "enabled": true },
+      "openai": { "api_key": "sk-...", "default_model": "gpt-4o", "enabled": false }
     }
   },
   "proxy_mode": "none",
@@ -246,47 +181,53 @@ openlaoke --resume                     # Resume last session
 }
 ```
 
-## Environment Variables
+### Environment variables
 
-| Variable | Provider |
-|----------|----------|
-| `ANTHROPIC_API_KEY` | Anthropic |
-| `OPENAI_API_KEY` | OpenAI |
-| `MINIMAX_API_KEY` | MiniMax |
-| `ALIYUN_API_KEY` | Aliyun Coding Plan |
-| `GOOGLE_API_KEY` | Google AI |
-| `XAI_API_KEY` | xAI |
-| `MISTRAL_API_KEY` | Mistral |
-| `GROQ_API_KEY` | Groq |
-| `CEREBRAS_API_KEY` | Cerebras |
-| `COHERE_API_KEY` | Cohere |
-| `DEEPINFRA_API_KEY` | DeepInfra |
-| `TOGETHERAI_API_KEY` | Together AI |
-| `PERPLEXITY_API_KEY` | Perplexity |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `GITHUB_TOKEN` | GitHub Copilot |
-| `OPENLAOKE_MODEL` | Default model override |
-| `HTTP_PROXY` / `HTTPS_PROXY` | Proxy |
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
+
+## Architecture
+
+```text
+openlaoke/
+├── entrypoints/cli.py     # argparse CLI + config wizard entry
+├── core/
+│   ├── repl.py            # interactive loop, streaming, tool dispatch
+│   ├── agent_runner.py    # provider-agnostic agent turn
+│   ├── multi_provider_api.py
+│   ├── sessions.py        # session persistence
+│   ├── snapshot/          # per-turn file + conversation snapshots
+│   ├── compact/           # fast pruner + summarizer
+│   ├── skill_system.py    # Agent Skills loader
+│   ├── prompt_templates.py
+│   ├── hook_system.py     # extension points
+│   └── tool.py            # Tool / ToolRegistry
+├── tools/                 # read, write, edit, bash, grep, glob, ls, powershell, invoke_skill
+├── commands/              # pi command set + prompt/skill commands
+├── types/                 # core types, providers, hooks
+└── utils/                 # config, theme, diff, path safety
+```
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format .
-mypy
 pytest
-pytest --cov
 ```
+
+147 tests cover the pi-compatible commands, prompt templates, sessions, snapshots, tools, diffing, and i18n.
 
 ## Acknowledgements
 
-OpenLaoKe's architecture draws inspiration from several excellent open-source projects in the AI coding assistant space:
+OpenLaoKe is a Python implementation of **[pi](https://github.com/earendil-works/pi)** by Mario Zechner, and follows its design closely. pi is MIT-licensed; OpenLaoKe is GPLv3.
 
-- **[nanobot](https://github.com/HKUDS/nanobot)** — for the event-driven agent loop, multi-channel session model, AutoCompact, and Dream memory consolidation patterns
-- **[smallcode](https://github.com/Doorman11991/smallcode)** — for the liquid tool-call parser, tool routing with category scoring, thinking budget control, plan-tracker with step anchoring, and read-before-write guard
-- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** — for the transport-agnostic Controller pattern, cache-stable prefix with structured compaction, Previewer/PreviewChange tool interface, Config-driven provider/plugin registry, and plugin-based MCP client architecture
-- **[OpenCode](https://github.com/opencode-ai/opencode)** — for the full-screen TUI design, git-native workflow, session fork/branch checkpoint model, and the pragmatic approach to zero-config multi-model routing
+Earlier iterations also drew on patterns from:
+
+- **[nanobot](https://github.com/HKUDS/nanobot)** — event-driven agent loop, AutoCompact
+- **[smallcode](https://github.com/Doorman11991/smallcode)** — tool-call parsing, read-before-write guard
+- **[DeepSeek-](https://github.com/esengine/DeepSeek-)** — cache-stable prefix, plugin provider registry
+- **[OpenCode](https://github.com/opencode-ai/opencode)** — full-screen TUI, session fork/branch model
 
 ## License
 
-GPLv3
+GPLv3. pi is MIT, which is compatible with GPLv3; its copyright notice is retained in `THIRD_PARTY_NOTICES.md`.
