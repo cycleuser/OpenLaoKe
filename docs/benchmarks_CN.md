@@ -135,7 +135,7 @@ Anthropic mock 校验的是精确契约，而不只是连通性：
 ## 第四部分 —— 具体本地任务
 
 在两个 ≥2B 模型上，用两个外壳、中英双语跑了 5 个具体任务：8 种（外壳, 模型, 语言）组合 × 5 任务 = 40 次。每次运行单独一个目录，位于
-`~/Downloads/openlaoke-pi-small-models/<外壳>/<模型>/<语言>/<任务>/`，外壳输出在 `run.log`，生成的文件保留原处供人工检查。
+`tests/artifacts/pi-small-model-tasks/<外壳>/<模型>/<语言>/<任务>/`，外壳输出在 `run.log`，生成的文件保留原处供人工检查。
 
 | 任务 | 指令（中文） | 通过条件 |
 |------|--------------|----------|
@@ -236,7 +236,7 @@ python scripts/bench_local_models.py --base-url http://127.0.0.1:11434/v1
 # 3. 多语言，双外壳
 python scripts/bench_harness_multilang.py
 
-# 4. 具体本地任务（产物写到 ~/Downloads/openlaoke-pi-small-models）
+# 4. 具体本地任务（产物写到 tests/artifacts/pi-small-model-tasks）
 python scripts/bench_concrete_tasks.py
 python scripts/analyze_concrete_tasks.py
 

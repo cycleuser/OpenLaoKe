@@ -151,7 +151,7 @@ Passes per language (both harnesses combined, out of 12):
 Five concrete tasks were run on both harnesses, in Chinese and English, for the
 two ≥2B models: eight (harness, model, language) combinations × five tasks =
 40 runs. Each run got its own directory under
-`~/Downloads/openlaoke-pi-small-models/<harness>/<model>/<lang>/<task>/`, with
+`tests/artifacts/pi-small-model-tasks/<harness>/<model>/<lang>/<task>/`, with
 the harness output in `run.log` and any generated file left in place for manual
 inspection.
 
@@ -274,7 +274,7 @@ python scripts/bench_local_models.py --base-url http://127.0.0.1:11434/v1
 # 3. Multilingual, both harnesses
 python scripts/bench_harness_multilang.py
 
-# 4. Concrete local tasks (writes artifacts under ~/Downloads/openlaoke-pi-small-models)
+# 4. Concrete local tasks (writes artifacts under tests/artifacts/pi-small-model-tasks)
 python scripts/bench_concrete_tasks.py
 python scripts/analyze_concrete_tasks.py
 

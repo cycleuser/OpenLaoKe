@@ -18,10 +18,10 @@ import sys
 import time
 from pathlib import Path
 
-REPO = "/Users/fred/Documents/GitHub/cycleuser/OpenLaoKe"
+REPO = str(Path(__file__).resolve().parents[1])
 DEV = sys.executable  # run with the conda dev environment
 BASE_URL = "http://127.0.0.1:11434/v1"
-OUT_ROOT = Path.home() / "Downloads" / "pi-small-model-tasks"
+OUT_ROOT = Path(REPO) / "tests" / "artifacts" / "pi-small-model-tasks"
 RESULTS = OUT_ROOT / "results.jsonl"
 
 MODELS = ["qwen3.5:2b", "LiquidAI-dev/lfm2.5-2.6b:latest"]
