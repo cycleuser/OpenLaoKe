@@ -20,16 +20,21 @@ directional, not authoritative.
 | Ollama | 0.34.2, serving on `http://127.0.0.1:11434` |
 | Local endpoint | `http://127.0.0.1:11434/v1` (OpenAI-compatible) |
 
-Chat-capable models under test (Ollama):
+Chat-capable models tested (Ollama). The Params/Quant/Capabilities columns are
+taken from `ollama show`:
 
 | Model | Params | Quant | Capabilities |
 |-------|-------:|-------|--------------|
-| `qwen3.5:2b` | 2.3B | Q8_0 | completion, tools, thinking, vision |
-| `qwen3.5:0.8b` | 873M | Q8_0 | completion, tools, thinking, vision |
+| `qwen3.5:2b` | 2.3B | Q8_0 | completion, vision, tools, thinking |
+| `qwen3.5:0.8b` | 873.44M | Q8_0 | completion, vision, tools, thinking |
 | `LiquidAI-dev/lfm2.5-2.6b:latest` | 2.7B | Q4_K_M | completion, tools, thinking |
-| `LiquidAI/lfm2.5-350m:latest` | 379M | Q4_K_M | completion |
-| `lfm2.5-thinking:latest` | 731M | — | completion, thinking |
-| `granite4:350m-h` | 366M | — | completion |
+| `LiquidAI/lfm2.5-350m:latest` | 354.48M | Q8_0 | completion, tools, thinking |
+| `lfm2.5-thinking:latest` | 1.2B | Q4_K_M | completion, tools, thinking |
+| `granite4:350m-h` | 340.33M | Q8_0 | completion, tools |
+
+All six models appear in the results below. For day-to-day use the local set was
+later trimmed to the two models at or above 2B (`qwen3.5:2b`,
+`LiquidAI-dev/lfm2.5-2.6b`); the data for the removed models is kept here.
 
 > **Note.** A thinking model must be given enough `max_tokens`; otherwise the
 > entire budget is spent on reasoning and the visible answer is empty. We used

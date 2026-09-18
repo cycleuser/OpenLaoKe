@@ -25,11 +25,7 @@ from pathlib import Path
 
 DEFAULT_MODELS = [
     "qwen3.5:2b",
-    "qwen3.5:0.8b",
     "LiquidAI-dev/lfm2.5-2.6b:latest",
-    "LiquidAI/lfm2.5-350m:latest",
-    "lfm2.5-thinking:latest",
-    "granite4:350m-h",
 ]
 
 PROMPTS = {
