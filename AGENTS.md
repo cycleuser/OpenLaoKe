@@ -1,6 +1,7 @@
 # AGENTS.md - OpenLaoKe 开发指南
 
-OpenLaoKe 是开源终端AI编程助手（Python 3.11+），类 Claude Code。
+OpenLaoKe 是 [pi](https://github.com/earendil-works/pi) 的 Python 实现（Python 3.11+），
+一个极简、快速、可扩展的终端编程智能体。设计上刻意贴近 pi：内核小，能力向外长。
 
 ## 开发命令
 
@@ -13,73 +14,70 @@ mypy                          # 类型检查（非严格）
 pytest                        # 测试（asyncio_mode=auto）
 ```
 
-单测试：`pytest tests/test_tools.py::TestBashTool::test_simple_command -v`
+单测试：`pytest tests/test_pi_commands.py -v`
 
 ## 运行模式
 
-| 模式 | 命令 | 特点 |
-|------|------|------|
-| TUI（默认） | `openlaoke` | 交互式终端界面 |
-| Web UI | `openlaoke web` | 完整Web界面，支持局域网访问 |
-| API Server | `openlaoke server` | FastAPI后端（localhost:3000） |
-| 本地模式 | `openlaoke --local` | 原子分解+监督，适合小模型 |
-
-Web UI：`openlaoke web --host 0.0.0.0 --port 8080`（默认局域网可访问）
+| 模式 | 命令 |
+|------|------|
+| TUI（默认） | `openlaoke` |
+| 非交互 | `openlaoke "write a script"` |
+| 本地模型管理 | `openlaoke model download/list/search/remove` |
+| 配置向导 | `openlaoke --config` |
 
 ## 代码风格
 
 - `from __future__ import annotations` + `TYPE_CHECKING` 守卫
 - 导入顺序：标准库 → 第三方 → `openlaoke.` 绝对导入
-- 类型注解：完整签名、`str | None`（不用Optional）、dataclass、pydantic BaseModel
+- 类型注解：完整签名、`str | None`（不用 Optional）、dataclass、pydantic BaseModel
 - 命名：类/PascalCase、函数/snake_case、常量/UPPER_SNAKE_CASE、私有/_前缀
-- Ruff规则：E, F, I, N, W, UP, B, SIM；行长100（E501忽略）
+- Ruff 规则：E, F, I, N, W, UP, B, SIM；行长 100
 - 错误：返回 `ToolResultBlock(is_error=True)`，不抛异常
 
 ## 架构
 
-```
+```text
 openlaoke/
-├── core/                    # 核心：state, tool, repl, multi_provider_api
-│   ├── supervisor/         # 任务监督（反AI检测、参考文献）
-│   ├── model_assessment/   # 模型评估（5层tier系统）
-│   ├── hyperauto/          # HyperAuto自主模式
-│   ├── compact/            # 上下文压缩（fast_pruner纯算法<5ms）
-│   ├── local_model_manager.py  # 本地GGUF模型注册表+ModelScope下载
-│   ├── builtin_model_provider.py # llama-cpp-python推理提供者
-│   ├── model_cli.py        # CLI模型管理（download/list/search/remove/info）
-│   ├── prompt_input.py     # 提示输入+Ctrl+P模型选择器
-│   ├── system_prompt.py    # 系统提示词（含本地模型精简版）
-│   ├── small_model_optimizations.py # 小模型优化（类型强制、schema清理、输出压缩、读循环预防）
-│   ├── hook_system.py      # 15钩子扩展系统（tool_execute_before/after等）
-│   ├── bitter_lesson_tracker.py # 自我反思与策略追踪（自动禁用失败方法）
-│   └── cross_project_lessons.py # 跨项目经验教训数据库
-├── tools/                  # 30+工具（bash/read/write/edit/glob/grep/agent/batch等）
-├── commands/                # 20+斜杠命令（base.py+registry.py）
-├── types/                  # 类型定义
-├── services/mcp/           # MCP服务
-├── server/                 # Web服务（server.py=API, web_ui.py=Web UI）
-└── entrypoints/cli.py      # CLI入口
+├── entrypoints/cli.py     # argparse CLI + 配置向导入口
+├── core/
+│   ├── repl.py            # 交互循环、流式输出、工具分发
+│   ├── agent_runner.py    # 与提供商无关的智能体回合
+│   ├── multi_provider_api.py  # 多提供商客户端
+│   ├── sessions.py        # 会话持久化（JSONL）
+│   ├── snapshot/          # 按回合的文件 + 对话快照（fork/rewind）
+│   ├── compact/           # fast_pruner 纯算法剪枝 + 摘要
+│   ├── skill_system.py    # Agent Skills 加载器（SKILL.md）
+│   ├── prompt_templates.py# pi 风格 prompt 模板
+│   ├── cache_guard.py     # 字节稳定的系统提示词前缀
+│   ├── hook_system.py     # 扩展点（tool_execute_before/after 等）
+│   ├── system_prompt.py   # 系统提示词构建
+│   └── tool.py            # Tool / ToolRegistry
+├── tools/                 # read, write, edit, bash, grep, glob, ls, powershell, invoke_skill
+├── commands/              # pi 命令集（base.py + pi_commands.py + skill_commands.py）
+├── types/                 # 核心类型、providers、hooks、permissions
+└── utils/                 # config、theme、diff、path_safety
 ```
 
 ## 关键实现
 
-**模型评估**：`openlaoke/core/model_assessment/` - `ModelAssessor`、`TaskDecomposer`
-**任务监督**：`openlaoke/core/supervisor/` - `TaskSupervisor`、`TaskCompletionChecker`
-**反AI检测**：`openlaoke/core/supervisor/checker.py` - 强制引用、数字、技术深度
-**小模型优化**：`openlaoke/core/small_model_optimizations.py` - 参数类型强制、schema清理、终端输出压缩、读循环预防、模型尺寸自适应
-**钩子系统**：`openlaoke/core/hook_system.py` - 15个扩展点，优先级排序，短路机制
-**自我反思**：`openlaoke/core/bitter_lesson_tracker.py` - 记录策略结果，自动禁用成功率<30%的方法
-**上下文修剪**：`openlaoke/core/compact/fast_pruner.py` - 纯算法压缩<5ms，头尾保护+关键词提取
+- **工具集**：`openlaoke/tools/register.py` 注册 pi 的 9 个工具。
+- **命令**：`openlaoke/commands/pi_commands.py` 实现 pi 的内置命令；`registry.py` 统一注册。
+- **prompt 模板**：`openlaoke/core/prompt_templates.py`，支持 `$1`/`$@`/`${1:-default}`/`${@:N:L}`。
+- **技能**：`openlaoke/core/skill_system.py` + `tools/invoke_skill_tool.py`（渐进披露，正文按需加载）。
+- **会话**：`openlaoke/core/sessions.py` + `openlaoke/snapshot/`。
+- **压缩**：`openlaoke/core/compact/fast_pruner.py`（纯算法，<5ms，不调 LLM）。
 
 ## 配置路径
 
 - 主配置：`~/.openlaoke/config.json`
 - 会话：`~/.openlaoke/sessions/`
-- 技能：`~/.config/opencode/skills/`
+- 技能：`~/.openlaoke/skills/<name>/SKILL.md`（兼容 `~/.config/opencode/skills/`）
+- prompt 模板：`~/.openlaoke/prompts/*.md`
 
 ## 重要约束
 
 - **不要添加注释**，除非用户明确要求
-- 工具`call()`方法用`async def`
-- 版本在`openlaoke/__init__.py`（`__version__`）
-- License: GPLv3（README/ LICENSE），非pyproject.toml中的MIT
+- 工具 `call()` 方法用 `async def`
+- 版本在 `openlaoke/__init__.py`（`__version__`）
+- License：GPLv3（见 `LICENSE`）；pi 为 MIT，版权见 `THIRD_PARTY_NOTICES.md`
+- 保持 pi 对齐：新增功能优先用技能 / prompt 模板 / 扩展点，而不是往内核堆工具

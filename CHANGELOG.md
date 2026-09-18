@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Pivot to a pi-aligned Python implementation
+- **Rewrote the project around pi's design** — a minimal terminal coding agent
+  (github.com/earendil-works/pi). The default surface is now pi's: 9 tools, 23
+  built-in commands, tree sessions, progressive-disclosure skills, and prompt
+  templates.
+- **Removed the feature-heavy subsystems** from the default path: supervisor,
+  hyperauto, model assessment, explorer, scheduler, language sandboxes,
+  extended-web auth, memory, insomnia, dual-model, adaptive router, anti-stall,
+  bitter-lesson tracker, distilled templates, quality monitor, git store, plan
+  mode, permissions, MCP, channels, HTTP server / web UI, cron, message bus, and
+  the C translation.
+- **Implemented pi's built-in commands** in `openlaoke/commands/pi_commands.py`:
+  `new`, `name`, `session`, `tree`, `fork`, `clone`, `import`, `share`, `copy`,
+  `changelog`, `hotkeys`, `trust`, `login`, `logout`, `reload`, `scoped-models`.
+- **Added a pi-style prompt-template system** (`core/prompt_templates.py`) with
+  `$1` / `$@` / `${1:-default}` / `${@:N:L}` argument expansion, wired to
+  `/prompt` and to unknown `/name` commands.
+- **Slimmed dependencies**: dropped `fastapi`, `uvicorn`, `websockets`, `jieba`,
+  and `watchfiles`.
+- **Result**: 286 files / 77,955 lines → 69 files / 19,349 lines; 7 runtime
+  dependencies; 147 tests passing; `ruff` clean.
+
+### Docs
+- Rewrote `README.md` and `README_CN.md` around the pi-aligned design, design
+  philosophy, the pivot rationale, project history, and the speed/complexity
+  trade-off.
+- Added `THIRD_PARTY_NOTICES.md` (pi's MIT license and copyright).
+- Removed the obsolete feature docs, architecture reports, test reports, and the
+  C translation from `docs/`.
+
 ### OpenCode-style Workflow Core
 - **Conversation rewind** — `SnapshotStore.capture_conversation` persists per-turn conversation; `rewind_conversation` truncates live history (code / conversation / both scopes); rewinding to the first recorded turn clears the conversation
 - **Session fork / branch** — `fork_session` inherits the parent's conversation and file snapshots; `Orchestrator.fork/branch/switch` register switchable sessions; forked sessions continue at the next turn index (never overwrite inherited records)
