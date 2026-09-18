@@ -21,7 +21,7 @@ from pathlib import Path
 REPO = "/Users/fred/Documents/GitHub/cycleuser/OpenLaoKe"
 DEV = sys.executable  # run with the conda dev environment
 BASE_URL = "http://127.0.0.1:11434/v1"
-OUT_ROOT = Path.home() / "Downloads" / "openlaoke-pi-small-models"
+OUT_ROOT = Path.home() / "Downloads" / "pi-small-model-tasks"
 RESULTS = OUT_ROOT / "results.jsonl"
 
 MODELS = ["qwen3.5:2b", "LiquidAI-dev/lfm2.5-2.6b:latest"]
