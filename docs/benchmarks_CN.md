@@ -27,8 +27,8 @@
 | `lfm2.5-thinking:latest` | 1.2B | Q4_K_M | completion, tools, thinking |
 | `granite4:350m-h` | 340.33M | Q8_0 | completion, tools |
 
-全部六个模型都出现在下表中。日常使用已把本机模型缩减为两个 ≥2B 的模型
-（`qwen3.5:2b`、`LiquidAI-dev/lfm2.5-2.6b`）；被删模型的数据仍保留在此。
+全部六个模型都出现在下表中。日常使用推荐的本机模型为两个 ≥2B 的模型
+（`qwen3.5:2b`、`LiquidAI-dev/lfm2.5-2.6b`）；其他几个我都删掉了后来，只是把被删模型的数据仍保留在此。
 
 > **注意**：思考型模型必须给足 `max_tokens`，否则配额会全花在思考上、可见答案为空。
 > 语言测试用 `max_tokens=1200`，工具测试用 `2000`。

@@ -32,9 +32,10 @@ taken from `ollama show`:
 | `lfm2.5-thinking:latest` | 1.2B | Q4_K_M | completion, tools, thinking |
 | `granite4:350m-h` | 340.33M | Q8_0 | completion, tools |
 
-All six models appear in the results below. For day-to-day use the local set was
-later trimmed to the two models at or above 2B (`qwen3.5:2b`,
-`LiquidAI-dev/lfm2.5-2.6b`); the data for the removed models is kept here.
+All six models appear in the results below. The recommended local models for
+day-to-day use are the two at or above 2B (`qwen3.5:2b`,
+`LiquidAI-dev/lfm2.5-2.6b`); I deleted the others later, and just kept their
+data here.
 
 > **Note.** A thinking model must be given enough `max_tokens`; otherwise the
 > entire budget is spent on reasoning and the visible answer is empty. We used

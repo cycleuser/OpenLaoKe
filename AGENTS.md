@@ -77,6 +77,7 @@ openlaoke/
 
 ## 重要约束
 
+- **未经用户明确要求，禁止任何删除/覆盖类破坏性操作**（`rm`、`git rm`、`ollama rm`、`pip uninstall`、覆盖写入、`reset --hard`、`clean`、强推等）；需要清理时先提出建议并等待确认
 - **不要添加注释**，除非用户明确要求
 - 工具 `call()` 方法用 `async def`
 - 版本在 `openlaoke/__init__.py`（`__version__`）
