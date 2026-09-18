@@ -1,0 +1,56 @@
+{
+  "qwen3.5:2b|short(~15)": {
+    "prompt_tokens": 15,
+    "output_tokens": 128,
+    "prefill_tps": 146.1,
+    "decode_tps": 18.9,
+    "ttft_s": 6.83,
+    "total_s": 6.91,
+    "load_s": 0.01
+  },
+  "qwen3.5:2b|medium(~500)": {
+    "prompt_tokens": 560,
+    "output_tokens": 128,
+    "prefill_tps": 5876.6,
+    "decode_tps": 19.0,
+    "ttft_s": 6.805,
+    "total_s": 6.82,
+    "load_s": 0.0
+  },
+  "qwen3.5:2b|long(~2000)": {
+    "prompt_tokens": 2210,
+    "output_tokens": 128,
+    "prefill_tps": 24130.9,
+    "decode_tps": 18.8,
+    "ttft_s": 6.968,
+    "total_s": 6.92,
+    "load_s": 0.0
+  },
+  "LiquidAI-dev/lfm2.5-2.6b:latest|short(~15)": {
+    "prompt_tokens": 17,
+    "output_tokens": 128,
+    "prefill_tps": 112.5,
+    "decode_tps": 20.7,
+    "ttft_s": 0.236,
+    "total_s": 6.35,
+    "load_s": 0.0
+  },
+  "LiquidAI-dev/lfm2.5-2.6b:latest|medium(~500)": {
+    "prompt_tokens": 560,
+    "output_tokens": 128,
+    "prefill_tps": 3481.9,
+    "decode_tps": 20.6,
+    "ttft_s": 0.279,
+    "total_s": 6.59,
+    "load_s": 0.0
+  },
+  "LiquidAI-dev/lfm2.5-2.6b:latest|long(~2000)": {
+    "prompt_tokens": 2210,
+    "output_tokens": 128,
+    "prefill_tps": 14543.6,
+    "decode_tps": 20.0,
+    "ttft_s": 0.282,
+    "total_s": 6.85,
+    "load_s": 0.0
+  }
+}

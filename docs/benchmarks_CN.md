@@ -9,7 +9,7 @@
 
 | 项目 | 值 |
 |------|----|
-| 机器 | macOS（Apple Silicon），本机 |
+| 机器 | Apple M4（10 核 CPU），16 GB 内存，macOS |
 | Python | 3.12（conda 环境 `dev`） |
 | OpenLaoKe | 0.1.40 |
 | pi | 0.85.1 |
@@ -132,6 +132,79 @@ Anthropic mock 校验的是精确契约，而不只是连通性：
 | 日 | 8/12 | 中 | 6/12 |
 | 俄 | 8/12 | 意 | 6/12 |
 
+## 第四部分 —— 具体本地任务
+
+在两个 ≥2B 模型上，用两个外壳、中英双语跑了 5 个具体任务：8 种（外壳, 模型, 语言）组合 × 5 任务 = 40 次。每次运行单独一个目录，位于
+`~/Downloads/openlaoke-pi-small-models/<外壳>/<模型>/<语言>/<任务>/`，外壳输出在 `run.log`，生成的文件保留原处供人工检查。
+
+| 任务 | 指令（中文） | 通过条件 |
+|------|--------------|----------|
+| T1 精确写文件 | 在当前目录创建 `hello.txt`，内容正好是 `hello small model` | 文件含该文本 |
+| T2 读并求和 | 读 `data.txt`（每行一个整数），求和 | 答案含 `224` |
+| T3 写+运行 | 写 `fib.py` 打印前 10 个斐波那契数，并运行 | 脚本可运行并输出 `0 1 1 2 3 5 8 13 21 34` |
+| T4 生成产物 | 写 `report.md`，含标题和三条要点 | 有 `#` 标题且 ≥3 条要点 |
+| T5 修 bug | 修复 `buggy.py` 中 `average()` 的偏差，并运行 | 去掉 `+ 1`，输出 `4.0` |
+
+`OK` = 通过，`..` = 失败。
+
+| 外壳 | 模型 | 语言 | T1 | T2 | T3 | T4 | T5 | 得分 |
+|------|------|------|:--:|:--:|:--:|:--:|:--:|-----:|
+| openlaoke | qwen3.5:2b | 中 | OK | OK | OK | .. | OK | 4/5 |
+| openlaoke | qwen3.5:2b | 英 | OK | OK | .. | OK | .. | 3/5 |
+| openlaoke | LiquidAI-dev/lfm2.5-2.6b | 中 | OK | OK | .. | OK | OK | 4/5 |
+| openlaoke | LiquidAI-dev/lfm2.5-2.6b | 英 | OK | .. | .. | OK | OK | 3/5 |
+| pi | qwen3.5:2b | 中 | OK | .. | OK | OK | OK | 4/5 |
+| pi | qwen3.5:2b | 英 | .. | OK | OK | OK | OK | 4/5 |
+| pi | LiquidAI-dev/lfm2.5-2.6b | 中 | OK | OK | .. | OK | OK | 4/5 |
+| pi | LiquidAI-dev/lfm2.5-2.6b | 英 | OK | OK | .. | OK | OK | 4/5 |
+
+| 按任务 | 通过 | 按模型 | 通过 | 按外壳 | 通过 | 按语言 | 通过 |
+|--------|-----:|--------|-----:|--------|-----:|--------|-----:|
+| T1 精确写文件 | 7/8 | qwen3.5:2b | 15/20 | openlaoke | 14/20 | 中 | 16/20 |
+| T2 读并求和 | 6/8 | LiquidAI-dev/lfm2.5-2.6b | 15/20 | pi | 16/20 | 英 | 14/20 |
+| T3 写+运行 | 3/8 | | | | | | |
+| T4 生成产物 | 7/8 | | | | | | |
+| T5 修 bug | 7/8 | | | | | | |
+
+### 到底错在哪
+
+失败是模型形态的，不是外壳形态的：
+
+1. **把 `\n` 写成字面量。** 模型在工具参数里放了两个字符 `\` 和 `n`，而不是真的换行。
+   LiquidAI-dev 多次如此——`fib.py` 变成单行 `print("Fibonacci test")\n`，报
+   `SyntaxError: unexpected character after line continuation character`。
+   外壳只是把模型要求的内容原样写入。
+2. **定义了却不调用。** `openlaoke + qwen3.5:2b + 英 + T3` 生成了 `fib(n)` 函数却没调用，运行无输出。
+3. **复述指令。** `pi + qwen3.5:2b + 中 + T2` 答的是提示词原文，而不是算出的和。
+
+另有一次 600 秒超时（`pi + LiquidAI-dev + 中 + T3`），一次 Python 报错
+（`openlaoke + LiquidAI-dev + 中 + T3`）。此处确认的经验法则：写文件基本可靠，读并汇报通常可靠，
+而 **写后即运行**（既要通过工具调用产出合法代码、又要真的执行）是小模型翻车的重灾区。
+
+## 第五部分 —— 本地推理速度
+
+通过 Ollama 原生 API 测量，它给出纳秒级的 `prompt_eval_duration` 与 `eval_duration`。
+`prefill` = 提示 token 数 / 预填充耗时；`decode` = 生成 token 数 / 解码耗时。
+3 次取中位数，输出上限 128 token，Apple M4（10 核 CPU，16 GB 内存），Ollama 0.34.2。
+
+| 模型 | 提示规模 | 提示 token | Prefill (t/s) | Decode (t/s) | 首包 (s) | 总时长 (s) |
+|------|----------|-----------:|--------------:|-------------:|---------:|-----------:|
+| qwen3.5:2b | 短 | 15 | 142 | 17.2 | 0.11 | 7.72 |
+| qwen3.5:2b | 中 | 560 | 5608 | 17.5 | — | 7.41 |
+| qwen3.5:2b | 长 | 2210 | 25188 | 17.1 | — | 7.62 |
+| LiquidAI-dev/lfm2.5-2.6b | 短 | 17 | 109 | 19.1 | 0.32 | 6.88 |
+| LiquidAI-dev/lfm2.5-2.6b | 中 | 560 | 3438 | 18.8 | — | 6.99 |
+| LiquidAI-dev/lfm2.5-2.6b | 长 | 2210 | 12675 | 18.8 | — | 7.03 |
+
+“首包”指任何类型的第一个流式分片耗时，两个模型都在 0.35 秒内。对*思考型*模型，更相关的是**首个可见答案**
+token 的时间：qwen3.5:2b 把推理放进 `thinking` 字段，思考结束前 `response` 一直为空，所以答案大约在
+上表预算（128 token 上限时约 7.5 秒）结束时才出现；LiquidAI-dev 则把 `<think>` 标记直接写进
+`response` 流，文字立刻出现（但含思考标记）。
+
+- **Decode** 接近：约 17 t/s（qwen）对约 19 t/s（LiquidAI）。
+- **Prefill** 在长上下文下 qwen 更快：2210 token 时约 25k 对约 13k t/s。短提示的 prefill 数字被固定开销主导，只有中/长才有意义。
+- **响应感**在短提示下 LiquidAI 更好（无思考延迟），代价是输出里带思考标记。
+
 ## 结论
 
 1. **瓶颈不在外壳。** OpenLaoKe（42/60）与 pi（41/60）基本打平，差异在模型噪声范围内。
@@ -162,6 +235,15 @@ python scripts/bench_local_models.py --base-url http://127.0.0.1:11434/v1
 
 # 3. 多语言，双外壳
 python scripts/bench_harness_multilang.py
+
+# 4. 具体本地任务（产物写到 ~/Downloads/openlaoke-pi-small-models）
+python scripts/bench_concrete_tasks.py
+python scripts/analyze_concrete_tasks.py
+
+# 5. 本地推理速度（prefill / decode / 首包延迟）
+python scripts/bench_perf.py
 ```
+
+以上运行的结果归档在 `bench/results/` 下。
 
 模型列表、提示词与语言分类器的具体实现见 `scripts/` 下对应脚本。

@@ -1,0 +1,10 @@
+{
+  "qwen3.5:2b": {
+    "ttft_any_s": 0.109,
+    "ttft_content_s": 0.109
+  },
+  "LiquidAI-dev/lfm2.5-2.6b:latest": {
+    "ttft_any_s": 0.322,
+    "ttft_content_s": 0.322
+  }
+}

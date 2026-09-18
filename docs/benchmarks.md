@@ -13,7 +13,7 @@ directional, not authoritative.
 
 | Item | Value |
 |------|-------|
-| Machine | macOS (Apple Silicon), local |
+| Machine | Apple M4 (10-core CPU), 16 GB RAM, macOS |
 | Python | 3.12 (conda env `dev`) |
 | OpenLaoKe | 0.1.40 |
 | pi | 0.85.1 |
@@ -146,6 +146,95 @@ Passes per language (both harnesses combined, out of 12):
 | ja | 8/12 | zh | 6/12 |
 | ru | 8/12 | it | 6/12 |
 
+## Part 4 — Concrete local tasks
+
+Five concrete tasks were run on both harnesses, in Chinese and English, for the
+two ≥2B models: eight (harness, model, language) combinations × five tasks =
+40 runs. Each run got its own directory under
+`~/Downloads/openlaoke-pi-small-models/<harness>/<model>/<lang>/<task>/`, with
+the harness output in `run.log` and any generated file left in place for manual
+inspection.
+
+| Task | Instruction (English) | Pass condition |
+|------|-----------------------|----------------|
+| T1 write exact | Create `hello.txt` containing exactly `hello small model` | file contains that text |
+| T2 read + sum | Read `data.txt` (one integer per line), compute the sum | answer contains `224` |
+| T3 write + run | Write `fib.py` printing the first 10 Fibonacci numbers, run it | script runs and prints `0 1 1 2 3 5 8 13 21 34` |
+| T4 artifact | Write `report.md` with a title and three bullet points | `#` title and ≥3 bullets |
+| T5 fix bug | Fix the off-by-one in `average()` in `buggy.py`, then run it | `+ 1` removed, output `4.0` |
+
+`OK` = passed, `..` = failed.
+
+| Harness | Model | Lang | T1 | T2 | T3 | T4 | T5 | Score |
+|---------|-------|------|:--:|:--:|:--:|:--:|:--:|------:|
+| openlaoke | qwen3.5:2b | zh | OK | OK | OK | .. | OK | 4/5 |
+| openlaoke | qwen3.5:2b | en | OK | OK | .. | OK | .. | 3/5 |
+| openlaoke | LiquidAI-dev/lfm2.5-2.6b | zh | OK | OK | .. | OK | OK | 4/5 |
+| openlaoke | LiquidAI-dev/lfm2.5-2.6b | en | OK | .. | .. | OK | OK | 3/5 |
+| pi | qwen3.5:2b | zh | OK | .. | OK | OK | OK | 4/5 |
+| pi | qwen3.5:2b | en | .. | OK | OK | OK | OK | 4/5 |
+| pi | LiquidAI-dev/lfm2.5-2.6b | zh | OK | OK | .. | OK | OK | 4/5 |
+| pi | LiquidAI-dev/lfm2.5-2.6b | en | OK | OK | .. | OK | OK | 4/5 |
+
+| By task | Passed | By model | Passed | By harness | Passed | By language | Passed |
+|---------|-------:|----------|-------:|------------|-------:|-------------|-------:|
+| T1 write exact | 7/8 | qwen3.5:2b | 15/20 | openlaoke | 14/20 | zh | 16/20 |
+| T2 read + sum | 6/8 | LiquidAI-dev/lfm2.5-2.6b | 15/20 | pi | 16/20 | en | 14/20 |
+| T3 write + run | 3/8 | | | | | | |
+| T4 artifact | 7/8 | | | | | | |
+| T5 fix bug | 7/8 | | | | | | |
+
+### What actually goes wrong
+
+The failures are model-shaped, not harness-shaped:
+
+1. **Literal `\n` written into files.** The model puts the two characters `\` and
+   `n` in the tool argument instead of a real newline. LiquidAI-dev did this
+   repeatedly — `fib.py` became the single line `print("Fibonacci test")\n` and
+   died with `SyntaxError: unexpected character after line continuation
+   character`. The harness writes exactly what the model requested.
+2. **Defining but never calling.** `openlaoke + qwen3.5:2b + en + T3` produced a
+   `fib(n)` function that was never called, so running it printed nothing.
+3. **Echoing the instruction.** `pi + qwen3.5:2b + zh + T2` answered with the
+   prompt text instead of the sum.
+
+One run hit a 600 s timeout (`pi + LiquidAI-dev + zh + T3`); one produced a
+Python traceback (`openlaoke + LiquidAI-dev + zh + T3`). The rule of thumb this
+confirms: writing a file is mostly reliable, reading and reporting is usually
+reliable, and **write-then-run** — emitting syntactically valid code through a
+tool call and then executing it — is where small models fall apart.
+
+## Part 5 — Local inference speed
+
+Measured through Ollama's native API, which reports `prompt_eval_duration` and
+`eval_duration` in nanoseconds. `prefill` = prompt tokens / prompt-eval time;
+`decode` = generated tokens / eval time. Median of 3 runs, output capped at 128
+tokens, on an Apple M4 (10-core CPU, 16 GB RAM), Ollama 0.34.2.
+
+| Model | Prompt | Prompt tokens | Prefill (t/s) | Decode (t/s) | First chunk (s) | Total (s) |
+|-------|--------|--------------:|--------------:|-------------:|----------------:|----------:|
+| qwen3.5:2b | short | 15 | 142 | 17.2 | 0.11 | 7.72 |
+| qwen3.5:2b | medium | 560 | 5608 | 17.5 | — | 7.41 |
+| qwen3.5:2b | long | 2210 | 25188 | 17.1 | — | 7.62 |
+| LiquidAI-dev/lfm2.5-2.6b | short | 17 | 109 | 19.1 | 0.32 | 6.88 |
+| LiquidAI-dev/lfm2.5-2.6b | medium | 560 | 3438 | 18.8 | — | 6.99 |
+| LiquidAI-dev/lfm2.5-2.6b | long | 2210 | 12675 | 18.8 | — | 7.03 |
+
+"First chunk" is the time to the first streamed chunk of any kind; both models
+emit it in under 0.35 s. For a *thinking* model the more relevant number is time
+to the first **visible answer** token: qwen3.5:2b streams its reasoning into the
+`thinking` field and leaves `response` empty until thinking ends, so the answer
+appears roughly at the end of the budget above (~7.5 s when capped at 128
+tokens). LiquidAI-dev/lfm2.5-2.6b instead writes `<think>` markers directly into
+the `response` stream, so text appears immediately (with thinking markers).
+
+- **Decode** is comparable: ~17 t/s (qwen) vs ~19 t/s (LiquidAI).
+- **Prefill** favours qwen at long context: ~25k vs ~13k t/s at 2210 tokens. The
+  short-prompt prefill figures are dominated by fixed per-call overhead; only
+  medium/long are meaningful.
+- **Responsiveness** favours LiquidAI on short prompts (no thinking delay), at
+  the cost of thinking markers in the output.
+
 ## Findings
 
 1. **The harness is not the bottleneck.** OpenLaoKe (42/60) and pi (41/60) are
@@ -184,7 +273,16 @@ python scripts/bench_local_models.py --base-url http://127.0.0.1:11434/v1
 
 # 3. Multilingual, both harnesses
 python scripts/bench_harness_multilang.py
+
+# 4. Concrete local tasks (writes artifacts under ~/Downloads/openlaoke-pi-small-models)
+python scripts/bench_concrete_tasks.py
+python scripts/analyze_concrete_tasks.py
+
+# 5. Local inference speed (prefill / decode / first-chunk latency)
+python scripts/bench_perf.py
 ```
+
+Results from the runs above are archived under `bench/results/`.
 
 See the scripts in `scripts/` for the exact model lists, prompts and language
 classifier.
