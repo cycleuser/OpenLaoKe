@@ -211,9 +211,6 @@ class ReadLoopTracker:
             "Glob",
             "Grep",
             "ListDirectory",
-            "ToolSearch",
-            "WebSearch",
-            "WebFetch",
         }
     )
     _read_tools_lower: set[str] = field(default_factory=set, repr=False)

@@ -1200,7 +1200,7 @@ class REPL:
 
         result = await tool.safe_call(ctx, **tool_input)
 
-        if tool_use.name in ("Write", "Edit", "NotebookWrite"):
+        if tool_use.name in ("Write", "Edit"):
             self._verify_file_written(tool_input, result)
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
@@ -1382,7 +1382,7 @@ class REPL:
         target path for file writers, tool-wide when no narrower subject."""
         if tool_name == "Bash":
             return str(tool_input.get("command", ""))[:200]
-        if tool_name in ("Write", "Edit", "NotebookWrite", "AppendFile"):
+        if tool_name in ("Write", "Edit"):
             path = str(tool_input.get("file_path", ""))
             return path[:200]
         return ""
@@ -1416,67 +1416,6 @@ class REPL:
 
     def _get_git_store(self) -> Any | None:
         return None
-
-    def _build_tool_list_for_small_model(self) -> str:
-        try:
-            all_tools = self.registry.get_all()
-        except Exception:
-            return ""
-
-        if not all_tools:
-            return ""
-
-        essential_order = [
-            "Bash",
-            "Read",
-            "Write",
-            "Edit",
-            "Glob",
-            "Grep",
-            "ListDirectory",
-            "TodoWrite",
-            "WebSearch",
-            "WebFetch",
-            "TaskKill",
-            "Agent",
-            "Question",
-            "Git",
-            "Batch",
-            "Sleep",
-            "MemoryStore",
-            "MemoryRecall",
-            "Plan",
-        ]
-        ordered = []
-        for name in essential_order:
-            for t in all_tools:
-                if getattr(t, "name", "") == name:
-                    ordered.append(t)
-                    break
-        for t in all_tools:
-            if t not in ordered:
-                ordered.append(t)
-
-        lines = [
-            "\n\n## Tools Available (use ONLY when needed for files/commands)",
-            "For questions, greetings, or conversation: respond directly WITHOUT tools.",
-            "Output ONE tool per line using SIMPLE format:",
-            "Write file_path=filename content=your code here",
-            "Bash command=your command here",
-            "Read file_path=filename",
-            "Glob pattern=*.py",
-            "Edit file_path=file old_text=old new_text=new",
-            "Grep pattern=keyword",
-            "",
-            "Or use XML format: <tool_call> <function=Name> <parameter=key> value </tool_call>",
-            "",
-        ]
-        max_tools = min(len(ordered), 10)
-        for t in ordered[:max_tools]:
-            name = getattr(t, "name", "?")
-            desc = (getattr(t, "description", "") or "")[:50]
-            lines.append(f"- {name}: {desc}")
-        return "\n".join(lines)
 
     @staticmethod
     def _parse_inline_tool_calls(content: str) -> list[ToolUseBlock]:

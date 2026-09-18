@@ -99,15 +99,12 @@ class PermissionConfig:
                 PermissionRule("Glob", PermissionResult.ALLOW, "File pattern matching"),
                 PermissionRule("Grep", PermissionResult.ALLOW, "Content search"),
                 PermissionRule("ListDirectory", PermissionResult.ALLOW, "Directory listing"),
-                PermissionRule("ToolSearch", PermissionResult.ALLOW, "Tool discovery"),
             ],
             always_deny_rules=[],
             always_ask_rules=[
                 PermissionRule("Bash", PermissionResult.ASK, "Shell command execution"),
                 PermissionRule("Write", PermissionResult.ASK, "File write operations"),
                 PermissionRule("Edit", PermissionResult.ASK, "File edit operations"),
-                PermissionRule("Agent", PermissionResult.ASK, "Sub-agent spawning"),
-                PermissionRule("WebBrowser", PermissionResult.ASK, "Browser automation"),
             ],
         )
 

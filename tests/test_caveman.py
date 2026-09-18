@@ -17,20 +17,19 @@ class TestCavemanMode:
         assert "Be extremely concise" in SYSTEM_PROMPT_CAVEMAN
         assert "No pleasantries" in SYSTEM_PROMPT_CAVEMAN
 
-    def test_full_prompt_has_quality_standards(self):
-        assert "Anti-AI Quality Standards" in SYSTEM_PROMPT_STATIC
+    def test_full_prompt_lists_tools(self):
+        assert "InvokeSkill" in SYSTEM_PROMPT_STATIC
 
     def test_cache_guard_default_uses_full_prompt(self, app_state):
         guard = CacheGuard(app_state)
         prompt = guard.system_prompt
-        assert "Anti-AI Quality Standards" in prompt
+        assert "InvokeSkill" in prompt
 
     def test_cache_guard_caveman_uses_concise_prompt(self, app_state):
         app_state.caveman_mode = True
         guard = CacheGuard(app_state)
         prompt = guard.system_prompt
         assert "No pleasantries" in prompt
-        assert "Anti-AI Quality Standards" not in prompt
 
     def test_toggle_caveman_returns_new_state(self):
         guard = CacheGuard()

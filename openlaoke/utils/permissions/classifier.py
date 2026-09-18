@@ -218,7 +218,7 @@ def classify_tool(tool_name: str, tool_input: dict) -> ClassifierResult:
     Returns:
         ClassifierResult with classification decision
     """
-    safe_tools = {"Read", "Glob", "Grep", "WebFetch"}
+    safe_tools = {"Read", "Glob", "Grep"}
 
     if tool_name in safe_tools:
         return ClassifierResult(

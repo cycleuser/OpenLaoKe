@@ -216,19 +216,9 @@ class ToolRegistry:
     _DEFAULT_READONLY_TOOLS: frozenset[str] = frozenset(
         {
             "Read",
-            "ReadFile",
             "Glob",
             "Grep",
-            "LSP",
             "ListDirectory",
-            "WebSearch",
-            "WebFetch",
-            "ToolSearch",
-            "Brief",
-            "Plan",
-            "Lsp",
-            "NotebookRead",
-            "ReadTracker",
         }
     )
     _DEFAULT_WRITER_TOOLS: frozenset[str] = frozenset(
@@ -236,13 +226,6 @@ class ToolRegistry:
             "Write",
             "Edit",
             "Bash",
-            "ApplyPatch",
-            "Batch",
-            "Git",
-            "CodeRunner",
-            "Agent",
-            "NotebookWrite",
-            "MultiEdit",
         }
     )
 
