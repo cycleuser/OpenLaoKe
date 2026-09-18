@@ -233,6 +233,12 @@ pytest
 
 147 个测试覆盖了 pi 兼容命令、prompt 模板、会话、快照、工具、diff 与 i18n。
 
+## 基准测试
+
+提供商格式验证、本地模型能力测试，以及双外壳（OpenLaoKe vs pi）在 6 个本地模型、10 种语言上的
+对比，详见 [`docs/benchmarks_CN.md`](docs/benchmarks_CN.md)（中文）与
+[`docs/benchmarks.md`](docs/benchmarks.md)（英文）。复现脚本在 [`scripts/`](scripts)。
+
 ## 致谢
 
 OpenLaoKe 是 Mario Zechner 的 **[pi](https://github.com/earendil-works/pi)** 的 Python 实现，并紧密跟随其设计。pi 采用 MIT 协议；OpenLaoKe 采用 GPLv3。

@@ -233,6 +233,14 @@ pytest
 
 147 tests cover the pi-compatible commands, prompt templates, sessions, snapshots, tools, diffing, and i18n.
 
+## Benchmarks
+
+Provider-format verification, local-model capability checks, and a two-harness
+(OpenLaoKe vs pi) multilingual comparison across six local models and ten
+languages are documented in [`docs/benchmarks.md`](docs/benchmarks.md)
+(English) and [`docs/benchmarks_CN.md`](docs/benchmarks_CN.md) (中文).
+Reproduction scripts live in [`scripts/`](scripts).
+
 ## Acknowledgements
 
 OpenLaoKe is a Python implementation of **[pi](https://github.com/earendil-works/pi)** by Mario Zechner, and follows its design closely. pi is MIT-licensed; OpenLaoKe is GPLv3.
