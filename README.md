@@ -75,8 +75,6 @@ So we made a decision: **keep the engineering we were proud of, but adopt the de
 | Tests | — | **147 passing** |
 | Built-in commands | 40+ | **23 (pi parity)** |
 
-The removed code is preserved in the git history. Nothing was lost; it was moved out of the default path.
-
 ## A short history
 
 The commit log tells the story in four phases: **grow → specialize → consolidate → simplify.**
