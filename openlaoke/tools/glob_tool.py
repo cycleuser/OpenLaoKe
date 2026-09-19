@@ -43,9 +43,9 @@ class GlobTool(Tool):
 
         abs_path = self._resolve_path(search_path, ctx.app_state.get_cwd())
 
-        from openlaoke.utils.path_safety import validate_path
+        from openlaoke.utils.path_safety import validate_read_path
 
-        path_error = validate_path(abs_path, ctx.app_state.get_cwd())
+        path_error = validate_read_path(abs_path, ctx.app_state.get_cwd())
         if path_error:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,

@@ -54,3 +54,37 @@ def _is_user_home_path(path: str) -> bool:
         if parts and os.path.basename(home).startswith(parts[0]):
             return True
     return False
+
+
+_SYSTEM_READ_PREFIXES = (
+    "/proc",
+    "/sys",
+    "/etc",
+    "/var",
+    "/usr",
+    "/opt",
+    "/tmp",
+    "/dev",
+    "/Library",
+    "/Applications",
+    "/System",
+    "/Volumes",
+    "/private/etc",
+    "/private/var",
+    "/private/tmp",
+)
+
+
+def validate_read_path(resolved: str, cwd: str) -> str | None:
+    """Like :func:`validate_path`, but also allows reading common system
+    paths (``/proc``, ``/etc``, ``/sys``, ``/usr``, ...). Read-only tools use
+    this so inspecting the machine is not blocked; writers keep the strict
+    workspace/home confinement."""
+    error = validate_path(resolved, cwd)
+    if error is None:
+        return None
+    real = os.path.realpath(resolved)
+    for prefix in _SYSTEM_READ_PREFIXES:
+        if real == prefix or real.startswith(prefix + "/"):
+            return None
+    return error

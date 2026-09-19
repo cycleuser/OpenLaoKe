@@ -132,9 +132,9 @@ class ReadTool(Tool):
         return resolve_path(path, cwd)
 
     def _validate_path(self, resolved: str, cwd: str) -> str | None:
-        from openlaoke.utils.path_safety import validate_path
+        from openlaoke.utils.path_safety import validate_read_path
 
-        return validate_path(resolved, cwd)
+        return validate_read_path(resolved, cwd)
 
 
 def register(registry: ToolRegistry) -> None:

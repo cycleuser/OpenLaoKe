@@ -75,7 +75,33 @@ Provide all required parameters for a tool call. If a task matches an installed 
 # ---------------------------------------------------------------------------
 
 SESSION_CONTEXT_TEMPLATE = """[Session context: Today is {date_str}.
-Current model: {model}. OS: {os_name}. Working directory: {cwd}.{git_info}]"""
+Current model: {model}. OS: {os_name}. Working directory: {cwd}.{git_info}
+Environment commands: {os_guidance}]"""
+
+
+def _os_command_guidance() -> str:
+    """Platform-specific command hints, so the model does not reach for a
+    command that only exists on another OS (e.g. `lscpu` on macOS)."""
+    system = platform.system()
+    if system == "Darwin":
+        return (
+            "macOS. For CPU/memory/disk use `uname -a`, `sw_vers`, "
+            "`sysctl -n machdep.cpu.brand_string`, `sysctl -n hw.memsize`, "
+            "`system_profiler SPHardwareDataType`, `vm_stat`, `df -h`, `ps`. "
+            "Do NOT use Linux-only commands like `lscpu`, `free`, or `/proc/...`."
+        )
+    if system == "Linux":
+        return (
+            "Linux. For CPU/memory/disk use `uname -a`, `lscpu`, `free -h`, `df -h`, "
+            "`/proc/cpuinfo`, `/proc/meminfo`, `ps`."
+        )
+    if system == "Windows":
+        return (
+            "Windows. Prefer the PowerShell tool and cmdlets such as "
+            "`Get-CimInstance Win32_Processor`, `Get-CimInstance Win32_OperatingSystem`, "
+            "or `systeminfo`."
+        )
+    return f"{system}. Use commands native to this platform."
 
 
 def _build_session_context(
@@ -118,6 +144,7 @@ def _build_session_context(
         os_name=os_name,
         cwd=cwd,
         git_info=git_info,
+        os_guidance=_os_command_guidance(),
     )
 
 

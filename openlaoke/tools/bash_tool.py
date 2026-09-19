@@ -10,6 +10,7 @@ from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import PermissionMode, ToolResultBlock
 from openlaoke.utils.permissions.bash_classifier import (
     CommandSafetyLevel,
+    ConfidenceLevel,
     classify_bash_command,
 )
 
@@ -72,12 +73,12 @@ class BashTool(Tool):
             )
 
         if perm_mode == PermissionMode.AUTO and (
-            classification.safety_level != CommandSafetyLevel.SAFE
+            classification.safety_level == CommandSafetyLevel.DANGEROUS
+            and classification.confidence == ConfidenceLevel.HIGH
         ):
-            # AUTO mode still gates dangerous commands: high-confidence
-            # DANGEROUS matches (rm -rf, curl|sh, interpreter inline code,
-            # file-writing redirects) require an explicit approval turn —
-            # they are reported back so the harness can ask the user.
+            # AUTO auto-approves anything except high-confidence dangerous
+            # matches (rm -rf, curl|sh, interpreter inline code, file-writing
+            # redirects). Unknown commands (low confidence) run normally.
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
                 content=f"Command needs confirmation in auto mode: {classification.reason}\n"
