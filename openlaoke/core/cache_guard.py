@@ -85,19 +85,21 @@ def _os_command_guidance() -> str:
     system = platform.system()
     if system == "Darwin":
         return (
-            "macOS. For CPU/memory/disk use `uname -a`, `sw_vers`, "
+            "macOS. The shell tool is Bash (there is no PowerShell here). "
+            "For CPU/memory/disk use `uname -a`, `sw_vers`, "
             "`sysctl -n machdep.cpu.brand_string`, `sysctl -n hw.memsize`, "
             "`system_profiler SPHardwareDataType`, `vm_stat`, `df -h`, `ps`. "
             "Do NOT use Linux-only commands like `lscpu`, `free`, or `/proc/...`."
         )
     if system == "Linux":
         return (
-            "Linux. For CPU/memory/disk use `uname -a`, `lscpu`, `free -h`, `df -h`, "
+            "Linux. The shell tool is Bash (there is no PowerShell here). "
+            "For CPU/memory/disk use `uname -a`, `lscpu`, `free -h`, `df -h`, "
             "`/proc/cpuinfo`, `/proc/meminfo`, `ps`."
         )
     if system == "Windows":
         return (
-            "Windows. Prefer the PowerShell tool and cmdlets such as "
+            "Windows. The shell tool is PowerShell; prefer cmdlets such as "
             "`Get-CimInstance Win32_Processor`, `Get-CimInstance Win32_OperatingSystem`, "
             "or `systeminfo`."
         )
