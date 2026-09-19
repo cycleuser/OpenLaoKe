@@ -686,6 +686,7 @@ class REPL:
 
                 if streaming_supported:
                     token_count = 0
+                    reasoning_count = 0
                     stream_error: str | None = None
                     start_time = time.time()
                     self._turn_start = start_time
@@ -707,6 +708,7 @@ class REPL:
                                     token_count += 1
                                 elif chunk.event_type == StreamEventType.REASONING:
                                     reasoning_text += chunk.text
+                                    reasoning_count += 1
                                 elif chunk.event_type == StreamEventType.TOOL_CALL_START:
                                     try:
                                         args = (
@@ -747,9 +749,15 @@ class REPL:
                         stream_error = str(e)[:200]
 
                     elapsed = max(time.time() - start_time, 0.01)
-                    tps = token_count / elapsed
+                    shown_tokens = token_count or reasoning_count
+                    label = (
+                        "tokens"
+                        if token_count
+                        else ("reasoning tokens" if reasoning_count else "tokens")
+                    )
+                    tps = shown_tokens / elapsed
                     self.console.print(
-                        f"  [{self._c('muted')}]{token_count} tokens · {tps:.0f} t/s · {elapsed:.1f}s[/]"
+                        f"  [{self._c('muted')}]{shown_tokens} {label} · {tps:.0f} t/s · {elapsed:.1f}s[/]"
                     )
                     if self.app_state.verbose:
                         self.console.print(
@@ -760,7 +768,13 @@ class REPL:
                         self.console.print(f"  [bold {self._c('error')}]Error:[/] {stream_error}")
                         break
 
-                    if token_count == 0 and elapsed > 5:
+                    if (
+                        token_count == 0
+                        and reasoning_count == 0
+                        and not tool_uses
+                        and not content_text.strip()
+                        and elapsed > 5
+                    ):
                         self.console.print(
                             f"  [bold {self._c('error')}]Model returned no output[/]"
                             f" (waited {elapsed:.0f}s). Try a different model or check the provider."
