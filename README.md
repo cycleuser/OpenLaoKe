@@ -10,7 +10,7 @@
 
 OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core idea — a tiny, opinionated agent loop that you extend yourself — and drops almost everything else.
 
-- **9 tools**, matching pi's surface: `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `ListDirectory`, `PowerShell`, plus `InvokeSkill` for on-demand skills.
+- **pi's tool surface**: `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `ListDirectory`, `InvokeSkill`, and `PowerShell` — registered only where it can actually run (Windows, or a host with `pwsh`). On macOS and Linux you get 8 tools and no dead option.
 - **pi's 23 built-in commands**, plus prompt templates and skills.
 - **Session tree with branch / fork / clone / rewind**, backed by append-only files.
 - **Prompt templates** (`/name` and `/prompt <name>`), with `$1`, `$@`, `${1:-default}`, `${@:N:L}`.
@@ -28,7 +28,7 @@ OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core ide
 | `Grep` | Regex search across files |
 | `Glob` | Find files by pattern |
 | `ListDirectory` | List directory contents |
-| `PowerShell` | Windows command execution |
+| `PowerShell` | Windows command execution (only registered on Windows or with `pwsh`) |
 | `InvokeSkill` | Load an installed skill at runtime |
 
 ### Slash commands
@@ -46,6 +46,25 @@ Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a promp
 - `/model <provider> <n>` — pick the nth model from that list
 - `/model <provider>/<model>` — switch to an explicit model
 - `/model list <provider>` — re-fetch the list from the provider
+
+## Screenshots
+
+The sessions below all run on a **local model** (Ollama `qwen3.5:2b`) — no API key,
+nothing leaves the machine.
+
+**OS-aware commands.** Asked to inspect the machine, the agent checks the platform
+first and then uses commands that exist there — macOS here, not Linux-only `lscpu`
+or `/proc`:
+
+![The agent detects macOS and picks the right commands](screenshots/ShowOS.png)
+
+**Tool calls.** Every tool call executes and its output returns to the loop:
+
+![A tool call being executed](screenshots/CallTool.png)
+
+**A real file task.** Read a file, translate it, write the result:
+
+![Reading, translating and writing a file](screenshots/Translate.png)
 
 ## Design philosophy
 
@@ -180,6 +199,13 @@ openlaoke --provider openai_compatible \
 ```
 
 Local endpoints need no real API key. LM Studio (port 1234), vLLM, and any other OpenAI-compatible server work the same way.
+
+Two things are tuned for local servers. Unless you turn thinking on, OpenLaoKe asks a
+local thinking model to skip its reasoning phase — a 2B model otherwise spends minutes
+per turn and can burn the whole token budget before emitting a tool call. And the
+context budget is taken from the window the server actually serves (Ollama's
+`num_ctx`, read from `/api/ps`) rather than the model's theoretical maximum, so
+history is compacted before it overflows.
 
 ### Providers
 

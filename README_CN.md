@@ -10,7 +10,7 @@
 
 OpenLaoKe **遵循 pi 的设计**，用 Python 实现。它保留了 pi 的核心想法——一个很小的、有主见的智能体循环，其余的由你自己扩展——然后把其它几乎所有东西都砍掉了。
 
-- **9 个工具**，与 pi 的能力面一致：`Read`、`Write`、`Edit`、`Bash`、`Grep`、`Glob`、`ListDirectory`、`PowerShell`，外加用于按需加载技能的 `InvokeSkill`。
+- **pi 的工具面**：`Read`、`Write`、`Edit`、`Bash`、`Grep`、`Glob`、`ListDirectory`、`InvokeSkill`，以及 `PowerShell` —— 只在真正能跑的地方注册（Windows，或装了 `pwsh` 的机器）。所以 macOS 和 Linux 上是 8 个工具，不会给模型一个调不动的选项。
 - **pi 的 23 个内置命令**，外加 prompt 模板与技能。
 - **树状会话，支持 branch / fork / clone / rewind**，底层是追加写文件。
 - **prompt 模板**（`/name` 与 `/prompt <name>`），支持 `$1`、`$@`、`${1:-default}`、`${@:N:L}`。
@@ -28,7 +28,7 @@ OpenLaoKe **遵循 pi 的设计**，用 Python 实现。它保留了 pi 的核�
 | `Grep` | 跨文件正则搜索 |
 | `Glob` | 按模式查找文件 |
 | `ListDirectory` | 列目录 |
-| `PowerShell` | Windows 命令执行 |
+| `PowerShell` | Windows 命令执行（仅在 Windows 或装了 `pwsh` 时注册） |
 | `InvokeSkill` | 运行时加载已安装的技能 |
 
 ### 斜杠命令
@@ -46,6 +46,23 @@ pi 的内置命令一一对应地实现了：
 - `/model <provider> <n>` —— 选列表里的第 n 个模型
 - `/model <provider>/<model>` —— 直接指定模型
 - `/model list <provider>` —— 从 provider 重新拉取一次列表
+
+## 截图
+
+以下会话全部跑在**本地模型**上（Ollama `qwen3.5:2b`）——不需要 API key，数据不出本机。
+
+**按操作系统选命令。** 让它看机器配置，它会先判断平台，再使用真实存在的命令——这里是
+macOS，而不是 Linux 专有的 `lscpu` 或 `/proc`：
+
+![智能体识别出 macOS 并使用对应命令](screenshots/ShowOS.png)
+
+**工具调用。** 每次工具调用都会真实执行，结果回流到循环里：
+
+![一次工具调用的执行](screenshots/CallTool.png)
+
+**一个真实的文件任务。** 读文件、翻译、写出结果：
+
+![读取、翻译并写出文件](screenshots/Translate.png)
 
 ## 设计哲学
 
@@ -180,6 +197,11 @@ openlaoke --provider openai_compatible \
 ```
 
 本地端点不需要真的 API key。LM Studio（端口 1234）、vLLM，以及任何其它 OpenAI 兼容服务都一样。
+
+针对本地服务做了两处专门的适配。除你显式打开 thinking，否则 OpenLaoKe 会让本地思考型模型
+跳过推理阶段——2B 模型否则一轮就能想上几分钟，常常在发出工具调用之前就把 token 预算烧光。
+上下文预算则取自服务端实际提供的窗口（Ollama 的 `num_ctx`，从 `/api/ps` 读取），而不是
+模型的理论上限，这样历史会在溢出之前先被压缩。
 
 ### 提供商
 
