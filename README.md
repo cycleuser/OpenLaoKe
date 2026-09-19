@@ -77,9 +77,11 @@ So we made a decision: **keep the engineering we were proud of, but adopt the de
 
 ## A short history
 
-The idea behind OpenLaoKe dates back to 2024; the code only began to take shape in April 2026. The commit log tells the story in four phases: **grow → specialize → consolidate → simplify.**
+This story starts outside this repository. Back in **2024**, the loop between a model and the outside world was already under way, beginning with the **[CLAP series](https://github.com/cycleuser/CLAP)** of projects: loading and resuming local dialogues, model-assisted database access, and command-line-oriented access. Full tool calling did not exist yet — CLAP predates it — but those projects became the foundation everything here is built on.
 
-**Phase 1 — Build the engine (conceived 2024, code from April 2026).** The initial commit landed a provider-agnostic agent loop. Very quickly it grew model-side machinery: CPU/GPU hybrid inference, intelligent model selection, batch operations, dual-model collaboration, model preloading, atomic generation, and HyperAuto (an autonomous self-improvement mode).
+The code in this repository began in April 2026. The commit log tells the story in four phases: **grow → specialize → consolidate → simplify.**
+
+**Phase 1 — Build the engine (April 2026).** The initial commit landed a provider-agnostic agent loop. Very quickly it grew model-side machinery: CPU/GPU hybrid inference, intelligent model selection, batch operations, dual-model collaboration, model preloading, atomic generation, and HyperAuto (an autonomous self-improvement mode).
 
 **Phase 2 — Reach the edges (April–May 2026).** Browser-based provider authentication (Chrome/Firefox), a `Ctrl+P` model picker, and — importantly — local GGUF models via llama-cpp-python, making zero-API-cost operation real. Memory tools and a growing tool set followed.
 
