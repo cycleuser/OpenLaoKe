@@ -737,7 +737,12 @@ class REPL:
                                     )
                                 )
                     except httpx.HTTPStatusError as e:
+                        reason = ""
+                        with contextlib.suppress(Exception):
+                            reason = (e.response.text or "").strip()[:300]
                         stream_error = f"API {e.response.status_code}"
+                        if reason:
+                            stream_error += f": {reason}"
                     except Exception as e:
                         stream_error = str(e)[:200]
 

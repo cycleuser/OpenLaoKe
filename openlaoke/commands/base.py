@@ -128,9 +128,9 @@ class ModelCommand(SlashCommand):
             ]
             return CommandResult(message="\n".join(lines))
 
-        tokens = args.replace("/", " ").split()
+        tokens = args.split()
 
-        if tokens[0] in ("list", "ls", "models"):
+        if tokens and tokens[0] in ("list", "ls", "models"):
             target = tokens[1] if len(tokens) > 1 else cur_provider
             if target not in providers:
                 return CommandResult(
@@ -142,19 +142,28 @@ class ModelCommand(SlashCommand):
                 return CommandResult(message=f"{target}: no models found.")
             return CommandResult(message=self._listing(target, models, cur_model, cur_provider))
 
+        # Split on the first whitespace only, so model ids that contain "/"
+        # (e.g. "LiquidAI-dev/lfm2.5-2.6b:latest", "anthropic/claude-3.5-sonnet")
+        # survive intact.
+        head, _, tail = args.partition(" ")
+        head = head.strip()
+        tail = tail.strip()
+
         provider_name: str | None = None
         model_name: str | None = None
-        if len(tokens) == 1:
-            if tokens[0] in providers:
-                provider_name = tokens[0]
+        if not tail:
+            if head in providers:
+                provider_name = head
+            elif "/" in head and head.split("/", 1)[0] in providers:
+                provider_name, model_name = head.split("/", 1)
             else:
-                model_name = tokens[0]
+                model_name = head
                 for key, provider in providers.items():
                     if model_name in provider.models:
                         provider_name = key
                         break
         else:
-            provider_name, model_name = tokens[0], " ".join(tokens[1:])
+            provider_name, model_name = head, tail
 
         if provider_name is not None and provider_name not in providers:
             return CommandResult(success=False, message=f"Unknown provider: {provider_name}")
