@@ -1,6 +1,6 @@
 # OpenLaoKe
 
-> A Python implementation of [pi](https://github.com/earendil-works/pi) — a minimal, fast, extensible terminal coding agent.
+> A terminal coding agent that follows [pi](https://github.com/earendil-works/pi)'s design — minimal, fast, extensible, implemented in Python.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
@@ -8,7 +8,7 @@
 
 ## What OpenLaoKe is now
 
-OpenLaoKe is a **faithful Python re-implementation of pi's design**. It keeps pi's core idea — a tiny, opinionated agent loop that you extend yourself — and drops almost everything else.
+OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core idea — a tiny, opinionated agent loop that you extend yourself — and drops almost everything else.
 
 - **9 tools**, matching pi's surface: `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `ListDirectory`, `PowerShell`, plus `InvokeSkill` for on-demand skills.
 - **pi's 23 built-in commands**, plus prompt templates and skills.
@@ -59,13 +59,13 @@ OpenLaoKe follows pi deliberately, and the philosophy is the point:
 
 This section is honest project history, because the pivot is the interesting part.
 
-OpenLaoKe did not start as pi. It began in April 2026 as a feature-rich, OpenCode-style assistant: 30+ tools, MCP, sub-agents, a supervisor, a plan mode, permissions, memory, an anti-AI-detection layer, dual-model collaboration, a web UI, a FastAPI server, and more. It grew to roughly **78,000 lines** and 286 modules.
+OpenLaoKe was not originally built around pi's design. It began in April 2026 as a feature-rich, OpenCode-style assistant: 30+ tools, MCP, sub-agents, a supervisor, a plan mode, permissions, memory, an anti-AI-detection layer, dual-model collaboration, a web UI, a FastAPI server, and more. It grew to roughly **78,000 lines** and 286 modules.
 
 Then we measured. Running the same model on the same task across harnesses showed that the *fixed* per-request overhead — system prompt plus tool schemas — dominated everything. In one controlled comparison, a minimal harness sent ~1.5k tokens per request at the baseline; a feature-rich one sent ~7.3k. Adding skills cost roughly 210 tokens each on both sides, identically, because both used the same Agent Skills standard. The conclusion was uncomfortable but clear:
 
 > Most of the "power" of a feature-rich harness is a constant tax paid on every single turn, and it buys you features you often do not use.
 
-So we made a decision: **keep the engineering we were proud of, but adopt the design that produces the numbers.** OpenLaoKe is now pi's design, in Python. The result:
+So we made a decision: **keep the engineering we were proud of, but adopt the design that produces the numbers.** OpenLaoKe now follows pi's design, implemented in Python. The result:
 
 | | Before | After |
 |---|---:|---:|
@@ -75,7 +75,7 @@ So we made a decision: **keep the engineering we were proud of, but adopt the de
 | Tests | — | **147 passing** |
 | Built-in commands | 40+ | **23 (pi parity)** |
 
-Everything removed is preserved on the `codex/harness-hardening` branch. Nothing was lost; it was moved out of the default path.
+The removed code is preserved in the git history. Nothing was lost; it was moved out of the default path.
 
 ## A short history
 
@@ -87,7 +87,7 @@ The commit log tells the story in four phases: **grow → specialize → consoli
 
 **Phase 3 — Consolidate (May–August 2026).** The pieces matured: a thinking display system, a cache-aware prompt engine with a byte-stable prefix, the `InvokeSkill` meta-tool (keeping the tool schema stable no matter how many skills are installed), mid-session display-language switching, and an OpenCode-style workflow core with rewind / fork / branch and plan-mode gating. We added architecture diagrams and public acknowledgements to the projects whose patterns we borrowed. Dependencies were trimmed once already.
 
-**Phase 4 — Simplify (September 2026).** The pivot. After the benchmark above, the whole feature surface was re-examined against a single question: *does pi have this?* If not, it left the default path. The repository went from 78k to 19k lines, the tool set from 30+ to 9, and the command set to pi's 23. The codebase now reads like the thing it implemented: small, legible, and fast.
+**Phase 4 — Simplify (September 2026).** The pivot to pi's design. After the benchmark above, the whole feature surface was re-examined against a single question: *does pi have this?* If not, it left the default path. The repository went from 78k to 19k lines, the tool set from 30+ to 9, and the command set to pi's 23. The codebase now reads like the design it follows: small, legible, and fast.
 
 ## Speed and complexity
 
@@ -243,7 +243,7 @@ Reproduction scripts live in [`scripts/`](scripts).
 
 ## Acknowledgements
 
-OpenLaoKe is a Python implementation of **[pi](https://github.com/earendil-works/pi)** by Mario Zechner, and follows its design closely. pi is MIT-licensed; OpenLaoKe is GPLv3.
+OpenLaoKe follows the design of **[pi](https://github.com/earendil-works/pi)** by Mario Zechner, implemented in Python. pi is MIT-licensed; OpenLaoKe is GPLv3.
 
 Earlier iterations also drew on patterns from:
 

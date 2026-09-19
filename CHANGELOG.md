@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Pivot to a pi-aligned Python implementation
+### Pivot to pi's design (Python implementation)
 - **Rewrote the project around pi's design** — a minimal terminal coding agent
-  (github.com/earendil-works/pi). The default surface is now pi's: 9 tools, 23
+  (github.com/earendil-works/pi). The default surface now follows pi's: 9 tools, 23
   built-in commands, tree sessions, progressive-disclosure skills, and prompt
   templates.
 - **Removed the feature-heavy subsystems** from the default path: supervisor,
@@ -35,7 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dependencies; 147 tests passing; `ruff` clean.
 
 ### Docs
-- Rewrote `README.md` and `README_CN.md` around the pi-aligned design, design
+- Rewrote `README.md` and `README_CN.md` around pi's design, design
   philosophy, the pivot rationale, project history, and the speed/complexity
   trade-off.
 - Added `THIRD_PARTY_NOTICES.md` (pi's MIT license and copyright).
