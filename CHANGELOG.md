@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.43] - 2026-09-19
+
+### Fixed
+- **Local thinking models no longer reason without bound**: when thinking was not
+  explicitly requested, requests to local providers now send
+  `reasoning_effort: "none"`. `qwen3.5:2b` previously spent minutes per turn
+  reasoning (and often burned the whole token budget before emitting any tool
+  call); it now answers in seconds.
+- **Local context budget now uses the server's real window**: the budget came from
+  the models.dev catalog (256k for `qwen3.5:2b`) while Ollama serves
+  `num_ctx=16384`, so pruning never ran, prompts grew past the real window, and
+  prefills slowed until they hit the 300s read timeout (“Model returned no
+  output”). `get_effective_context_limit()` now reads Ollama's `/api/ps` and
+  budgets against the runtime window (falling back to 8k when unknown); cloud
+  providers keep the catalog value.
+
 ## [0.1.42] - 2026-09-19
 
 ### Fixed
