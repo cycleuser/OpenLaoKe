@@ -521,6 +521,16 @@ class REPL:
         )
 
         model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+        from openlaoke.core.model_discovery import get_context_limit
+
+        _active_provider = (
+            self.api.config.get_active_provider() if self.api and self.api.config else None
+        )
+        context_limit = (
+            await get_context_limit(_active_provider, self.app_state.session_config.model)
+            if _active_provider
+            else None
+        )
         small_model_guidance = get_small_model_guidance(model_size)
         memory_prompt = ""
         thinking_prefix = apply_structured_thinking_prefix("code")
@@ -598,26 +608,37 @@ class REPL:
                 from openlaoke.core.small_model_optimizations import SmallModelGuard
 
                 self._guard = SmallModelGuard(model_size=model_size)
-            max_tokens_map = {
+            # Prefer the model's real context window from the catalog; fall back
+            # to a size-based estimate for providers the catalog does not cover.
+            fallback_ctx = {
                 "tiny": 4096,
                 "small": 8192,
                 "medium": 16384,
                 "large": 32768,
-            }
-            max_ctx = max_tokens_map.get(model_size, 8192)
+            }.get(model_size, 8192)
+            max_ctx = context_limit or fallback_ctx
+            # Reserve room for the model's reply and keep a proportional tail
+            # verbatim instead of the small 8k default.
+            ctx_budget = max(2048, int(max_ctx * 0.8))
+            keep_tail = max(2048, ctx_budget // 3)
 
             if len(messages) > 10:
                 if model_size in ("tiny", "small"):
-                    prune_result = fast_prune_aggressive(messages, max_tokens=max_ctx)
+                    prune_result = fast_prune_aggressive(messages, max_tokens=ctx_budget)
                 else:
-                    prune_result = fast_prune(messages, max_tokens=max_ctx)
+                    prune_result = fast_prune(
+                        messages, max_tokens=ctx_budget, keep_tail_tokens=keep_tail
+                    )
                 if prune_result.tokens_after < prune_result.tokens_before:
                     messages = prune_result.messages
+                    self.console.print(
+                        f"  [{self._c('muted')}](context compacted: "
+                        f"{prune_result.tokens_before} -> {prune_result.tokens_after} tokens)[/]"
+                    )
                     if self.app_state.verbose:
                         self.console.print(
-                            f"[{self._c('muted')}]Context pruned: "
-                            f"{prune_result.tokens_before} -> {prune_result.tokens_after} tokens "
-                            f"({prune_result.elapsed_ms:.1f}ms)[/]"
+                            f"[{self._c('muted')}]Context pruned in "
+                            f"{prune_result.elapsed_ms:.1f}ms[/]"
                         )
 
             tools = self.registry.get_all_for_prompt()

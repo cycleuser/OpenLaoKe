@@ -155,3 +155,37 @@ async def discover_models(provider: ProviderConfig) -> list[str]:
     catalog = await _catalog_models(provider)
     # de-duplicate, keeping live models first
     return list(dict.fromkeys([*live, *catalog]))
+
+
+def _model_id_candidates(model_id: str) -> list[str]:
+    """Candidate catalog keys for a model id across provider naming styles."""
+    base = model_id.split("/")[-1]
+    candidates: list[str] = []
+    for raw in (model_id, base):
+        for variant in (raw, raw.replace(":", "-"), raw.replace("-", ":", 1)):
+            if variant.endswith(":latest"):
+                variant = variant[: -len(":latest")]
+            if variant and variant not in candidates:
+                candidates.append(variant)
+    return candidates
+
+
+async def get_context_limit(provider: ProviderConfig, model_id: str) -> int | None:
+    """Return the model's real context window (tokens) from the models.dev catalog.
+
+    The catalog stores this under ``limit.context``. Returns None when unknown,
+    so callers can fall back to a size-based estimate.
+    """
+    provider_id = _MODELS_DEV_ID.get(provider.provider_type)
+    if not provider_id or not model_id:
+        return None
+    catalog = await _load_catalog()
+    models = (catalog.get(provider_id) or {}).get("models") or {}
+    for key in _model_id_candidates(model_id):
+        entry = models.get(key)
+        if not entry:
+            continue
+        limit = (entry.get("limit") or {}).get("context")
+        if isinstance(limit, int) and limit > 0:
+            return limit
+    return None
