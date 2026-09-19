@@ -757,6 +757,17 @@ class REPL:
                             parse_msg = self._guard.notify_parse_failure(content_text)
                             messages.append({"role": "user", "content": parse_msg})
 
+                    if reasoning_text:
+                        self._last_thinking = reasoning_text
+                        self.app_state.last_thinking = reasoning_text
+                        self._thinking_duration = (
+                            (time.time() - self._turn_start) * 1000 if self._turn_start else 0
+                        )
+                        self._display_thinking_inline(reasoning_text)
+
+                    if content_text:
+                        self._render_response(content_text)
+
                     is_plan_only = (
                         content_text
                         and not tool_uses
@@ -781,17 +792,6 @@ class REPL:
                             )
                         messages.append({"role": "user", "content": retry_content})
                         continue
-
-                    if reasoning_text:
-                        self._last_thinking = reasoning_text
-                        self.app_state.last_thinking = reasoning_text
-                        self._thinking_duration = (
-                            (time.time() - self._turn_start) * 1000 if self._turn_start else 0
-                        )
-                        self._display_thinking_inline(reasoning_text)
-
-                    if content_text:
-                        self._render_response(content_text)
 
                     for tu in tool_uses:
                         file_path = tu.input.get("file_path", "")
@@ -1570,27 +1570,35 @@ class REPL:
 
     @staticmethod
     def _is_plan_response(content: str) -> bool:
-        plan_keywords = [
-            "实施步骤",
-            "实施计划",
-            "创建项目结构",
-            "代码实现",
-            "第一步",
-            "第二步",
-            "第三步",
-            "步骤",
-            "step",
-            "1.",
-            "2.",
-            "3.",
-            "I will create",
-            "I will write",
-            "Let me first",
-            "First,",
-            "接下来",
-        ]
+        """True only when the model clearly promises to act but sends no tool
+        call. A final answer often contains numbered points, so a numbered list
+        alone must never be treated as a plan."""
         lower = content.lower()
-        return "<tool_call>" not in lower and any(kw.lower() in lower for kw in plan_keywords)
+        if "<tool_call>" in lower:
+            return False
+        # A completed answer reads like a summary, not a promise.
+        if any(k in lower for k in ("总结", "以下是", "完成", "结论", "summary", "done")):
+            return False
+        # Promises are short; a long reply is an answer.
+        if len(content) > 600:
+            return False
+        intents = (
+            "i will now",
+            "i will use",
+            "i will create",
+            "i will write",
+            "i will run",
+            "let me first",
+            "let me start",
+            "i'll start",
+            "i'll now",
+            "接下来我将",
+            "接下来我会",
+            "我将创建",
+            "我将执行",
+            "让我先",
+        )
+        return any(k in lower for k in intents)
 
     def _verify_file_written(self, tool_input: dict[str, Any], result: ToolResultBlock) -> None:
         file_path = tool_input.get("file_path", "")
