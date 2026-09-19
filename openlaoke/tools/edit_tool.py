@@ -11,6 +11,7 @@ from openlaoke.core.tool import Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
 from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
+from openlaoke.utils.text_escapes import normalize_model_escapes
 
 
 class EditInput(BaseModel):
@@ -75,8 +76,12 @@ class EditTool(Tool):
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         file_path = kwargs.get("file_path", "")
-        old_text = kwargs.get("old_text", "") or kwargs.get("old_string", "")
-        new_text = kwargs.get("new_text", "") or kwargs.get("new_string", "")
+        old_text = normalize_model_escapes(
+            str(kwargs.get("old_text", "") or kwargs.get("old_string", ""))
+        )
+        new_text = normalize_model_escapes(
+            str(kwargs.get("new_text", "") or kwargs.get("new_string", ""))
+        )
         replace_all = bool(kwargs.get("replace_all", False))
 
         if not file_path:

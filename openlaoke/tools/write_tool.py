@@ -17,6 +17,7 @@ from openlaoke.core.tool import PreviewResult, Tool, ToolContext, ToolRegistry
 from openlaoke.types.core_types import ToolResultBlock
 from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
+from openlaoke.utils.text_escapes import normalize_model_escapes
 
 _WRITE_GUARD_ATTEMPTS: dict[str, int] = {}
 
@@ -44,7 +45,7 @@ class WriteTool(Tool):
 
     def preview(self, **kwargs: Any) -> PreviewResult:
         file_path = str(kwargs.get("file_path", ""))
-        content = str(kwargs.get("content", ""))
+        content = normalize_model_escapes(str(kwargs.get("content", "")))
         if not file_path:
             return PreviewResult(summary="Error: missing file_path")
         abs_path = os.path.abspath(file_path)
@@ -76,7 +77,7 @@ class WriteTool(Tool):
 
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         file_path = kwargs.get("file_path", "")
-        content = kwargs.get("content", "")
+        content = normalize_model_escapes(str(kwargs.get("content", "")))
 
         if not file_path:
             return ToolResultBlock(

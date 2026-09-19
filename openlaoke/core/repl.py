@@ -1282,39 +1282,28 @@ class REPL:
     def _build_streaming_display(
         self, content: str, tokens: int, tps: float, elapsed: float
     ) -> Any:
-        from rich.box import ROUNDED
-        from rich.console import Group
-        from rich.panel import Panel
+        # A single line of plain styled text: rich Live clears it cleanly, and
+        # model output is never parsed as markup (which mangled the old boxed
+        # view and leaked literal colour tags).
         from rich.text import Text
 
-        visible_lines = 8
-
-        if content:
-            lines = content.split("\n")
-            if len(lines) > visible_lines:
-                shown = lines[-visible_lines:]
-                body = "\n".join(shown)
-                hidden = len(lines) - visible_lines
-                body += f"\n[{self._c('muted')}]+ {hidden} more lines[/]"
-            else:
-                body = content
-        else:
-            body = f"[{self._c('muted')}]...[/]"
-
-        panel = Panel(
-            Text.from_markup(body, justify="left"),
-            title=f"[{self._c('muted')}]Streaming[/]",
-            border_style=self._c("muted"),
-            box=ROUNDED,
-            padding=(0, 1),
-        )
-
-        counter = Text()
-        counter.append(f"  [{self._c('primary')}]{tokens} tokens[/]")
+        meta = f"  {elapsed:.0f}s"
+        if tokens:
+            meta += f" · {tokens} tok"
         if tps > 0:
-            counter.append(f" [{self._c('muted')}]· {tps:.0f} t/s · {elapsed:.1f}s[/]")
+            meta += f" · {tps:.0f} t/s"
 
-        return Group(panel, counter)
+        width = getattr(getattr(self, "console", None), "width", 80)
+        room = max(20, width - len(meta) - 6)
+        tail = " ".join(content.split())
+        if len(tail) > room:
+            tail = "…" + tail[-room:]
+
+        status = Text()
+        status.append("  ✻ ", style=self._c("primary"))
+        status.append(tail or "streaming…", style=self._c("muted"))
+        status.append(meta, style=self._c("muted"))
+        return status
 
     def _display_thinking_inline(self, thinking: str) -> None:
         enabled = self.app_state.thinking_enabled
@@ -1324,15 +1313,17 @@ class REPL:
             )
             return
         lines = thinking.strip().split("\n")
+        from rich.text import Text
+
         max_show = 5
-        if len(lines) <= max_show:
-            for line in lines:
-                self.console.print(f"  [{self._c('muted')}]{line}[/]")
-        else:
-            for line in lines[:max_show]:
-                self.console.print(f"  [{self._c('muted')}]{line}[/]")
+        for line in lines[:max_show]:
+            self.console.print(Text("  " + line, style=self._c("muted")))
+        if len(lines) > max_show:
             self.console.print(
-                f"  [{self._c('muted')} dim]... ({len(lines) - max_show} more lines, Ctrl+G to see all)[/]"
+                Text(
+                    f"  ... ({len(lines) - max_show} more lines, Ctrl+G to see all)",
+                    style=self._c("muted"),
+                )
             )
 
     def _show_thinking_full(self) -> None:
