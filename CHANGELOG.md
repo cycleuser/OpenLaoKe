@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.41] - 2026-09-19
+
 ### Pivot to pi's design (Python implementation)
 - **Rewrote the project around pi's design** — a minimal terminal coding agent
   (github.com/earendil-works/pi). The default surface now follows pi's: 9 tools, 23
@@ -34,6 +36,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Result**: 286 files / 77,955 lines → 69 files / 19,349 lines; 7 runtime
   dependencies; 147 tests passing; `ruff` clean.
 
+### Changed
+- **Minimum Python is now 3.12** (was 3.11); `pyproject.toml`, the ruff target
+  and the mypy target were updated accordingly.
+
+### Fixed
+- **Ollama streaming reasoning** — the OpenAI-compatible stream parser now reads
+  `delta.reasoning` (Ollama thinking models) alongside `delta.reasoning_content`
+  (DeepSeek). Thinking models previously produced an empty visible stream.
+- **System prompt** — rewritten to list only the nine tools that actually exist;
+  references to deleted tools (WebSearch, WebFetch, Agent) and the
+  anti-AI-detection section were removed.
+- **`pytest` collection** — `norecursedirs` now excludes `tests/artifacts`, whose
+  model-generated `test_*.py` files broke collection.
+
 ### Docs
 - Rewrote `README.md` and `README_CN.md` around pi's design, design
   philosophy, the pivot rationale, project history, and the speed/complexity
@@ -41,6 +57,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added `THIRD_PARTY_NOTICES.md` (pi's MIT license and copyright).
 - Removed the obsolete feature docs, architecture reports, test reports, and the
   C translation from `docs/`.
+- Added `docs/benchmarks.md` / `docs/benchmarks_CN.md` and reproduction scripts
+  in `scripts/` (provider formats, local-model capabilities, multilingual and
+  concrete-task runs, inference speed).
+- Corrected the provider documentation: OpenLaoKe speaks five native protocols
+  (Anthropic Messages, OpenAI Chat Completions, Google `generateContent`,
+  AWS Bedrock, Cohere), not "two formats".
+- `tests/` is no longer tracked; the suite is kept local and git-ignored.
+
+## [0.1.40] - 2026-08-24
 
 ### OpenCode-style Workflow Core
 - **Conversation rewind** — `SnapshotStore.capture_conversation` persists per-turn conversation; `rewind_conversation` truncates live history (code / conversation / both scopes); rewinding to the first recorded turn clears the conversation
