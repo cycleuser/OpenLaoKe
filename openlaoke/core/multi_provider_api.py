@@ -403,12 +403,10 @@ class MultiProviderClient:
             body["temperature"] = temperature
         if tools:
             body["tools"] = self._convert_tools_to_openai_format(tools)
+
+        provider = self.config.get_active_provider() if self.config else None
+        base_url = (provider.base_url or "").lower() if provider else ""
         if thinking_budget > 0:
-            base_url = ""
-            if self.config:
-                provider = self.config.get_active_provider()
-                if provider:
-                    base_url = (provider.base_url or "").lower()
             if "deepseek" in base_url:
                 body["chat_template_kwargs"] = {"thinking_budget": thinking_budget}
             elif thinking_budget <= 500:
@@ -417,6 +415,12 @@ class MultiProviderClient:
                 body["reasoning_effort"] = "medium"
             else:
                 body["reasoning_effort"] = "high"
+        elif provider is not None and (provider.is_local or _is_local_url(base_url)):
+            # Local thinking models reason without bound by default (qwen3 etc.).
+            # On a laptop that turns a 3-second answer into minutes and often
+            # burns the whole token budget before emitting any tool call, so ask
+            # them to skip thinking unless it was explicitly enabled.
+            body["reasoning_effort"] = "none"
         return body
 
     def _convert_tools_to_openai_format(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
