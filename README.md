@@ -14,7 +14,7 @@ OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core ide
 - **pi's 23 built-in commands**, plus prompt templates and skills.
 - **Session tree with branch / fork / clone / rewind**, backed by append-only files.
 - **Prompt templates** (`/name` and `/prompt <name>`), with `$1`, `$@`, `${1:-default}`, `${@:N:L}`.
-- **20+ providers, spoken natively** — Anthropic Messages, OpenAI Chat Completions, Google `generateContent`, AWS Bedrock and Cohere; the rest (Azure, xAI, Mistral, Groq, OpenRouter, Copilot, Aliyun, MiniMax, OpenCode Zen) ride the OpenAI format, and so do local servers (Ollama, LM Studio, vLLM).
+- **20+ providers, spoken natively** — Anthropic Messages, OpenAI Chat Completions, Google `generateContent`, AWS Bedrock and Cohere; the rest (DeepSeek, Ollama Cloud, Azure, xAI, Mistral, Groq, OpenRouter, Copilot, Aliyun, MiniMax, OpenCode Zen) ride the OpenAI format, and so do local servers (Ollama, LM Studio, vLLM).
 - ~19k lines of Python. No MCP, no sub-agents, no plan mode, no permission popups, no background bash.
 
 ### Tools
@@ -38,6 +38,14 @@ pi's built-in command set is implemented one-to-one:
 `/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
 
 Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list or activate a skill), `/theme`, `/help`.
+
+`/model` switches provider or model, with live model discovery:
+
+- `/model` — list providers and mark the active one
+- `/model <provider>` — switch provider and show its live model list
+- `/model <provider> <n>` — pick the nth model from that list
+- `/model <provider>/<model>` — switch to an explicit model
+- `/model list <provider>` — re-fetch the list from the provider
 
 ## Design philosophy
 
@@ -175,7 +183,7 @@ Local endpoints need no real API key. LM Studio (port 1234), vLLM, and any other
 
 ### Providers
 
-Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google `generateContent`**, **AWS Bedrock** and **Cohere**. Built-in providers: OpenAI, Anthropic (Claude), Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan, OpenCode Zen. Anything OpenAI-compatible works too — Ollama, LM Studio, vLLM, or your own gateway.
+Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google `generateContent`**, **AWS Bedrock** and **Cohere**. Built-in providers: Anthropic (Claude), OpenAI, DeepSeek, Ollama Cloud, Google, Azure OpenAI, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan, OpenCode Zen. Anything OpenAI-compatible works too — Ollama, LM Studio, vLLM, or your own gateway.
 
 ## Configuration
 
@@ -199,7 +207,7 @@ Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google 
 
 ### Environment variables
 
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OLLAMA_API_KEY`, `GOOGLE_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
 
 ## Architecture
 

@@ -23,6 +23,8 @@ class ProviderType(StrEnum):
 
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
+    DEEPSEEK = "deepseek"
+    OLLAMA_CLOUD = "ollama_cloud"
     OPENAI_COMPATIBLE = "openai_compatible"
     OLLAMA = "ollama"
     LM_STUDIO = "lm_studio"
@@ -239,6 +241,34 @@ class MultiProviderConfig:
                         "gpt-4-turbo",
                         "o1-preview",
                         "o1-mini",
+                    ],
+                ),
+                "deepseek": ProviderConfig(
+                    provider_type=ProviderType.DEEPSEEK,
+                    base_url="https://api.deepseek.com/v1",
+                    default_model="deepseek-v4-flash",
+                    models=[
+                        "deepseek-v4-flash",
+                        "deepseek-v4-pro",
+                        "deepseek-v4-flash-vision-exp",
+                        "deepseek-flash",
+                        "deepseek-chat",
+                        "deepseek-reasoner",
+                    ],
+                ),
+                "ollama_cloud": ProviderConfig(
+                    provider_type=ProviderType.OLLAMA_CLOUD,
+                    base_url="https://ollama.com/v1",
+                    default_model="gpt-oss:20b",
+                    models=[
+                        "gpt-oss:20b",
+                        "gpt-oss:120b",
+                        "deepseek-v4-flash",
+                        "minimax-m3",
+                        "kimi-k2.6",
+                        "glm-5.2",
+                        "qwen3.5:397b",
+                        "nemotron-3-ultra",
                     ],
                 ),
                 "minimax": ProviderConfig(

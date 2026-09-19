@@ -14,7 +14,7 @@ OpenLaoKe **遵循 pi 的设计**，用 Python 实现。它保留了 pi 的核�
 - **pi 的 23 个内置命令**，外加 prompt 模板与技能。
 - **树状会话，支持 branch / fork / clone / rewind**，底层是追加写文件。
 - **prompt 模板**（`/name` 与 `/prompt <name>`），支持 `$1`、`$@`、`${1:-default}`、`${@:N:L}`。
-- **20+ 个提供商，原生协议对接** —— 直接说 Anthropic Messages、OpenAI Chat Completions、Google `generateContent`、AWS Bedrock 和 Cohere；其余（Azure、xAI、Mistral、Groq、OpenRouter、Copilot、Aliyun、MiniMax、OpenCode Zen）走 OpenAI 格式，本地服务（Ollama、LM Studio、vLLM）也一样。
+- **20+ 个提供商，原生协议对接** —— 直接说 Anthropic Messages、OpenAI Chat Completions、Google `generateContent`、AWS Bedrock 和 Cohere；其余（DeepSeek、Ollama Cloud、Azure、xAI、Mistral、Groq、OpenRouter、Copilot、Aliyun、MiniMax、OpenCode Zen）走 OpenAI 格式，本地服务（Ollama、LM Studio、vLLM）也一样。
 - 约 1.9 万行 Python。没有 MCP、没有子智能体、没有计划模式、没有权限弹窗、没有后台 bash。
 
 ### 工具
@@ -38,6 +38,14 @@ pi 的内置命令一一对应地实现了：
 `/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
 
 另有几个符合同样哲学的新增命令：`/prompt`（展开 prompt 模板）、`/skill`（列出或激活技能）、`/theme`、`/help`。
+
+`/model` 用来切换 provider 或模型，支持实时拉取模型列表：
+
+- `/model` —— 列出所有 provider，并标出当前那个
+- `/model <provider>` —— 切换 provider，并显示它的实时模型列表
+- `/model <provider> <n>` —— 选列表里的第 n 个模型
+- `/model <provider>/<model>` —— 直接指定模型
+- `/model list <provider>` —— 从 provider 重新拉取一次列表
 
 ## 设计哲学
 
@@ -175,7 +183,7 @@ openlaoke --provider openai_compatible \
 
 ### 提供商
 
-原生协议：**Anthropic Messages**、**OpenAI Chat Completions**、**Google `generateContent`**、**AWS Bedrock** 与 **Cohere**。内置提供商：OpenAI、Anthropic（Claude）、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan、OpenCode Zen。任何 OpenAI 兼容端点也都能用——Ollama、LM Studio、vLLM，或你自己的网关。
+原生协议：**Anthropic Messages**、**OpenAI Chat Completions**、**Google `generateContent`**、**AWS Bedrock** 与 **Cohere**。内置提供商：Anthropic（Claude）、OpenAI、DeepSeek、Ollama Cloud、Google、Azure OpenAI、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan、OpenCode Zen。任何 OpenAI 兼容端点也都能用——Ollama、LM Studio、vLLM，或你自己的网关。
 
 ## 配置
 
@@ -199,7 +207,7 @@ openlaoke --provider openai_compatible \
 
 ### 环境变量
 
-`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、`DEEPSEEK_API_KEY`、`MINIMAX_API_KEY`、`XAI_API_KEY`、`MISTRAL_API_KEY`、`GROQ_API_KEY`、`OPENROUTER_API_KEY`、`GITHUB_TOKEN`、`OPENLAOKE_MODEL`、`HTTP_PROXY` / `HTTPS_PROXY`。
+`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`OLLAMA_API_KEY`、`GOOGLE_API_KEY`、`MINIMAX_API_KEY`、`XAI_API_KEY`、`MISTRAL_API_KEY`、`GROQ_API_KEY`、`OPENROUTER_API_KEY`、`GITHUB_TOKEN`、`OPENLAOKE_MODEL`、`HTTP_PROXY` / `HTTPS_PROXY`。
 
 ## 架构
 

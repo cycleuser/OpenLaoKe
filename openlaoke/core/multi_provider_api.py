@@ -188,6 +188,10 @@ class MultiProviderClient:
             env_key = os.environ.get("ANTHROPIC_API_KEY", "")
         elif provider.provider_type == ProviderType.OPENAI:
             env_key = os.environ.get("OPENAI_API_KEY", "")
+        elif provider.provider_type == ProviderType.DEEPSEEK:
+            env_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        elif provider.provider_type == ProviderType.OLLAMA_CLOUD:
+            env_key = os.environ.get("OLLAMA_API_KEY", "")
         elif provider.provider_type == ProviderType.MINIMAX:
             env_key = os.environ.get("MINIMAX_API_KEY", "")
         elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:
@@ -233,6 +237,10 @@ class MultiProviderClient:
             env_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
         elif provider.provider_type == ProviderType.OPENAI:
             env_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        elif provider.provider_type == ProviderType.DEEPSEEK:
+            env_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        elif provider.provider_type == ProviderType.OLLAMA_CLOUD:
+            env_url = os.environ.get("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/v1")
         elif provider.provider_type == ProviderType.MINIMAX:
             env_url = os.environ.get("MINIMAX_BASE_URL", "https://api.minimaxi.com/v1")
         elif provider.provider_type == ProviderType.ALIYUN_CODING_PLAN:

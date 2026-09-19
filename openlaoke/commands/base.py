@@ -85,36 +85,110 @@ class ClearCommand(SlashCommand):
 
 class ModelCommand(SlashCommand):
     name = "model"
-    description = "Show or change the current model"
+    description = "Show or switch provider/model"
     aliases = ["m"]
+
+    async def _refresh(self, config, provider_name: str) -> list[str]:
+        from openlaoke.core.model_discovery import discover_models
+
+        provider = config.providers.providers[provider_name]
+        live = await discover_models(provider)
+        if live:
+            provider.models = live
+        return live or provider.models
+
+    @staticmethod
+    def _listing(provider_name: str, models: list[str], current: str, current_provider: str) -> str:
+        lines = [f"{provider_name} models ({len(models)}):"]
+        for i, name in enumerate(models, 1):
+            star = "*" if provider_name == current_provider and name == current else " "
+            lines.append(f" {star} {i:>2}. {name}")
+        return "\n".join(lines)
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
         from openlaoke.utils.config import load_config, save_config
 
-        args = ctx.args.strip()
         config = load_config()
         providers = config.providers.providers
+        state = ctx.app_state.multi_provider_config or config.providers
+        cur_provider = getattr(state, "active_provider", "") or ""
+        cur_model = getattr(state, "active_model", "") or ctx.app_state.session_config.model
+        args = ctx.args.strip()
 
         if not args:
-            lines = [f"Current model: {ctx.app_state.session_config.model}", "", "Providers:"]
+            lines = [f"Current: {cur_provider or '-'} / {cur_model or '-'}", "", "Providers:"]
             for key, provider in providers.items():
-                model = provider.get_default_model() or "-"
                 status = "ready" if provider.is_configured() else "no key"
-                lines.append(f"  {key:<20} {status:<8} {model}")
-            lines.append("")
-            lines.append("Usage: /model <model>  or  /model <provider>/<model>")
+                marker = "*" if key == cur_provider else " "
+                default = provider.get_default_model() or "-"
+                lines.append(f" {marker} {key:<20} {status:<7} {default}  [{len(provider.models)}]")
+            lines += [
+                "",
+                "Usage: /model <provider> | /model <provider>/<model> | /model <provider> <n> | /model list <provider>",
+            ]
             return CommandResult(message="\n".join(lines))
 
-        model = args
-        if "/" in args:
-            provider_name, model = args.split("/", 1)
-            if provider_name in providers:
-                config.providers.active_provider = provider_name
-        ctx.app_state.session_config.model = model
-        if ctx.app_state.multi_provider_config is not None:
-            ctx.app_state.multi_provider_config.active_model = model
+        tokens = args.replace("/", " ").split()
+
+        if tokens[0] in ("list", "ls", "models"):
+            target = tokens[1] if len(tokens) > 1 else cur_provider
+            if target not in providers:
+                return CommandResult(success=False, message=f"Unknown provider: {target or '(none)'}")
+            models = await self._refresh(config, target)
+            save_config(config)
+            if not models:
+                return CommandResult(message=f"{target}: no models found.")
+            return CommandResult(
+                message=self._listing(target, models, cur_model, cur_provider)
+            )
+
+        provider_name: str | None = None
+        model_name: str | None = None
+        if len(tokens) == 1:
+            if tokens[0] in providers:
+                provider_name = tokens[0]
+            else:
+                model_name = tokens[0]
+                for key, provider in providers.items():
+                    if model_name in provider.models:
+                        provider_name = key
+                        break
+        else:
+            provider_name, model_name = tokens[0], " ".join(tokens[1:])
+
+        if provider_name is not None and provider_name not in providers:
+            return CommandResult(success=False, message=f"Unknown provider: {provider_name}")
+        if provider_name is None:
+            provider_name = cur_provider
+        if not provider_name:
+            return CommandResult(success=False, message="No provider selected. Use /model <provider>.")
+
+        models = await self._refresh(config, provider_name)
+        if model_name and model_name.isdigit():
+            idx = int(model_name)
+            if not 1 <= idx <= len(models):
+                return CommandResult(
+                    success=False, message=f"Index {idx} out of range (1-{len(models)})."
+                )
+            model_name = models[idx - 1]
+        if not model_name:
+            model_name = providers[provider_name].get_default_model() or (models[0] if models else "")
+
+        state.active_provider = provider_name
+        config.providers.active_provider = provider_name
+        if model_name:
+            state.active_model = model_name
+            config.providers.active_model = model_name
+            ctx.app_state.session_config.model = model_name
         save_config(config)
-        return CommandResult(message=f"Model set to: {model}")
+
+        note = ""
+        if not providers[provider_name].is_configured():
+            note = f"  (no key — /login {provider_name} <api-key>)"
+        result = f"Switched to {provider_name} / {model_name or '-'}{note}"
+        if len(models) > 1:
+            result += "\n\n" + self._listing(provider_name, models, model_name, provider_name)
+        return CommandResult(message=result)
 
 
 class ThinkingCommand(SlashCommand):
