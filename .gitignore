@@ -247,8 +247,7 @@ wechat.md
 /.
 /.codegraph
 
-# Local model benchmark test reports (generated data, not source)
-tests/test_reports/*.json
-tests/test_reports/*_report*.md
+# Test suite and artifacts — kept local, not tracked
+/tests/
 .toml
 .codegraph/daemon.pid
