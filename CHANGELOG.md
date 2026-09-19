@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.42] - 2026-09-19
+
+### Fixed
+- **Command execution was over-blocked**: AUTO mode now stops only high-confidence
+  dangerous commands (`rm -rf`, `curl | sh`, inline interpreter code, file-writing
+  redirections); unknown commands run. The safe list gained macOS/Linux
+  system-inspection tools (`lscpu`, `vm_stat`, `sysctl`, `system_profiler`,
+  `sw_vers`, `ioreg`, `hostinfo`, `defaults`, …).
+- **System paths are readable again**: `Read` / `Glob` / `Grep` may read `/proc`,
+  `/etc`, `/sys`, `/usr`, `/Library`, … while `Write` / `Edit` stay confined to
+  the workspace and home directory.
+- **The tool set now follows the host OS**: `PowerShell` is registered only on
+  Windows (or where `pwsh` is installed); macOS/Linux get Bash only. Previously
+  the model saw a PowerShell tool on macOS and assumed the host was Windows.
+- **`/model` no longer mangles model ids containing `/`** (e.g.
+  `LiquidAI-dev/lfm2.5-2.6b:latest`, `anthropic/claude-3.5-sonnet`), which made
+  local Ollama answer `400 invalid model name`.
+- **Tool-call-only replies from small models are no longer dropped**: the stream
+  loop counted only `content` chunks, so a `reasoning + tool_calls` response with
+  empty content tripped the “Model returned no output” check and discarded the
+  tool calls.
+- **Answers are no longer misread as “plans”**: the plan-retry heuristic no longer
+  fires on numbered lists, and content is rendered before any retry.
+- **Literal `\n` in written files**: small models double-escape newlines; `Write`
+  and `Edit` now repair that (`utils/text_escapes.py`).
+- **Streaming display**: replaced the boxed panel (which parsed model output as
+  rich markup and left overlapping artifacts) with a single-line status.
+
+### Added
+- OS-aware command guidance in the session context (macOS / Linux / Windows).
+- `model_discovery.get_context_limit()`: the context budget uses the model's real
+  window from the models.dev catalog (e.g. `glm-5.3` = 1M instead of the
+  hard-coded 16k), so history is not compacted prematurely.
+- Streaming errors now include the provider's response body.
+
 ## [0.1.41] - 2026-09-19
 
 ### Pivot to pi's design (Python implementation)
