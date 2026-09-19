@@ -6,7 +6,7 @@
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-## What OpenLaoKe is now
+## What OpenLaoKe is
 
 OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core idea — a tiny, opinionated agent loop that you extend yourself — and drops almost everything else.
 
@@ -14,7 +14,7 @@ OpenLaoKe **follows pi's design, implemented in Python**. It keeps pi's core ide
 - **pi's 23 built-in commands**, plus prompt templates and skills.
 - **Session tree with branch / fork / clone / rewind**, backed by append-only files.
 - **Prompt templates** (`/name` and `/prompt <name>`), with `$1`, `$@`, `${1:-default}`, `${@:N:L}`.
-- **API keys or local endpoints** — OpenAI and Anthropic (Claude) formats, plus any OpenAI-compatible server (Ollama, LM Studio, …).
+- **20+ providers, spoken natively** — Anthropic Messages, OpenAI Chat Completions, Google `generateContent`, AWS Bedrock and Cohere; the rest (Azure, xAI, Mistral, Groq, OpenRouter, Copilot, Aliyun, MiniMax, OpenCode Zen) ride the OpenAI format, and so do local servers (Ollama, LM Studio, vLLM).
 - ~19k lines of Python. No MCP, no sub-agents, no plan mode, no permission popups, no background bash.
 
 ### Tools
@@ -41,7 +41,7 @@ Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a promp
 
 ## Design philosophy
 
-OpenLaoKe follows pi deliberately, and the philosophy is the point:
+OpenLaoKe follows pi on purpose, and the philosophy is the point:
 
 **1. A minimal core, extended outward.** The default tool set is small and stable. Capabilities arrive through skills, prompt templates, hooks, and your own code — not through a growing pile of built-in features. A small core is easier to reason about, faster to start, and cheaper to run.
 
@@ -55,7 +55,7 @@ OpenLaoKe follows pi deliberately, and the philosophy is the point:
 
 **6. Local-first, zero-cost capable.** Point OpenLaoKe at a model running on your own machine — an OpenAI-compatible endpoint is a first-class option, not a fallback.
 
-## Why we pivoted
+## Why we switched to pi's design
 
 This section is honest project history, because the pivot is the interesting part.
 
@@ -152,14 +152,14 @@ Requires Python 3.11+.
 Set a key and go:
 
 ```bash
-export OPENAI_API_KEY=sk-...         # OpenAI format
-export ANTHROPIC_API_KEY=sk-ant-...  # Claude format
+export OPENAI_API_KEY=sk-...         # OpenAI
+export ANTHROPIC_API_KEY=sk-ant-...  # Anthropic (Claude)
 openlaoke --provider openai --model gpt-4o
 ```
 
 ### Local models
 
-OpenLaoKe speaks the OpenAI and Anthropic formats. For a local model, run any OpenAI-compatible server and point OpenLaoKe at it — how you run that server is up to you. With [Ollama](https://ollama.com):
+For a local model, run any OpenAI-compatible server and point OpenLaoKe at it — how you run that server is up to you. With [Ollama](https://ollama.com):
 
 ```bash
 ollama serve
@@ -175,7 +175,7 @@ Local endpoints need no real API key. LM Studio (port 1234), vLLM, and any other
 
 ### Providers
 
-Cloud: OpenAI, Anthropic (Claude), Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan. Free/local: OpenCode Zen, and any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, …).
+Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google `generateContent`**, **AWS Bedrock** and **Cohere**. Built-in providers: OpenAI, Anthropic (Claude), Azure OpenAI, Google, Google Vertex, AWS Bedrock, xAI, Mistral, Groq, Cerebras, Cohere, DeepInfra, Together AI, Perplexity, OpenRouter, GitHub Copilot, MiniMax, Aliyun Coding Plan, OpenCode Zen. Anything OpenAI-compatible works too — Ollama, LM Studio, vLLM, or your own gateway.
 
 ## Configuration
 
@@ -199,7 +199,7 @@ Cloud: OpenAI, Anthropic (Claude), Azure OpenAI, Google, Google Vertex, AWS Bedr
 
 ### Environment variables
 
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
 
 ## Architecture
 
@@ -231,7 +231,7 @@ ruff check . && ruff format .
 pytest
 ```
 
-147 tests cover the pi-compatible commands, prompt templates, sessions, snapshots, tools, diffing, and i18n.
+A pytest suite (kept alongside the sources) covers the pi-compatible commands, prompt templates, sessions, snapshots, tools, diffing, and i18n.
 
 ## Benchmarks
 

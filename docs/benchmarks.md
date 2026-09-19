@@ -43,8 +43,10 @@ data here.
 
 ## Part 1 — Provider format compatibility
 
-OpenLaoKe must speak both the OpenAI and the Anthropic (Claude) formats. Both
-were exercised end to end.
+This part exercises the two wire formats that carry most providers: Anthropic
+Messages and OpenAI Chat Completions. Both were run end to end. OpenLaoKe also
+speaks Google `generateContent`, AWS Bedrock and Cohere natively; those are not
+covered here.
 
 | Test | Endpoint | Result |
 |------|----------|--------|

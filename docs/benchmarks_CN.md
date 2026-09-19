@@ -35,7 +35,9 @@
 
 ## 第一部分 —— 提供商格式兼容性
 
-OpenLaoKe 需要同时说 OpenAI 与 Anthropic（Claude）两种格式，两者都做了端到端验证。
+本部分验证的是承载大多数提供商的那两种线协议：Anthropic Messages 与
+OpenAI Chat Completions，两者都做了端到端测试。OpenLaoKe 还原生支持
+Google `generateContent`、AWS Bedrock 与 Cohere，这些不在本部分范围内。
 
 | 测试 | 端点 | 结果 |
 |------|------|------|

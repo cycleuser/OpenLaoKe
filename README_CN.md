@@ -6,7 +6,7 @@
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-## 现在的 OpenLaoKe 是什么
+## OpenLaoKe 是什么
 
 OpenLaoKe **遵循 pi 的设计**，用 Python 实现。它保留了 pi 的核心想法——一个很小的、有主见的智能体循环，其余的由你自己扩展——然后把其它几乎所有东西都砍掉了。
 
@@ -14,7 +14,7 @@ OpenLaoKe **遵循 pi 的设计**，用 Python 实现。它保留了 pi 的核�
 - **pi 的 23 个内置命令**，外加 prompt 模板与技能。
 - **树状会话，支持 branch / fork / clone / rewind**，底层是追加写文件。
 - **prompt 模板**（`/name` 与 `/prompt <name>`），支持 `$1`、`$@`、`${1:-default}`、`${@:N:L}`。
-- **API key 或本地端点** —— 支持 OpenAI 与 Anthropic（Claude）两种格式，以及任何 OpenAI 兼容服务（Ollama、LM Studio 等）。
+- **20+ 个提供商，原生协议对接** —— 直接说 Anthropic Messages、OpenAI Chat Completions、Google `generateContent`、AWS Bedrock 和 Cohere；其余（Azure、xAI、Mistral、Groq、OpenRouter、Copilot、Aliyun、MiniMax、OpenCode Zen）走 OpenAI 格式，本地服务（Ollama、LM Studio、vLLM）也一样。
 - 约 1.9 万行 Python。没有 MCP、没有子智能体、没有计划模式、没有权限弹窗、没有后台 bash。
 
 ### 工具
@@ -41,11 +41,11 @@ pi 的内置命令一一对应地实现了：
 
 ## 设计哲学
 
-OpenLaoKe 是刻意跟随 pi 的，而这份哲学本身就是重点：
+OpenLaoKe 是有意照 pi 的路子来的，而这份哲学本身就是重点：
 
 **一、内核要小，能力向外长。** 默认的工具集小而稳定。新能力通过技能、prompt 模板、钩子，以及你自己的代码接入，而不是靠不断堆内置功能。内核小，才容易理清、启动快、运行便宜。
 
-**二、速度由"固定上下文基线"决定。** 每一次请求都要重发系统提示词、工具定义和技能元数据。这份固定开销乘以每一个模型回合，就是延迟和成本的主项。功能多的助手，是每一次调用都在为它付这笔钱。把基线压小，是一个设计决策，不是事后优化——见下面「速度与复杂度」。
+**二、速度由“固定上下文基线”决定。** 每一次请求都要重发系统提示词、工具定义和技能元数据。这份固定开销乘以每一个模型回合，就是延迟和成本的主项。功能多的助手，每一次调用都在为它交这笔钱。把基线压小，是一个设计决策，不是事后优化——见下面「速度与复杂度」。
 
 **三、渐进披露。** 技能正文在未被调用前不进上下文。随提示词走的只有名字和简短描述，真正的指令等模型确实需要时再加载。
 
@@ -55,7 +55,7 @@ OpenLaoKe 是刻意跟随 pi 的，而这份哲学本身就是重点：
 
 **六、本地优先，能零成本。** 把 OpenLaoKe 指向你自己机器上的模型——一个 OpenAI 兼容端点是一等公民，不是备胎。
 
-## 为什么突然转向
+## 为什么改成按 pi 的方式设计
 
 这一段是诚实的项目史，因为转向本身才是最有意思的部分。
 
@@ -152,14 +152,14 @@ openlaoke
 设好 key 就能用：
 
 ```bash
-export OPENAI_API_KEY=sk-...         # OpenAI 格式
-export ANTHROPIC_API_KEY=sk-ant-...  # Claude 格式
+export OPENAI_API_KEY=sk-...         # OpenAI
+export ANTHROPIC_API_KEY=sk-ant-...  # Anthropic（Claude）
 openlaoke --provider openai --model gpt-4o
 ```
 
 ### 本地模型
 
-OpenLaoKe 说 OpenAI 和 Anthropic 两种格式。要用本地模型，你自己起一个 OpenAI 兼容的服务，把它指过去就行——怎么起是你的事。以 [Ollama](https://ollama.com) 为例：
+要用本地模型，你自己起一个 OpenAI 兼容的服务，把它指过去就行——怎么起是你的事。以 [Ollama](https://ollama.com) 为例：
 
 ```bash
 ollama serve
@@ -175,7 +175,7 @@ openlaoke --provider openai_compatible \
 
 ### 提供商
 
-云端：OpenAI、Anthropic（Claude）、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan。免费/本地：OpenCode Zen，以及任何 OpenAI 兼容端点（Ollama、LM Studio、vLLM 等）。
+原生协议：**Anthropic Messages**、**OpenAI Chat Completions**、**Google `generateContent`**、**AWS Bedrock** 与 **Cohere**。内置提供商：OpenAI、Anthropic（Claude）、Azure OpenAI、Google、Google Vertex、AWS Bedrock、xAI、Mistral、Groq、Cerebras、Cohere、DeepInfra、Together AI、Perplexity、OpenRouter、GitHub Copilot、MiniMax、Aliyun Coding Plan、OpenCode Zen。任何 OpenAI 兼容端点也都能用——Ollama、LM Studio、vLLM，或你自己的网关。
 
 ## 配置
 
@@ -199,7 +199,7 @@ openlaoke --provider openai_compatible \
 
 ### 环境变量
 
-`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`、`DEEPSEEK_API_KEY`、`MINIMAX_API_KEY`、`XAI_API_KEY`、`MISTRAL_API_KEY`、`GROQ_API_KEY`、`OPENROUTER_API_KEY`、`GITHUB_TOKEN`、`OPENLAOKE_MODEL`、`HTTP_PROXY` / `HTTPS_PROXY`。
+`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、`DEEPSEEK_API_KEY`、`MINIMAX_API_KEY`、`XAI_API_KEY`、`MISTRAL_API_KEY`、`GROQ_API_KEY`、`OPENROUTER_API_KEY`、`GITHUB_TOKEN`、`OPENLAOKE_MODEL`、`HTTP_PROXY` / `HTTPS_PROXY`。
 
 ## 架构
 
@@ -231,7 +231,7 @@ ruff check . && ruff format .
 pytest
 ```
 
-147 个测试覆盖了 pi 兼容命令、prompt 模板、会话、快照、工具、diff 与 i18n。
+本地的 pytest 测试集覆盖 pi 兼容命令、prompt 模板、会话、快照、工具、diff 与 i18n。
 
 ## 基准测试
 
