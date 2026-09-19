@@ -521,13 +521,13 @@ class REPL:
         )
 
         model_size = estimate_model_size_from_name(self.app_state.session_config.model)
-        from openlaoke.core.model_discovery import get_context_limit
+        from openlaoke.core.model_discovery import get_effective_context_limit
 
         _active_provider = (
             self.api.config.get_active_provider() if self.api and self.api.config else None
         )
         context_limit = (
-            await get_context_limit(_active_provider, self.app_state.session_config.model)
+            await get_effective_context_limit(_active_provider, self.app_state.session_config.model)
             if _active_provider
             else None
         )

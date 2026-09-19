@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -189,3 +190,57 @@ async def get_context_limit(provider: ProviderConfig, model_id: str) -> int | No
         if isinstance(limit, int) and limit > 0:
             return limit
     return None
+
+
+def _url_is_local(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower() if url else ""
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal")
+
+
+async def _local_runtime_context(base_url: str, model_id: str) -> int | None:
+    """Ask a local Ollama server for the context window it actually serves."""
+    if not base_url:
+        return None
+    host = base_url.rstrip("/")
+    if host.endswith("/v1"):
+        host = host[:-3]
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.get(f"{host}/api/ps")
+        if resp.status_code >= 400:
+            return None
+        models = resp.json().get("models") or []
+    except Exception:
+        return None
+    for entry in models:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("model") or "")
+        if name == model_id or name.split(":")[0] == model_id.split(":")[0]:
+            ctx = entry.get("context_length")
+            if isinstance(ctx, int) and ctx > 0:
+                return ctx
+    return None
+
+
+# Conservative window for a local server whose real num_ctx is unknown.
+_DEFAULT_LOCAL_CONTEXT = 8192
+
+
+async def get_effective_context_limit(provider: ProviderConfig, model_id: str) -> int | None:
+    """Context window to budget against.
+
+    Cloud models use the catalog value. Local servers serve a far smaller window
+    than the model's theoretical maximum — Ollama commonly runs 16k against a
+    catalogued 256k — so trusting the catalog there disables pruning entirely
+    and prefills slow to a crawl. Prefer the runtime value, then a conservative
+    default.
+    """
+    catalog = await get_context_limit(provider, model_id)
+    base = provider.base_url or ""
+    if not (provider.is_local or _url_is_local(base)):
+        return catalog
+    runtime = await _local_runtime_context(base, model_id)
+    if runtime:
+        return min(catalog, runtime) if catalog else runtime
+    return min(catalog, _DEFAULT_LOCAL_CONTEXT) if catalog else _DEFAULT_LOCAL_CONTEXT
