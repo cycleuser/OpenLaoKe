@@ -322,7 +322,14 @@ class ShareCommand(SlashCommand):
         _write_json(tmp, data)
         try:
             result = subprocess.run(
-                ["gh", "gist", "create", "--desc", f"OpenLaoKe session {ctx.app_state.session_id}", str(tmp)],
+                [
+                    "gh",
+                    "gist",
+                    "create",
+                    "--desc",
+                    f"OpenLaoKe session {ctx.app_state.session_id}",
+                    str(tmp),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -411,7 +418,9 @@ class TrustCommand(SlashCommand):
         else:
             return CommandResult(success=False, message="Usage: /trust [on|off|status]")
         _write_json(_trust_path(), trust)
-        return CommandResult(message=f"Project trust for {project}: {'trusted' if trust[project] else 'untrusted'}.")
+        return CommandResult(
+            message=f"Project trust for {project}: {'trusted' if trust[project] else 'untrusted'}."
+        )
 
 
 class LoginCommand(SlashCommand):
@@ -478,7 +487,9 @@ class ReloadCommand(SlashCommand):
 
         skills = rescan_skills()
         templates = rescan_prompt_templates()
-        return CommandResult(message=f"Reloaded: {skills} skill(s), {templates} prompt template(s).")
+        return CommandResult(
+            message=f"Reloaded: {skills} skill(s), {templates} prompt template(s)."
+        )
 
 
 class ScopedModelsCommand(SlashCommand):
@@ -515,11 +526,15 @@ class ScopedModelsCommand(SlashCommand):
         if action == "remove":
             models = [m for m in models if m != value]
             self._save(models)
-            return CommandResult(message=f"Removed {value}. Scoped models: {', '.join(models) or '(none)'}")
+            return CommandResult(
+                message=f"Removed {value}. Scoped models: {', '.join(models) or '(none)'}"
+            )
         if action == "clear":
             self._save([])
             return CommandResult(message="Cleared scoped models.")
-        return CommandResult(success=False, message="Usage: /scoped-models [list|add|remove|clear] [model]")
+        return CommandResult(
+            success=False, message="Usage: /scoped-models [list|add|remove|clear] [model]"
+        )
 
 
 class PromptCommand(SlashCommand):

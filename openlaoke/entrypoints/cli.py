@@ -97,17 +97,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=[
-            "anthropic",
-            "openai",
-            "minimax",
-            "aliyun_coding_plan",
-            "ollama",
-            "lm_studio",
-            "openai_compatible",
-        ],
         default=None,
-        help="AI provider to use",
+        help="AI provider to use (any configured key, e.g. deepseek, ollama_cloud, openai)",
     )
     parser.add_argument(
         "--api-key",

@@ -389,9 +389,7 @@ class REPL:
             await self._run_api_loop()
             if self._interrupt_requested:
                 self._patch_dangling_tool_calls()
-                self.console.print(
-                    f"[{self._c('warning')}]Interrupted — context preserved.[/]"
-                )
+                self.console.print(f"[{self._c('warning')}]Interrupted — context preserved.[/]")
         except Exception as e:
             self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
             self.app_state.set_error(str(e))

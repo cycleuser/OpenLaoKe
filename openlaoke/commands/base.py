@@ -133,14 +133,14 @@ class ModelCommand(SlashCommand):
         if tokens[0] in ("list", "ls", "models"):
             target = tokens[1] if len(tokens) > 1 else cur_provider
             if target not in providers:
-                return CommandResult(success=False, message=f"Unknown provider: {target or '(none)'}")
+                return CommandResult(
+                    success=False, message=f"Unknown provider: {target or '(none)'}"
+                )
             models = await self._refresh(config, target)
             save_config(config)
             if not models:
                 return CommandResult(message=f"{target}: no models found.")
-            return CommandResult(
-                message=self._listing(target, models, cur_model, cur_provider)
-            )
+            return CommandResult(message=self._listing(target, models, cur_model, cur_provider))
 
         provider_name: str | None = None
         model_name: str | None = None
@@ -161,7 +161,9 @@ class ModelCommand(SlashCommand):
         if provider_name is None:
             provider_name = cur_provider
         if not provider_name:
-            return CommandResult(success=False, message="No provider selected. Use /model <provider>.")
+            return CommandResult(
+                success=False, message="No provider selected. Use /model <provider>."
+            )
 
         models = await self._refresh(config, provider_name)
         if model_name and model_name.isdigit():
@@ -172,7 +174,9 @@ class ModelCommand(SlashCommand):
                 )
             model_name = models[idx - 1]
         if not model_name:
-            model_name = providers[provider_name].get_default_model() or (models[0] if models else "")
+            model_name = providers[provider_name].get_default_model() or (
+                models[0] if models else ""
+            )
 
         state.active_provider = provider_name
         config.providers.active_provider = provider_name
@@ -322,7 +326,9 @@ class ExportCommand(SlashCommand):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write("\n".join(lines))
             else:
-                return CommandResult(success=False, message=f"Unknown format: {fmt}. Use json|markdown.")
+                return CommandResult(
+                    success=False, message=f"Unknown format: {fmt}. Use json|markdown."
+                )
         except OSError as exc:
             return CommandResult(success=False, message=f"Export failed: {exc}")
         return CommandResult(message=f"Session exported to {path}")
@@ -341,6 +347,8 @@ class ThemeCommand(SlashCommand):
                 message=f"Current theme: {current}\nAvailable: {', '.join(themes)}"
             )
         if args not in themes:
-            return CommandResult(success=False, message=f"Unknown theme: {args}. Use: {', '.join(themes)}")
+            return CommandResult(
+                success=False, message=f"Unknown theme: {args}. Use: {', '.join(themes)}"
+            )
         ctx.app_state.theme = args
         return CommandResult(message=f"Theme set to: {args}")

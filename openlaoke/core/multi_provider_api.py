@@ -108,6 +108,7 @@ def _is_local_url(url: str) -> bool:
 
 class MultiProviderClient:
     """HTTP client supporting multiple LLM providers."""
+
     def __init__(self, config: MultiProviderConfig, proxy: str | None = None) -> None:
         self.config = config
         self._proxy = proxy
