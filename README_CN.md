@@ -2,7 +2,7 @@
 
 > 遵循 [pi](https://github.com/earendil-works/pi) 的设计、用 Python 实现的终端编程智能体 —— 极简、快速、可扩展。
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -145,7 +145,7 @@ pip install openlaoke
 openlaoke
 ```
 
-需要 Python 3.11+。
+需要 Python 3.12+。
 
 ### API key
 

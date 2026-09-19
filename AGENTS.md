@@ -1,6 +1,6 @@
 # AGENTS.md - OpenLaoKe 开发指南
 
-OpenLaoKe 是 [pi](https://github.com/earendil-works/pi) 的 Python 实现（Python 3.11+），
+OpenLaoKe 是 [pi](https://github.com/earendil-works/pi) 的 Python 实现（Python 3.12+），
 一个极简、快速、可扩展的终端编程智能体。设计上刻意贴近 pi：内核小，能力向外长。
 
 ## 开发命令

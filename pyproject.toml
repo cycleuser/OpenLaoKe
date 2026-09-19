@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Open-source terminal AI coding assistant — a Python implementation of pi"
 readme = "README.md"
 license = "GPL-3.0-only"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "OpenLaoKe Contributors" },
 ]
@@ -19,7 +19,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
@@ -61,7 +60,7 @@ version = { attr = "openlaoke.__version__" }
 include = ["openlaoke*"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
@@ -69,7 +68,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 ignore = ["E501", "F601", "B027"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = false
 warn_return_any = true
 warn_unused_ignores = true
@@ -77,6 +76,7 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+norecursedirs = ["artifacts", "__pycache__", ".git", ".mypy_cache", ".ruff_cache", ".pytest_cache"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
