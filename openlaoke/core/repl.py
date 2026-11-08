@@ -122,6 +122,7 @@ class REPL:
         self._cache_monitor = CacheMonitor()
         app_state._cache_monitor = self._cache_monitor
         self._mcp_runtime = MCPRuntime()
+        self._scheduler_task: asyncio.Task | None = None
         app_state._mcp_runtime = self._mcp_runtime
         self._last_usage: Any = None
 
@@ -214,6 +215,7 @@ class REPL:
         self.api = MultiProviderClient(config, proxy=self._proxy)
 
         await self._start_mcp()
+        self._start_scheduler()
 
         try:
             while self._running:
@@ -223,6 +225,7 @@ class REPL:
         finally:
             for task in self._active_tasks:
                 task.cancel()
+            await self._stop_scheduler()
             await self._stop_mcp()
             if self.api:
                 await self.api.close()
@@ -253,6 +256,45 @@ class REPL:
             f"  [{self._c('muted')}]MCP: {len(added)} tool(s) from "
             f"{len(self._mcp_runtime.clients)} server(s)[/]"
         )
+
+    def _start_scheduler(self) -> None:
+        """Start the local schedule loop when the config enables it."""
+        if not self.app_config or not getattr(self.app_config, "enable_scheduler", False):
+            return
+        self._scheduler_task = asyncio.create_task(self._scheduler_loop())
+
+    async def _stop_scheduler(self) -> None:
+        task = getattr(self, "_scheduler_task", None)
+        if task is None:
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+        self._scheduler_task = None
+
+    async def _scheduler_loop(self, interval: float = 30.0) -> None:
+        from openlaoke.core.scheduler import get_scheduler
+
+        while self._running:
+            await asyncio.sleep(interval)
+            scheduler = get_scheduler(self.app_state)
+            due = scheduler.due()
+            for entry in due[:10]:
+                if entry.command:
+                    from openlaoke.core.task import get_task_manager
+
+                    manager = get_task_manager(self.app_state)
+                    await manager.run_bash(
+                        entry.command,
+                        description=f"scheduled: {entry.name}",
+                        auto_background_ms=0.0,
+                    )
+                    notice = f"[scheduled command '{entry.name}' started in the background]"
+                else:
+                    notice = f"[scheduled reminder '{entry.name}': {entry.prompt}]"
+                    self._input_queue.append(notice)
+                scheduler.mark_run(entry)
+                self.console.print(f"  [{self._c('muted')}]{notice}[/]")
 
     async def _stop_mcp(self) -> None:
         with contextlib.suppress(Exception):

@@ -43,6 +43,7 @@ class AppConfig:
     max_output_lines: int = 500
     enable_mcp: bool = True
     enable_batch: bool = False
+    enable_scheduler: bool = False
     mcp_servers: dict[str, Any] = field(default_factory=dict)
     custom_system_prompt: str = ""
     env_vars: dict[str, str] = field(default_factory=dict)
@@ -141,6 +142,7 @@ def load_config() -> AppConfig:
                 max_output_lines=data.get("max_output_lines", 500),
                 enable_mcp=data.get("enable_mcp", True),
                 enable_batch=bool(data.get("enable_batch", False)),
+                enable_scheduler=bool(data.get("enable_scheduler", False)),
                 mcp_servers=data.get("mcp_servers", {}),
                 custom_system_prompt=data.get("custom_system_prompt", ""),
                 env_vars=data.get("env_vars", {}),
@@ -204,6 +206,7 @@ def save_config(config: AppConfig) -> None:
         "max_output_lines": config.max_output_lines,
         "enable_mcp": config.enable_mcp,
         "enable_batch": config.enable_batch,
+        "enable_scheduler": config.enable_scheduler,
         "mcp_servers": config.mcp_servers,
         "custom_system_prompt": config.custom_system_prompt,
         "env_vars": config.env_vars,

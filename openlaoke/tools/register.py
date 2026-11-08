@@ -43,6 +43,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
     from openlaoke.tools.ls_tool import ListDirectoryTool
     from openlaoke.tools.memory_tool import MemoryTool
     from openlaoke.tools.read_tool import ReadTool
+    from openlaoke.tools.schedule_tool import ScheduleTool
     from openlaoke.tools.session_search_tool import (
         ConversationSearchTool,
         SessionSearchTool,
@@ -65,6 +66,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         WebSearchTool(),
         PanelTool(),
         OpenTool(),
+        ScheduleTool(),
         BgTool(),
         CodeModeTool(),
         CompileTool(),

@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Schedule` tool and `/schedule`** (`core/scheduler.py`): local entries in three
+  forms only - `every 30m`, `daily 09:00`, and a one-shot `2026-11-09T08:30` - that
+  either queue a prompt for the next turn or run a shell command in the background.
+  The list is a JSON file that survives restarts; the tick loop is off unless
+  `enable_scheduler` is set, and nothing fires while the session is closed.
 - **`Panel` tool** (`core/panel_render.py`): renders markdown to one self-contained
   HTML file with inline CSS - headings, lists, fenced code, inline code,
   bold/italic, links, quotes and rules. Raw HTML in the input is escaped and

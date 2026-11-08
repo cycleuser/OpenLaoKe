@@ -525,6 +525,22 @@ class StatsCommand(SlashCommand):
         return CommandResult(message="\n".join(lines))
 
 
+class ScheduleCommand(SlashCommand):
+    name = "schedule"
+    description = "Show the local schedule"
+    aliases = ["cron"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.scheduler import get_scheduler
+
+        scheduler = get_scheduler(ctx.app_state)
+        enabled = bool(getattr(getattr(ctx, "app_config", None), "enable_scheduler", False))
+        note = (
+            "" if enabled else "\n(scheduler loop is off: set enable_scheduler=true in the config)"
+        )
+        return CommandResult(message=scheduler.render() + note)
+
+
 class McpCommand(SlashCommand):
     name = "mcp"
     description = "Show MCP servers and the tools they contributed"
