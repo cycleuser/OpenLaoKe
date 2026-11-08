@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Generated tool and command reference** (`docs/tool-reference.md`,
+  `scripts/dump_tool_reference.py`): built from the registry and the command list, with
+  `--check` exiting non-zero when the file is stale, and a test that keeps it honest.
 - **Whitespace-tolerant `Edit`** (`utils/fuzzy.py`): when the exact text is not
   found, the tool retries ignoring trailing whitespace, then comparing with runs of
   whitespace collapsed; the replacement is applied at the matched span and the result
