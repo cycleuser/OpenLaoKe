@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`WebFetch` tool**: reads a URL through httpx (already a dependency) and returns the
+  page as text with scripts, styles and markup removed; the title is kept, output is
+  capped by `max_chars`, and a repeat of the same page collapses to a ledger pointer.
 - **Four-tier command risk** (`utils/permissions/command_risk.py`): shell lines are
   classified offline by blast radius - `safe`, `low` (destructive but bounded to the
   working directory: runs and is recorded in `risk_events`), `confirm` (target comes

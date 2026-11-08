@@ -35,7 +35,7 @@
 | todo | `Todo` + `/todos` | P4 | **已实现**（phase/lane/after/completely_blocked/external_blocker/assessment，done 必须带 evidence，否则降级 in_progress） |
 | bg | `Bg` | P7 | 待做（list/status/output/tail/cancel/wait/watch） |
 | batch | `Batch` | P8 | 待做（1-10 并发、禁止嵌套、默认关闭，靠配置开） |
-| webfetch | `WebFetch` | P12 | 待做 |
+| webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
 | websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
 | memory | `Memory` | P9 | 待做（remember/recall/search/list/forget/tag/link/related，本地 BM25） |
 | session_search | `SessionSearch` | P10 | 待做 |
