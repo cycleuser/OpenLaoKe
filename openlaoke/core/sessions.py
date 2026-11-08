@@ -181,6 +181,10 @@ class SessionManager:
                 app_state.risk_events = data["risk_events"]
             if isinstance(data.get("edit_stats"), dict):
                 app_state.edit_stats = data["edit_stats"]
+            if isinstance(data.get("tool_call_counts"), dict):
+                app_state.tool_call_counts = {
+                    str(key): int(value) for key, value in data["tool_call_counts"].items()
+                }
 
             cost_data = data.get("cost_info", {})
             if cost_data:

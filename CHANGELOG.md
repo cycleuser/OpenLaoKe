@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`/stats` dashboard**: one screen with tokens in/out, cache hit rate, estimated
+  cost, tool-call counts, edit totals, task-list state, running background jobs,
+  memory size and the recent cache hit rate. Tool calls are now counted per name and
+  persisted with the session.
+- **`scripts/productivity_report.py`**: Markdown report over the saved sessions -
+  activity per day, which directories saw the work, which tools carried it, and token
+  totals; no model calls, and sessions without reported usage show zero rather than a
+  guess.
 - **MCP support** (`core/mcp_client.py`, `core/mcp_runtime.py`, `/mcp`): servers
   configured under `mcp_servers` are started over stdio at session start, their
   `tools/list` becomes local tools named `mcp__server__tool`, and calls go through

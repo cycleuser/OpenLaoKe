@@ -81,7 +81,7 @@
 | 会话休眠释放派生缓存 | SESSION_HIBERNATION.md | P19 | 待做（单进程下等价物是释放快照与索引） |
 | 模糊匹配（替换/换位/加权） | jcode-fuzzy | P16 | 待做 |
 | 终端图片协议（kitty/sixel/iterm2） | jcode-terminal-image | P17 | 待做（纯 Python 可实现 Kitty 协议） |
-| 生产力仪表盘（扫会话出 Markdown+PNG） | jcode-productivity-core | P20 | 待做（Markdown 版） |
+| 生产力仪表盘 | jcode-productivity-core | P20 | **Markdown 版已实现**（`scripts/productivity_report.py` 扫会话出逐日活动/项目分布/工具用量；另加 `/stats` 会话内仪表盘）。PNG 版本未做 |
 | 开销门禁 | bench_startup.py 等 | P6 | **已实现**（`scripts/bench_startup.py`：冷解释器测入口模块导入耗时与峰值 RSS，超预算非零退出，可 `--max-ms/--max-mb/--json`；仓库无 CI，以脚本退出码当门禁） |
 
 ## 四、命令层

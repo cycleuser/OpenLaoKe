@@ -1356,6 +1356,9 @@ class REPL:
 
     async def _execute_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
         tool = self.registry.get(tool_use.name)
+        self.app_state.tool_call_counts[tool_use.name] = (
+            self.app_state.tool_call_counts.get(tool_use.name, 0) + 1
+        )
         if not tool:
             self.console.print(f"  [{self._c('muted')}]Unknown tool: {tool_use.name}[/]")
             return ToolResultBlock(

@@ -455,6 +455,76 @@ class EditsCommand(SlashCommand):
         return CommandResult(message=stats.render())
 
 
+class StatsCommand(SlashCommand):
+    name = "stats"
+    description = "Session dashboard: tokens, tools, edits, tasks, memory"
+    aliases = ["dashboard"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.edit_stats import EditStats
+        from openlaoke.core.todo_engine import TodoStore
+
+        state = ctx.app_state
+        lines: list[str] = []
+
+        usage = state.token_usage
+        total_in = int(getattr(usage, "input_tokens", 0) or 0)
+        total_out = int(getattr(usage, "output_tokens", 0) or 0)
+        cache_read = int(getattr(usage, "cache_read_tokens", 0) or 0) or int(
+            getattr(usage, "cache_read_input_tokens", 0) or 0
+        )
+        cache_write = int(getattr(usage, "cache_creation_tokens", 0) or 0)
+        hit = f"{cache_read / total_in:.0%}" if total_in else "n/a"
+        lines.append(
+            f"Tokens: {total_in:,} in / {total_out:,} out; cache read {cache_read:,} "
+            f"({hit}), written {cache_write:,}"
+        )
+
+        cost = state.cost_info
+        input_cost = float(getattr(cost, "input_cost", 0) or 0)
+        output_cost = float(getattr(cost, "output_cost", 0) or 0)
+        if input_cost or output_cost:
+            lines.append(f"Estimated cost: ${input_cost + output_cost:.4f}")
+
+        counts = state.tool_call_counts or {}
+        if counts:
+            ordered = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:8]
+            lines.append(
+                f"Tool calls: {sum(counts.values())} "
+                + ", ".join(f"{name}×{count}" for name, count in ordered)
+            )
+        else:
+            lines.append("Tool calls: none yet")
+
+        edits = EditStats.from_dict(state.edit_stats)
+        lines.append(
+            f"Edits: {edits.files_created} created, {edits.files_modified} modified, "
+            f"+{edits.lines_added}/-{edits.lines_removed}"
+        )
+
+        todos = TodoStore(state.todo_state)
+        lines.append(
+            f"Tasks: {len(todos.open_items())} open, {len(todos.items)} total, "
+            f"{len(todos.blocked_items())} blocked"
+        )
+
+        running = [
+            task for task in state.get_all_tasks() if task.id and task.status.value == "running"
+        ]
+        lines.append(f"Background jobs: {len(running)} running, {len(state.tasks)} total")
+
+        memory = getattr(state, "_memory_store", None)
+        if memory is not None:
+            lines.append(f"Memory notes: {len(memory.entries)}")
+
+        monitor = getattr(state, "_cache_monitor", None)
+        if monitor is not None and getattr(monitor, "readings", None):
+            lines.append(f"Cache hit rate (recent): {monitor.avg_hit_rate():.0%}")
+
+        lines.append(f"Session: {state.session_id} ({len(state.messages)} messages)")
+        return CommandResult(message="\n".join(lines))
+
+
 class McpCommand(SlashCommand):
     name = "mcp"
     description = "Show MCP servers and the tools they contributed"
