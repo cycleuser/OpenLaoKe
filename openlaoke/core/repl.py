@@ -32,6 +32,7 @@ from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.core.cache_monitor import CacheMonitor
 from openlaoke.core.config_wizard import get_proxy_url
+from openlaoke.core.engine import assistant_turn, tool_result_message
 from openlaoke.core.mcp_runtime import MCPRuntime
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.prompt_input import (
@@ -709,13 +710,7 @@ class REPL:
                 and isinstance(msg, SystemMessage)
                 and msg.tool_use_id
             ):
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": msg.tool_use_id,
-                        "content": msg.content,
-                    }
-                )
+                messages.append(tool_result_message(msg.tool_use_id, msg.content))
 
         runtime_blocks: list[str] = []
         system_prompt = self._cache_guard.system_prompt
@@ -1104,22 +1099,7 @@ class REPL:
                         # Defer persistence to the explicit _persist() call at
                         # turn end — avoids a blocking disk write per iteration.
                         self.app_state.add_message(msg, persist=False)
-                        assistant_msg_dict: dict[str, Any] = {"role": "assistant"}
-                        if content_text:
-                            assistant_msg_dict["content"] = content_text
-                        if tool_uses:
-                            assistant_msg_dict["tool_calls"] = [
-                                {
-                                    "id": tu.id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tu.name,
-                                        "arguments": json.dumps(tu.input),
-                                    },
-                                }
-                                for tu in tool_uses
-                            ]
-                        messages.append(assistant_msg_dict)
+                        messages.append(assistant_turn(content_text, tool_uses))
 
                     if not tool_uses:
                         if (
@@ -1149,13 +1129,7 @@ class REPL:
                                     if isinstance(result.content, str)
                                     else str(result.content)
                                 )
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_use.id,
-                                    "content": result_content,
-                                }
-                            )
+                            messages.append(tool_result_message(tool_use.id, result_content))
                             self._record_tool_result(tool_use.id, result_content)
                     else:
                         for tool_use in tool_uses:
@@ -1189,11 +1163,11 @@ class REPL:
                                     f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
                                 )
                                 messages.append(
-                                    {
-                                        "role": "tool",
-                                        "tool_call_id": tool_use.id,
-                                        "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
-                                    }
+                                    tool_result_message(
+                                        tool_use.id,
+                                        f"ERROR: Tool '{tool_use.name}' has been called "
+                                        f"{failed_tool_calls[tool_key]} times with the same parameters.",
+                                    )
                                 )
                                 continue
 
@@ -1204,13 +1178,7 @@ class REPL:
                                 if isinstance(result.content, str)
                                 else str(result.content)
                             )
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_use.id,
-                                    "content": result_content,
-                                }
-                            )
+                            messages.append(tool_result_message(tool_use.id, result_content))
                             self._record_tool_result(tool_use.id, result_content)
 
                     self.app_state._persist()
@@ -1272,22 +1240,7 @@ class REPL:
                                 "content", response.content
                             )
 
-                    response_dict: dict[str, Any] = {"role": "assistant"}
-                    if response.content:
-                        response_dict["content"] = response.content
-                    if response.tool_uses:
-                        response_dict["tool_calls"] = [
-                            {
-                                "id": tu.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tu.name,
-                                    "arguments": json.dumps(tu.input),
-                                },
-                            }
-                            for tu in response.tool_uses
-                        ]
-                    messages.append(response_dict)
+                    messages.append(assistant_turn(response.content or "", response.tool_uses))
                     self.app_state.add_message(
                         AssistantMessage(
                             role=MessageRole.ASSISTANT,
@@ -1331,11 +1284,11 @@ class REPL:
                                 f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
                             )
                             messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_use.id,
-                                    "content": f"ERROR: Tool '{tool_use.name}' has been called {failed_tool_calls[tool_key]} times with the same parameters.",
-                                }
+                                tool_result_message(
+                                    tool_use.id,
+                                    f"ERROR: Tool '{tool_use.name}' has been called "
+                                    f"{failed_tool_calls[tool_key]} times with the same parameters.",
+                                )
                             )
                             continue
 
@@ -1346,13 +1299,7 @@ class REPL:
                             if isinstance(result.content, str)
                             else str(result.content)
                         )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_use.id,
-                                "content": result_content,
-                            }
-                        )
+                        messages.append(tool_result_message(tool_use.id, result_content))
                         self._record_tool_result(tool_use.id, result_content)
 
                     self.app_state._persist()

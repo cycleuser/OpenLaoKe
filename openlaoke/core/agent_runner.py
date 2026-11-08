@@ -115,8 +115,13 @@ async def run_subagent(
 
     On failure/cancellation the partial state is saved and a summary of the
     partial output is returned so the parent can reuse it.
+
+    The loop itself lives in :mod:`openlaoke.core.engine`; this function only
+    supplies the sub-agent's system prompt, its resumable state file and the
+    partial-result contract the parent expects.
     """
     from openlaoke.core.config_wizard import get_proxy_url
+    from openlaoke.core.engine import STOP_ERROR, EnginePolicy, run_loop
     from openlaoke.core.multi_provider_api import MultiProviderClient
     from openlaoke.core.tool import ToolRegistry
     from openlaoke.tools import register_all_tools
@@ -132,137 +137,65 @@ async def run_subagent(
     proxy = get_proxy_url(app_config) if app_config else None
 
     api = MultiProviderClient(config, proxy=proxy)
-
     system_prompt = _build_system_prompt(app_state)
 
-    result_parts: list[str] = []
-    messages: list[dict[str, Any]] = []
-    iteration = 0
     state_path = _state_path(task_state)
+    messages: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+    offset = 0
 
     if resume_from:
         saved = _load_subagent_state(os.path.expanduser(resume_from))
         if saved:
             messages = list(saved.get("messages", []))
-            result_parts = list(saved.get("result_parts", []))
-            iteration = int(saved.get("iteration", 0))
-        if not messages:
-            messages = [{"role": "user", "content": prompt}]
-    elif not messages:
+            text_parts = list(saved.get("result_parts", []))
+            offset = int(saved.get("iteration", 0))
+    if not messages:
         messages = [{"role": "user", "content": prompt}]
 
-    _save_subagent_state(state_path, prompt, messages, result_parts, iteration, "running")
+    def save(iteration: int, current: list[dict[str, Any]], parts: list[str], status: str) -> None:
+        _save_subagent_state(state_path, prompt, current, parts, offset + iteration, status)
 
-    max_iterations = 50
+    save(0, messages, text_parts, "running")
+
+    policy = EnginePolicy(
+        max_iterations=max(1, 50 - offset),
+        tools=registry.get_all_for_prompt(),
+        save_state=save,
+    )
+
     try:
-        while iteration < max_iterations:
-            iteration += 1
-
-            response, usage, cost = await api.send_message(
-                system_prompt=system_prompt,
-                messages=messages,
-                tools=registry.get_all_for_prompt() if iteration < max_iterations - 1 else None,
-                model=app_state.session_config.model,
-            )
-
-            app_state.accumulate_tokens(usage)
-            app_state.accumulate_cost(cost)
-
-            if response.content:
-                result_parts.append(response.content)
-
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": response.content,
-                    **(
-                        {
-                            "tool_calls": [
-                                {
-                                    "id": tu.id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tu.name,
-                                        "arguments": json.dumps(tu.input, ensure_ascii=False),
-                                    },
-                                }
-                                for tu in response.tool_uses
-                            ]
-                        }
-                        if response.tool_uses
-                        else {}
-                    ),
-                }
-            )
-
-            if not response.tool_uses:
-                break
-
-            for tool_use in response.tool_uses:
-                tool = registry.get(tool_use.name)
-                if not tool:
-                    messages.append(
-                        {
-                            "role": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Unknown tool: {tool_use.name}",
-                        }
-                    )
-                    continue
-
-                from openlaoke.core.tool import ToolContext
-
-                ctx = ToolContext(
-                    app_state=app_state,
-                    tool_use_id=tool_use.id,
-                )
-
-                validation = tool.validate_input(tool_use.input)
-                if not validation.result:
-                    messages.append(
-                        {
-                            "role": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Validation error: {validation.message}",
-                        }
-                    )
-                    continue
-
-                result = await tool.safe_call(ctx, **tool_use.input)
-                messages.append(
-                    {
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": result.content
-                        if isinstance(result.content, str)
-                        else str(result.content),
-                    }
-                )
-
-                _save_subagent_state(
-                    state_path, prompt, messages, result_parts, iteration, "running"
-                )
-
-    except asyncio.CancelledError:
-        _save_subagent_state(state_path, prompt, messages, result_parts, iteration, "cancelled")
-        raise
-    except Exception as e:
-        _save_subagent_state(
-            state_path, prompt, messages, result_parts, iteration, "failed", str(e)
+        result = await run_loop(
+            app_state=app_state,
+            api=api,
+            registry=registry,
+            system_prompt=system_prompt,
+            messages=messages,
+            policy=policy,
+            model=app_state.session_config.model,
         )
-        partial = _partial_summary(result_parts, str(e), state_path)
-        return partial
+    except asyncio.CancelledError:
+        _save_subagent_state(state_path, prompt, messages, text_parts, offset, "cancelled")
+        raise
     finally:
         await api.close()
 
-    _save_subagent_state(state_path, prompt, messages, result_parts, iteration, "completed")
+    if result.stop_reason == STOP_ERROR:
+        _save_subagent_state(
+            state_path, prompt, result.messages, result.text_parts, offset, "failed", result.error
+        )
+        return _partial_summary(result.text_parts, result.error, state_path)
+
+    _save_subagent_state(
+        state_path, prompt, result.messages, result.text_parts, offset, "completed"
+    )
     try:
         if os.path.exists(state_path):
             os.remove(state_path)
     except OSError:
         pass
 
-    return "\n".join(result_parts) if result_parts else "(no output)"
+    return "\n".join(part for part in result.text_parts if part) or "(no output)"
 
 
 def _partial_summary(result_parts: list[str], error: str, state_path: str) -> str:

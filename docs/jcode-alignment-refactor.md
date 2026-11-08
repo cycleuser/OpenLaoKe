@@ -218,6 +218,18 @@ class AgentEngine:
 
 风险提示：这是 P0–P6 里唯一一处"行为面可能变"的改动，务必先补 characterization 测试再动。
 
+**落地情况（2026-11-08）**：`core/engine.py` 已建，形态与上面草案不同——采用
+`EnginePolicy`（回调）+ `run_loop`（函数）而不是持有 api/registry 的类，理由是同一次运行里
+需要换策略而不需要换对象。已迁入的两处：`agent_runner.run_subagent` 与
+`cli._run_non_interactive`，两者现在共用消息整形、工具分派、校验、允许清单与中止信号，
+子代理此前使用的 `role="tool_result"` 内部格式一并改成规范的 `role="tool"`。
+
+`repl._run_api_loop` **没有**整体搬到引擎：它同时负责流式渲染、重试、guard、压缩、钩子、
+结果账本与只读并发，一次性重写等于把这些行为同时改一遍，无法在没有真实 provider 的情况下验证。
+它现在改用引擎导出的 `assistant_turn` 与 `tool_result_message`，消息形状与两个非交互循环
+由同一份代码产出，测试 `tests/test_engine.py` 与 `tests/test_subagent_engine.py` 锁住形状与语义。
+剩下的"REPL 退化为渲染层"留给后续单独一轮，与 P15 的泳道 worker 一起做更划算。
+
 ### P2：token 账本与会话级上限（1 天）
 
 新增 `core/context_budget.py`：

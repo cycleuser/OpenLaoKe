@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Shared agent loop** (`core/engine.py`): one implementation of the request /
+  tool-call / result cycle, used now by the sub-agent runner and the non-interactive
+  CLI. It adds what the two small loops were missing - argument validation, a tool
+  allow-list, a permission callback, an abort signal and a state-save hook - and the
+  REPL uses its `assistant_turn` / `tool_result_message` helpers so the message shapes
+  cannot drift apart again.
+
+### Fixed
+- Sub-agent tool results were sent as `{"role": "tool_result"}`, an internal shape the
+  provider adapters had to special-case; they now use the canonical
+  `{"role": "tool", "tool_call_id": ...}` like the interactive loop.
 - **`Browser` tool** (optional extension, off by default): open a page, read its
   rendered text, list links, or run JavaScript. It only registers when both
   `enable_browser` is set and `selenium` imports; a missing dependency is reported

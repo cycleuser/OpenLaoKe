@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import sys
 from typing import Any
@@ -286,6 +285,7 @@ async def _run_interactive(app_state, config) -> None:
 
 
 async def _run_non_interactive(prompt: str, app_state, config) -> None:
+    from openlaoke.core.engine import STOP_ERROR, EnginePolicy, run_loop
     from openlaoke.core.system_prompt import build_system_prompt
     from openlaoke.core.tool import ToolRegistry
     from openlaoke.tools.register import register_all_tools
@@ -299,102 +299,33 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     proxy_url = get_proxy_url(config)
     api = MultiProviderClient(config.providers, proxy=proxy_url)
 
-    user_msg = UserMessage(role=MessageRole.USER, content=prompt)
-    app_state.add_message(user_msg)
+    app_state.add_message(UserMessage(role=MessageRole.USER, content=prompt))
 
     system_prompt = build_system_prompt(app_state, registry.get_all_for_prompt())
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
-    tools = registry.get_all_for_prompt()
 
-    max_iterations = 50
-    iteration = 0
+    policy = EnginePolicy(
+        max_iterations=50,
+        tools=registry.get_all_for_prompt(),
+        on_text=lambda text: print(text),
+    )
 
     try:
-        while iteration < max_iterations:
-            iteration += 1
-
-            response, usage, cost = await api.send_message(
-                system_prompt=system_prompt,
-                messages=messages,
-                tools=tools if iteration < max_iterations - 1 else None,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-            )
-
-            app_state.accumulate_tokens(usage)
-            app_state.accumulate_cost(cost)
-
-            if response.content:
-                print(response.content)
-
-            if not response.tool_uses:
-                break
-
-            # Record the assistant's tool-call turn so the next API request
-            # has a well-formed [assistant(tool_calls), tool(result)] sequence.
-            # Strict OpenAI-compatible providers (DeepSeek) reject a tool-role
-            # message that isn't preceded by an assistant message with tool_calls.
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": response.content or "",
-                    "tool_calls": [
-                        {
-                            "id": tu.id,
-                            "type": "function",
-                            "function": {
-                                "name": tu.name,
-                                "arguments": json.dumps(tu.input, ensure_ascii=False),
-                            },
-                        }
-                        for tu in response.tool_uses
-                    ],
-                }
-            )
-
-            for tool_use in response.tool_uses:
-                tool = registry.get(tool_use.name)
-                if not tool:
-                    messages.append(
-                        {
-                            "role": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Unknown tool: {tool_use.name}",
-                        }
-                    )
-                    continue
-
-                from openlaoke.core.tool import ToolContext
-
-                ctx = ToolContext(app_state=app_state, tool_use_id=tool_use.id)
-
-                validation = tool.validate_input(tool_use.input)
-                if not validation.result:
-                    messages.append(
-                        {
-                            "role": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Validation error: {validation.message}",
-                        }
-                    )
-                    continue
-
-                result = await tool.safe_call(ctx, **tool_use.input)
-                messages.append(
-                    {
-                        "role": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": result.content
-                        if isinstance(result.content, str)
-                        else str(result.content),
-                    }
-                )
-
-    except Exception as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        sys.exit(1)
+        result = await run_loop(
+            app_state=app_state,
+            api=api,
+            registry=registry,
+            system_prompt=system_prompt,
+            messages=messages,
+            policy=policy,
+            send_kwargs={"max_tokens": config.max_tokens, "temperature": config.temperature},
+        )
     finally:
         await api.close()
+
+    if result.stop_reason == STOP_ERROR:
+        console.print(f"\n[bold red]Error:[/bold red] {result.error}")
+        sys.exit(1)
 
     print(f"\n--- Session cost: ${app_state.cost_info.total_cost:.4f} ---")
 

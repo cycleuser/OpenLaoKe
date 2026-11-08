@@ -63,6 +63,7 @@
 
 | 机制 | jcode 出处 | OpenLaoKe 阶段 | 状态 |
 | --- | --- | --- | --- |
+| 三套 agent 循环合一 | 自定 | P1 | **部分实现**（`core/engine.py` 提供 `run_loop`/`EnginePolicy`/`execute_tool` 与统一的消息整形；`agent_runner` 与 `cli._run_non_interactive` 已迁入，子代理的 `tool_result` 旧格式一并修正；REPL 保留流式外壳但复用同一套消息与工具结果形状） |
 | 会话上下文上限 / effective_budget | HARNESS.md:87 | P2 | **已实现**（2b85890） |
 | token 账本用真实 usage | token-accounting-reliability.md | P2 | **已实现** |
 | 结果账本：内容去重 + 超大先扣住 | agentgrep + accept_large_output | P3 | **已实现**（`core/result_ledger.py`，重复内容换指针，超 1500 token 先摘要并报价，`accept_large_output` 才发全文） |
