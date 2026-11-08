@@ -42,7 +42,7 @@
 | conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
 | skill_manage | `InvokeSkill` + `/skills` | — | 已有，P16 补 manage 子命令 |
 | mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
-| codemode | `CodeMode` | P14 | 待做（Python 受限沙箱） |
+| codemode | `CodeMode` | P14 | **已实现**（`core/code_sandbox.py`：独立解释器 `python -I -B`、环境变量清空、open 限定工作区、屏蔽进程/网络/FFI 模块与 os.system、CPU/内存 rlimit、超时杀进程、输出上限；文档写明这不是对抗恶意代码的边界） |
 | swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
 | panel / side_panel | `Panel` | P17 | 待做（终端内 markdown 面板 → 落 HTML 供浏览器打开） |
 | open | `Open` | P17 | 待做 |
