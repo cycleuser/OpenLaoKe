@@ -343,6 +343,20 @@ def _parse_amount(raw: str) -> int:
         raise ValueError(f"Not a token amount: {raw}") from exc
 
 
+class CacheCommand(SlashCommand):
+    name = "cache"
+    description = "Show prompt-cache hit rate and prefix stability"
+    aliases = ["kv"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        monitor = getattr(ctx.app_state, "_cache_monitor", None)
+        if monitor is None:
+            return CommandResult(
+                message="Cache monitor is not attached to this session (it starts with the REPL)."
+            )
+        return CommandResult(message=monitor.render())
+
+
 class TodosCommand(SlashCommand):
     name = "todos"
     description = "Show the session task list"

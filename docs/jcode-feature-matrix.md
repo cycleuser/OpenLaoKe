@@ -70,19 +70,19 @@
 | 命令风险四级（safe/low/confirm/catastrophic） | jcode-command-risk | P5 | **已实现**（`utils/permissions/command_risk.py` 按爆炸半径判定，Bash 新增 `justification` 入参，catastrophic 硬拒且 justification 解不开，low 放行并留痕） |
 | 安全两层权限（无 always-deny） | SAFETY_SYSTEM.md:83 | P5 | 待做 |
 | 软中断：生成中入队、安全点注入 | SOFT_INTERRUPT.md | P6 | 部分（已有输入队列，补 urgent 标记与安全点） |
-| 生命周期钩子 8 键 + 独立超时 + pre_tool 闸门 + post_tool_feedback | HOOKS.md:8 | P6 | 待做（现有 hook_system 键名不同，要对齐） |
+| 生命周期钩子 8 键 + 独立超时 + pre_tool 闸门 + post_tool_feedback | HOOKS.md:8 | P6 | **已实现**（19 个扩展点，新增 turn_start/turn_end/tool_gate/tool_feedback，旧名 pre_tool/post_tool/pre_tool_transform/post_tool_feedback 为别名；每个钩子可设 timeout_ms，async 钩子用 asyncio.wait_for 截断并计入 stats；tool_gate 在权限检查之前可否决，tool_feedback 的文本入输入队列交给模型） |
 | 工具超时自动转后台（auto_background_timeout_ms=3000） | TOOL_BACKGROUND_TIMEOUT.md | P7 | 待做 |
 | 编辑统计（增删行，按会话落盘） | SESSION_EDIT_STATS.md | P7 | 待做 |
 | 计划图上限 MAX_PLAN_ITEMS=1024 | jcode-plan | P15 | 待做 |
 | swarm 输出预算（报告 4000 字、尾部 1000 token） | jcode-swarm-core | P15 | 待做 |
-| KV cache 监视与未命中分类 | HARNESS.md:131 | P6 | 待做 |
+| KV cache 监视与未命中分类 | HARNESS.md:131 | P6 | **已实现**（`core/cache_monitor.py`：按 model/system/tools/历史消息做前缀指纹，排除最新一条避免每轮误报；读 provider 的 cache_read/cache_creation 与 OpenAI 的 prompt_tokens_details.cached_tokens；`/cache` 报告命中率、前缀是否变化、连续未命中） |
 | schema 方言集中归一 | jcode-schema-dialect | P3 | 部分（已有 schema 消毒，要集中成一层） |
 | 会话级环境变量（替换而非合并，作业快照） | HARNESS.md:3-86 | P7 | 待做 |
 | 会话休眠释放派生缓存 | SESSION_HIBERNATION.md | P19 | 待做（单进程下等价物是释放快照与索引） |
 | 模糊匹配（替换/换位/加权） | jcode-fuzzy | P16 | 待做 |
 | 终端图片协议（kitty/sixel/iterm2） | jcode-terminal-image | P17 | 待做（纯 Python 可实现 Kitty 协议） |
 | 生产力仪表盘（扫会话出 Markdown+PNG） | jcode-productivity-core | P20 | 待做（Markdown 版） |
-| 开销门禁进 CI | check_*_budget.py、bench_startup.py、memory_regression_gate.sh | P6→P20 | 待做 |
+| 开销门禁 | bench_startup.py 等 | P6 | **已实现**（`scripts/bench_startup.py`：冷解释器测入口模块导入耗时与峰值 RSS，超预算非零退出，可 `--max-ms/--max-mb/--json`；仓库无 CI，以脚本退出码当门禁） |
 
 ## 四、命令层
 

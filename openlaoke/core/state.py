@@ -97,6 +97,7 @@ class AppState:
     _persist_path: str | None = None
     _insomnia_engine: Any = None
     _cache_guard: Any = None
+    _cache_monitor: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:

@@ -30,6 +30,7 @@ from rich.text import Text
 
 from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.cache_guard import CacheGuard
+from openlaoke.core.cache_monitor import CacheMonitor
 from openlaoke.core.config_wizard import get_proxy_url
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.prompt_input import (
@@ -114,6 +115,9 @@ class REPL:
         self._cache_guard = CacheGuard(app_state)
         app_state._cache_guard = self._cache_guard
         self._cache_split = PromptCacheSplit()
+        self._cache_monitor = CacheMonitor()
+        app_state._cache_monitor = self._cache_monitor
+        self._last_usage: Any = None
 
         # Interrupt + queued-input state (B1/B2 harness fixes):
         # - _agent_task: the running agent loop, cancellable via Ctrl+C
@@ -521,6 +525,25 @@ class REPL:
             return
         self.app_state.compact_state["used_tokens"] = total
         self.app_state.compact_state["used_source"] = "provider_usage"
+        self._last_usage = usage
+        if self._cache_monitor is not None:
+            self._cache_monitor.observe(usage, model=self.app_state.session_config.model)
+
+    async def _fire_turn_hook(self, hook_type: str, **fields: Any) -> None:
+        """Run a turn-level hook; a hook never gets to break the loop."""
+        if not self._hook_system.has_hooks(hook_type):
+            return
+        from openlaoke.core.hook_system import HookInput
+
+        payload = HookInput(
+            session_id=self.app_state.session_id,
+            provider_name=self.app_state.multi_provider_config.active_provider
+            if self.app_state.multi_provider_config
+            else "",
+            model_name=self.app_state.session_config.model,
+            metadata=dict(fields),
+        )
+        await self._hook_system.execute_hooks_async(hook_type, payload)
 
     async def _run_api_loop(self) -> None:
         max_iterations = self._resolve_max_iterations()
@@ -657,6 +680,14 @@ class REPL:
                 )
                 messages.append({"role": "user", "content": queued})
 
+            turn_start_index = len(messages)
+            await self._fire_turn_hook(
+                "turn_start",
+                turn=iteration,
+                messages=len(messages),
+                context_cap=self.app_state.context_cap,
+            )
+
             from openlaoke.core.compact.fast_pruner import fast_prune, fast_prune_aggressive
             from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
 
@@ -711,6 +742,15 @@ class REPL:
                         )
 
             tools = self.registry.get_all_for_prompt()
+
+            # Fingerprint the cacheable prefix every turn: a change here is what
+            # makes the next request pay full price, and it is invisible in the UI.
+            self._cache_monitor.note_request(
+                model=self.app_state.session_config.model,
+                system_prompt=system_prompt,
+                tool_names=[str(defn.get("name", "")) for defn in tools],
+                messages=messages,
+            )
 
             # Apply cache_control markers for Anthropic providers
             if self.api:
@@ -1198,6 +1238,25 @@ class REPL:
             except Exception as e:
                 self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
                 break
+            finally:
+                # turn_end fires however the iteration leaves, including the
+                # break paths above, so a counter that listens for it can never
+                # drift out of sync with turn_start.
+                usage = self._last_usage
+                await self._fire_turn_hook(
+                    "turn_end",
+                    turn=iteration,
+                    tool_calls=sum(
+                        1
+                        for msg in messages[turn_start_index:]
+                        if msg.get("role") == "assistant" and msg.get("tool_calls")
+                    ),
+                    input_tokens=int(getattr(usage, "input_tokens", 0) or 0) if usage else 0,
+                    output_tokens=int(getattr(usage, "output_tokens", 0) or 0) if usage else 0,
+                    cache_read_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+                    if usage
+                    else 0,
+                )
 
     async def _execute_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
         tool = self.registry.get(tool_use.name)
@@ -1242,6 +1301,30 @@ class REPL:
                 )
             if hook_output.tool_args is not None:
                 tool_input = hook_output.tool_args
+
+        # The veto point sits after argument rewriting and before the
+        # permission check, so a gate sees the final arguments and the user is
+        # never asked to approve a call a plugin already refused.
+        if self._hook_system.has_hooks("tool_gate"):
+            gate_input = HookInput(
+                tool_name=tool_use.name,
+                tool_args=dict(tool_input),
+                session_id=hook_input.session_id,
+                provider_name=hook_input.provider_name,
+                model_name=hook_input.model_name,
+            )
+            gate_output = self._hook_system.gate(gate_input)
+            if gate_output.tool_args is not None:
+                tool_input = gate_output.tool_args
+                hook_input.tool_args = dict(tool_input)
+            if gate_output.handled:
+                reason = (
+                    gate_output.tool_result
+                    or gate_output.metadata.get("reason")
+                    or "Blocked by a tool_gate hook."
+                )
+                self.console.print(f"  [{self._c('warning')}]Blocked:[/] {tool_use.name}")
+                return ToolResultBlock(tool_use_id=tool_use.id, content=str(reason), is_error=True)
 
         self._read_loop_tracker.notify_tool_call(tool_use.name)
 
@@ -1361,6 +1444,29 @@ class REPL:
                     tool_use_id=result.tool_use_id,
                     content=hook_output_after.tool_result,
                     is_error=result.is_error,
+                )
+
+        # A plugin's feedback is queued as a user-role remark rather than
+        # injected into the tool result, so it survives into the next turn
+        # without pretending the tool said it.
+        if self._hook_system.has_hooks("tool_feedback"):
+            feedback_input = HookInput(
+                tool_name=tool_use.name,
+                tool_args=dict(tool_input),
+                tool_result=result.content if isinstance(result.content, str) else "",
+                tool_error=(result.content if isinstance(result.content, str) else "")
+                if result.is_error
+                else "",
+                session_id=hook_input.session_id,
+                provider_name=hook_input.provider_name,
+                model_name=hook_input.model_name,
+            )
+            feedback_output = self._hook_system.execute_hooks("tool_feedback", feedback_input)
+            if feedback_output.feedback:
+                note = f"[hook feedback on {tool_use.name}] {feedback_output.feedback}"
+                self._input_queue.append(note)
+                self.console.print(
+                    f"  [{self._c('muted')}]hook feedback queued ({len(feedback_output.feedback)} chars)[/]"
                 )
 
         rendered = tool.render_result(result)

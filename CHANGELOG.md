@@ -7,6 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Turn and tool hook points** (`core/hook_system.py`): `turn_start`, `turn_end`,
+  `tool_gate` and `tool_feedback` join the existing extension points, and the names
+  jcode uses (`pre_tool`, `post_tool`, `pre_tool_transform`, `post_tool_feedback`)
+  register as aliases of them. `tool_gate` runs after argument rewriting and before
+  the permission check, so a plugin can veto a call the user is never asked about;
+  `tool_feedback` text is queued for the model instead of being injected into the
+  tool result. Every hook may carry `timeout_ms`: async hooks are bounded by
+  `asyncio.wait_for`, sync ones are measured, and overruns are counted in the stats.
+- **Prompt-cache monitor** (`core/cache_monitor.py`, `/cache`): fingerprints the
+  cacheable prefix (model, system prompt, tool names, all but the newest message) so
+  a change that will invalidate the provider cache is visible, and reads the
+  provider's cache counters back to report hit rate, tokens served from cache, and
+  runs of turns without a cache read.
+- **Startup cost gate** (`scripts/bench_startup.py`): imports the entry module in a
+  cold interpreter, reports import time, peak RSS and the largest imported modules,
+  and exits non-zero over budget.
 - **`WebFetch` tool**: reads a URL through httpx (already a dependency) and returns the
   page as text with scripts, styles and markup removed; the title is kept, output is
   capped by `max_chars`, and a repeat of the same page collapses to a ledger pointer.
