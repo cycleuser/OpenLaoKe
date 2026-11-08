@@ -105,8 +105,10 @@ async def check_anthropic_mock() -> None:
             and msg.content == "PONG"
             and body.get("system") == "You are a test harness."
         )
-        print(f"[Anthropic format] {'PASS' if ok else 'FAIL'}  path={RECEIVED.get('path')} "
-              f"text={msg.content!r} in={usage.input_tokens} out={usage.output_tokens}")
+        print(
+            f"[Anthropic format] {'PASS' if ok else 'FAIL'}  path={RECEIVED.get('path')} "
+            f"text={msg.content!r} in={usage.input_tokens} out={usage.output_tokens}"
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"[Anthropic format] FAIL {type(exc).__name__}: {str(exc)[:120]}")
     finally:

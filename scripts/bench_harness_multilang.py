@@ -43,11 +43,79 @@ PROMPTS = {
 
 STOP = {
     "en": {"i", "am", "a", "an", "and", "the", "with", "for", "english", "assistant", "name", "my"},
-    "fr": {"je", "suis", "un", "une", "et", "le", "la", "les", "pour", "avec", "français", "appelle", "mon"},
-    "de": {"ich", "bin", "ein", "eine", "und", "der", "die", "das", "mit", "für", "deutsch", "heiße", "mein"},
-    "es": {"soy", "un", "una", "y", "el", "la", "los", "con", "para", "español", "llamo", "mi", "asistente"},
-    "pt": {"sou", "um", "uma", "e", "o", "a", "com", "para", "português", "chamo", "meu", "assistente"},
-    "it": {"sono", "un", "una", "e", "il", "la", "con", "per", "italiano", "chiamo", "mio", "assistente"},
+    "fr": {
+        "je",
+        "suis",
+        "un",
+        "une",
+        "et",
+        "le",
+        "la",
+        "les",
+        "pour",
+        "avec",
+        "français",
+        "appelle",
+        "mon",
+    },
+    "de": {
+        "ich",
+        "bin",
+        "ein",
+        "eine",
+        "und",
+        "der",
+        "die",
+        "das",
+        "mit",
+        "für",
+        "deutsch",
+        "heiße",
+        "mein",
+    },
+    "es": {
+        "soy",
+        "un",
+        "una",
+        "y",
+        "el",
+        "la",
+        "los",
+        "con",
+        "para",
+        "español",
+        "llamo",
+        "mi",
+        "asistente",
+    },
+    "pt": {
+        "sou",
+        "um",
+        "uma",
+        "e",
+        "o",
+        "a",
+        "com",
+        "para",
+        "português",
+        "chamo",
+        "meu",
+        "assistente",
+    },
+    "it": {
+        "sono",
+        "un",
+        "una",
+        "e",
+        "il",
+        "la",
+        "con",
+        "per",
+        "italiano",
+        "chiamo",
+        "mio",
+        "assistente",
+    },
 }
 
 
@@ -70,21 +138,48 @@ def detect(text: str) -> str:
 
 
 def run_one(
-    harness: str, model: str, lang: str, base_url: str, pi_provider: str, max_tokens: int, timeout: int
+    harness: str,
+    model: str,
+    lang: str,
+    base_url: str,
+    pi_provider: str,
+    max_tokens: int,
+    timeout: int,
 ) -> dict:
     prompt = PROMPTS[lang]
     if harness == "openlaoke":
         cmd = [
-            sys.executable, "-m", "openlaoke",
-            "--provider", "openai_compatible", "--base-url", base_url,
-            "--api-key", "not-needed", "--model", model,
-            "--max-tokens", str(max_tokens), "--cwd", "/tmp", prompt,
+            sys.executable,
+            "-m",
+            "openlaoke",
+            "--provider",
+            "openai_compatible",
+            "--base-url",
+            base_url,
+            "--api-key",
+            "not-needed",
+            "--model",
+            model,
+            "--max-tokens",
+            str(max_tokens),
+            "--cwd",
+            "/tmp",
+            prompt,
         ]
     else:
         cmd = [
-            "pi", "-p", "--provider", pi_provider, "--model", model,
-            "--no-skills", "--no-context-files", "--no-extensions",
-            "--no-prompt-templates", "--no-themes", prompt,
+            "pi",
+            "-p",
+            "--provider",
+            pi_provider,
+            "--model",
+            model,
+            "--no-skills",
+            "--no-context-files",
+            "--no-extensions",
+            "--no-prompt-templates",
+            "--no-themes",
+            prompt,
         ]
     start = time.time()
     out = ""
@@ -127,13 +222,24 @@ def main() -> None:
     for harness in args.harnesses:
         for model in args.models:
             for lang in args.langs:
-                r = run_one(harness, model, lang, args.base_url, args.pi_provider, args.max_tokens, args.timeout)
+                r = run_one(
+                    harness,
+                    model,
+                    lang,
+                    args.base_url,
+                    args.pi_provider,
+                    args.max_tokens,
+                    args.timeout,
+                )
                 with out_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(r, ensure_ascii=False) + "\n")
                 results.setdefault((harness, model), {})[lang] = r["detected"]
                 mark = "OK " if r["detected"] == lang else ".. "
-                print(f"{harness:10} {model:32} {lang} {mark}{r['detected']:6} {r['seconds']:5.1f}s "
-                      f"{r['text'][:36]!r}", flush=True)
+                print(
+                    f"{harness:10} {model:32} {lang} {mark}{r['detected']:6} {r['seconds']:5.1f}s "
+                    f"{r['text'][:36]!r}",
+                    flush=True,
+                )
 
     print("\n================ language match matrix ================")
     for harness in args.harnesses:

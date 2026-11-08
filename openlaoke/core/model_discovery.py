@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -122,7 +123,7 @@ async def _load_catalog() -> dict:
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.get(_CATALOG_URL)
             resp.raise_for_status()
-            data = resp.json()
+            data: dict[str, Any] = resp.json()
         _CATALOG_CACHE.parent.mkdir(parents=True, exist_ok=True)
         _CATALOG_CACHE.write_text(json.dumps(data), encoding="utf-8")
         _catalog_memory = data

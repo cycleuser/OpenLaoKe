@@ -12,7 +12,9 @@ def run_py(work: Path, name: str) -> str:
     if not f.exists():
         return ""
     try:
-        p = subprocess.run(["python3", str(f)], cwd=work, capture_output=True, text=True, timeout=60)
+        p = subprocess.run(
+            ["python3", str(f)], cwd=work, capture_output=True, text=True, timeout=60
+        )
         return (p.stdout + p.stderr).strip()
     except Exception as e:  # noqa: BLE001
         return f"ERR {e}"
@@ -36,7 +38,7 @@ def evaluate(r) -> tuple[bool, str]:
         o = run_py(work, "fib.py")
         nums = re.findall(r"\d+", o)
         seq = ["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"]
-        ok = any(nums[i:i+10] == seq for i in range(len(nums)))
+        ok = any(nums[i : i + 10] == seq for i in range(len(nums)))
         return ok, "seq ok" if ok else f"out={o[:40]!r}"
     if t == "T4_report_md":
         f = work / "report.md"
@@ -87,24 +89,26 @@ for h in harnesses:
 print("\n== 按 任务 汇总 (OK / 8) ==")
 for t in tasks:
     ok = sum(1 for r in rows if r["task"] == t and r["ok"])
-    print(f"  {t:16} {ok}/{len(harnesses)*len(models)*len(langs)}")
+    print(f"  {t:16} {ok}/{len(harnesses) * len(models) * len(langs)}")
 
 print("\n== 按 模型 汇总 (OK / 20) ==")
 for m in models:
     ok = sum(1 for r in rows if r["model"] == m and r["ok"])
-    print(f"  {m:32} {ok}/{len(harnesses)*len(langs)*len(tasks)}")
+    print(f"  {m:32} {ok}/{len(harnesses) * len(langs) * len(tasks)}")
 
 print("\n== 按 外壳 汇总 (OK / 20) ==")
 for h in harnesses:
     ok = sum(1 for r in rows if r["harness"] == h and r["ok"])
-    print(f"  {h:10} {ok}/{len(models)*len(langs)*len(tasks)}")
+    print(f"  {h:10} {ok}/{len(models) * len(langs) * len(tasks)}")
 
 print("\n== 按 语言 汇总 ==")
 for lg in langs:
     ok = sum(1 for r in rows if r["lang"] == lg and r["ok"])
-    print(f"  {lg}: {ok}/{len(harnesses)*len(models)*len(tasks)}")
+    print(f"  {lg}: {ok}/{len(harnesses) * len(models) * len(tasks)}")
 
 print("\n== 失败的格子明细 ==")
 for r in rows:
     if not r["ok"]:
-        print(f"  {r['harness']:9} {r['model'][:22]:22} {r['lang']} {r['task']:16} {r['seconds']:6.1f}s  {r['note']}")
+        print(
+            f"  {r['harness']:9} {r['model'][:22]:22} {r['lang']} {r['task']:16} {r['seconds']:6.1f}s  {r['note']}"
+        )

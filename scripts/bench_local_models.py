@@ -42,7 +42,11 @@ async def plain(base_url: str, model: str, max_tokens: int) -> str:
             temperature=0.0,
         )
         text = (msg.content or "").strip().replace("\n", " ")
-        return f"OK out={usage.output_tokens} {text[-40:]!r}" if "PONG" in text else f"?? {text[:40]!r}"
+        return (
+            f"OK out={usage.output_tokens} {text[-40:]!r}"
+            if "PONG" in text
+            else f"?? {text[:40]!r}"
+        )
     except Exception as exc:  # noqa: BLE001
         return f"FAIL {type(exc).__name__}: {str(exc)[:60]}"
     finally:
@@ -72,10 +76,22 @@ async def stream(base_url: str, model: str, max_tokens: int) -> str:
 def tools(base_url: str, model: str, max_tokens: int) -> str:
     with tempfile.TemporaryDirectory() as d:
         cmd = [
-            sys.executable, "-m", "openlaoke",
-            "--provider", "openai_compatible", "--base-url", base_url,
-            "--api-key", "not-needed", "--model", model,
-            "--max-tokens", str(max_tokens), "--yes", "--cwd", d,
+            sys.executable,
+            "-m",
+            "openlaoke",
+            "--provider",
+            "openai_compatible",
+            "--base-url",
+            base_url,
+            "--api-key",
+            "not-needed",
+            "--model",
+            model,
+            "--max-tokens",
+            str(max_tokens),
+            "--yes",
+            "--cwd",
+            d,
             "Create a file named out.txt containing exactly: hello pi. Then run cat out.txt",
         ]
         try:

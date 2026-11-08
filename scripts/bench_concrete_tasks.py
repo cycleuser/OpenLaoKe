@@ -71,27 +71,63 @@ def run_one(harness: str, model: str, lang: str, task: str) -> dict:
 
     prompt = PROMPTS[task][lang]
     if harness == "openlaoke":
-        cmd = [DEV, "-m", "openlaoke", "--provider", "openai_compatible", "--base-url", BASE_URL,
-               "--api-key", "not-needed", "--model", model, "--max-tokens", "2000", "--yes",
-               "--cwd", str(work), prompt]
+        cmd = [
+            DEV,
+            "-m",
+            "openlaoke",
+            "--provider",
+            "openai_compatible",
+            "--base-url",
+            BASE_URL,
+            "--api-key",
+            "not-needed",
+            "--model",
+            model,
+            "--max-tokens",
+            "2000",
+            "--yes",
+            "--cwd",
+            str(work),
+            prompt,
+        ]
         cwd = REPO
     else:
-        cmd = ["pi", "-p", "--provider", "ollama-local", "--model", model,
-               "--no-skills", "--no-context-files", "--no-extensions",
-               "--no-prompt-templates", "--no-themes", prompt]
+        cmd = [
+            "pi",
+            "-p",
+            "--provider",
+            "ollama-local",
+            "--model",
+            model,
+            "--no-skills",
+            "--no-context-files",
+            "--no-extensions",
+            "--no-prompt-templates",
+            "--no-themes",
+            prompt,
+        ]
         cwd = str(work)
     start = time.time()
     try:
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600, check=False)
+        proc = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=600, check=False
+        )
         out, err = proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
         out, err = "", "TIMEOUT"
     elapsed = round(time.time() - start, 1)
-    (work / "run.log").write_text(f"$ {' '.join(cmd)}\n\n--- stdout ---\n{out}\n--- stderr ---\n{err}\n", encoding="utf-8")
+    (work / "run.log").write_text(
+        f"$ {' '.join(cmd)}\n\n--- stdout ---\n{out}\n--- stderr ---\n{err}\n", encoding="utf-8"
+    )
 
     return {
-        "harness": harness, "model": model, "lang": lang, "task": task,
-        "seconds": elapsed, "workdir": str(work), "stdout": out[:4000],
+        "harness": harness,
+        "model": model,
+        "lang": lang,
+        "task": task,
+        "seconds": elapsed,
+        "workdir": str(work),
+        "stdout": out[:4000],
         "artifacts": sorted(p.name for p in work.iterdir() if p.name != "run.log"),
     }
 
@@ -109,8 +145,11 @@ def main() -> None:
                     r = run_one(harness, model, lang, task)
                     with RESULTS.open("a", encoding="utf-8") as fh:
                         fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-                    print(f"[{n}/{total}] {harness:9} {model:32} {lang} {task:16} "
-                          f"{r['seconds']:6.1f}s  artifacts={r['artifacts']}", flush=True)
+                    print(
+                        f"[{n}/{total}] {harness:9} {model:32} {lang} {task:16} "
+                        f"{r['seconds']:6.1f}s  artifacts={r['artifacts']}",
+                        flush=True,
+                    )
     print(f"\nDone. Artifacts under {OUT_ROOT}")
 
 

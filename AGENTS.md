@@ -13,7 +13,7 @@ DEV=/Users/fred/miniconda3/envs/dev/bin/python
 $DEV -m pytest                  # 测试（asyncio_mode=auto）
 $DEV -m pytest tests/test_pi_commands.py -v   # 单文件
 $DEV -m ruff check . && $DEV -m ruff format . # 检查+格式化
-$DEV -m mypy                    # 类型检查（非严格）
+$DEV -m mypy openlaoke           # 类型检查（非严格，需显式目标）
 $DEV -m openlaoke ...           # 运行
 ```
 
@@ -44,7 +44,7 @@ openlaoke/
 │   ├── repl.py            # 交互循环、流式输出、工具分发
 │   ├── agent_runner.py    # 与提供商无关的智能体回合
 │   ├── multi_provider_api.py  # 多提供商客户端
-│   ├── sessions.py        # 会话持久化（JSONL）
+│   ├── sessions.py        # 会话持久化（整文件 JSON，version 字段标识格式）
 │   ├── snapshot/          # 按回合的文件 + 对话快照（fork/rewind）
 │   ├── compact/           # fast_pruner 纯算法剪枝 + 摘要
 │   ├── skill_system.py    # Agent Skills 加载器（SKILL.md）
@@ -82,4 +82,6 @@ openlaoke/
 - 工具 `call()` 方法用 `async def`
 - 版本在 `openlaoke/__init__.py`（`__version__`）
 - License：GPLv3（见 `LICENSE`）；pi 为 MIT，版权见 `THIRD_PARTY_NOTICES.md`
-- 保持 pi 对齐：新增功能优先用技能 / prompt 模板 / 扩展点，而不是往内核堆工具
+- 保持 pi 对齐：能用技能 / prompt 模板 / 扩展点解决的能力，不要往内核加工具。
+  例外是可靠性机制：上下文预算、工具结果账本、任务状态这类**替模型做节制的东西**允许进内核，
+  理由见 `docs/jcode-alignment-refactor.md`

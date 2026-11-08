@@ -191,13 +191,15 @@ class EngineConfig:
     prune: bool = True
     retry: bool = True
     parallel_readonly: bool = True
-    auto_continue: int = 0          # P4 才用，先占位
+    auto_continue: int = 0  # P4 才用，先占位
+
 
 @dataclass(slots=True)
 class EngineResult:
     stop_reason: Literal["no_tool_calls", "max_turns", "guard", "error"]
     turns: int
     usage: TokenUsage
+
 
 class AgentEngine:
     def __init__(self, api, registry, state, budget, *, config: EngineConfig) -> None: ...
@@ -226,7 +228,7 @@ class ContextBudget:
     model_window: int
     session_cap: int | None
     global_cap: int | None
-    effective_budget: int        # min(窗口, 会话上限或全局上限)
+    effective_budget: int  # min(窗口, 会话上限或全局上限)
     used_tokens: int
     source: Literal["provider_usage", "estimate"]
 ```

@@ -462,8 +462,12 @@ class REPL:
                 )
         self.app_state._persist()
 
+    def _resolve_max_iterations(self) -> int:
+        steps = getattr(self.app_state, "max_steps", 0) or 0
+        return steps if steps > 0 else 100
+
     async def _run_api_loop(self) -> None:
-        max_iterations = 100
+        max_iterations = self._resolve_max_iterations()
         iteration = 0
         failed_tool_calls: dict[str, int] = {}
 

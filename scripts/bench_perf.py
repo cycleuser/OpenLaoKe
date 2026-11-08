@@ -32,7 +32,9 @@ SIZES = {
 
 def post(path: str, payload: dict):
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(f"{HOST}{path}", data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        f"{HOST}{path}", data=data, headers={"Content-Type": "application/json"}
+    )
     return urllib.request.urlopen(req, timeout=600)
 
 
@@ -100,12 +102,16 @@ def main() -> None:
                 "load_s": round(m["load_ns"] / 1e9, 2),
             }
             r = results[(model, size)]
-            print(f"  {size:14} prompt={r['prompt_tokens']:5} out={r['output_tokens']:4} "
-                  f"prefill={r['prefill_tps']:7.1f} t/s  decode={r['decode_tps']:6.1f} t/s  "
-                  f"ttft={r['ttft_s']:.2f}s  total={r['total_s']:.2f}s  load={r['load_s']:.2f}s",
-                  flush=True)
+            print(
+                f"  {size:14} prompt={r['prompt_tokens']:5} out={r['output_tokens']:4} "
+                f"prefill={r['prefill_tps']:7.1f} t/s  decode={r['decode_tps']:6.1f} t/s  "
+                f"ttft={r['ttft_s']:.2f}s  total={r['total_s']:.2f}s  load={r['load_s']:.2f}s",
+                flush=True,
+            )
     with open("/tmp/perf_results.json", "w", encoding="utf-8") as fh:
-        json.dump({f"{k[0]}|{k[1]}": v for k, v in results.items()}, fh, ensure_ascii=False, indent=2)
+        json.dump(
+            {f"{k[0]}|{k[1]}": v for k, v in results.items()}, fh, ensure_ascii=False, indent=2
+        )
     print("\nSaved /tmp/perf_results.json")
 
 

@@ -463,25 +463,6 @@ class CacheGuard:
             "Give specific, accurate answers only."
         )
 
-        if user_input:
-            extras: list[str] = []
-            try:
-                from openlaoke.agent.context import compose_runtime_block
-
-                runtime = compose_runtime_block()
-                if runtime:
-                    extras.append(runtime)
-            except Exception:
-                pass
-
-            from openlaoke.core.distilled_templates import DistilledTemplateManager
-
-            manager = DistilledTemplateManager()
-            context = manager.build_context(user_input, max_tokens=200)
-            if context:
-                extras.append(context)
-
-            if extras:
-                return f"{base}\n\n" + "\n\n".join(extras)
+        return base
 
         return base

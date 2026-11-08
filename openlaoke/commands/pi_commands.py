@@ -70,7 +70,7 @@ def _last_assistant_text(app_state: AppState) -> str:
     from openlaoke.types.core_types import AssistantMessage
 
     for message in reversed(app_state.messages):
-        if isinstance(message, AssistantMessage) and getattr(message, "content", ""):
+        if isinstance(message, AssistantMessage) and message.content:
             return str(message.content)
     return ""
 
@@ -444,14 +444,14 @@ class LoginCommand(SlashCommand):
             return CommandResult(message="\n".join(lines))
 
         key = parts[0]
-        provider = providers.get(key)
-        if provider is None:
+        target = providers.get(key)
+        if target is None:
             return CommandResult(success=False, message=f"Unknown provider: {key}")
         if len(parts) < 2 or not parts[1].strip():
             return CommandResult(
                 message=f"Provider {key} configured. Usage: /login {key} <api-key>"
             )
-        provider.api_key = parts[1].strip()
+        target.api_key = parts[1].strip()
         config.providers.active_provider = key
         save_config(config)
         return CommandResult(message=f"Saved API key for {key}.")
