@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`ApplyPatch` tool**: applies a multi-file patch given either as the
+  `*** Begin Patch` envelope (`*** Add File` / `*** Update File` with `@@` hunks /
+  `*** Delete File`) or as a unified diff. Every hunk is matched in memory before
+  anything is written, so a patch that cannot apply completely changes nothing; paths
+  outside the workspace, adding an existing file and updating a missing one are all
+  refused. Patches feed the same edit counters as `Write` and `Edit`.
 - **`Batch` tool** (off by default): 1-10 independent calls in one turn, run
   concurrently. Destructive tools are refused because a batch bypasses the
   interactive permission prompt, nesting a batch is refused, and `/batch on|off`

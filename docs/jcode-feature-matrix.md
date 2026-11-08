@@ -28,8 +28,8 @@
 | --- | --- | --- | --- |
 | read | `Read` | — | 已有 |
 | write | `Write` | — | 已有 |
-| edit（含 `multiedit` 别名） | `Edit` | P11 | 已有，补 replace_all 与多替换原子性 |
-| apply_patch（含 `patch` 别名） | `ApplyPatch` | P11 | 待做（Codex `*** Begin Patch` + unified diff） |
+| edit（含 `multiedit`） | `Edit` + `ApplyPatch` | P11 | **已实现**（`Edit` 有 `replace_all`；一次多处、跨文件改写由 `ApplyPatch` 承担并保证全或无，不再单设 `multiedit` 别名） |
+| apply_patch | `ApplyPatch` | P11 | **已实现**（Codex `*** Begin Patch` 信封与 unified diff 两种格式；先在内存里校验全部 hunk，全部通过才落盘；越界路径、已存在的新增、缺失的更新一律拒绝） |
 | agentgrep（grep/find/outline） | `Grep` 三模式 | P3 | **已实现**（find 按名匹配、outline 列定义、grep 结果标注所属定义、paths_only、max_regions） |
 | bash | `Bash` | — | 已有，P7 补后台化与超时接管 |
 | todo | `Todo` + `/todos` | P4 | **已实现**（phase/lane/after/completely_blocked/external_blocker/assessment，done 必须带 evidence，否则降级 in_progress） |

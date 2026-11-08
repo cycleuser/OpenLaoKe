@@ -31,6 +31,7 @@ def _has_powershell() -> bool:
 
 def register_all_tools(registry: ToolRegistry) -> None:
     """Register the built-in tools for this host."""
+    from openlaoke.tools.apply_patch_tool import ApplyPatchTool
     from openlaoke.tools.bg_tool import BgTool
     from openlaoke.tools.edit_tool import EditTool
     from openlaoke.tools.glob_tool import GlobTool
@@ -52,6 +53,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         TodoTool(),
         WebFetchTool(),
         BgTool(),
+        ApplyPatchTool(),
     ]
     from openlaoke.utils.config import load_config
 
