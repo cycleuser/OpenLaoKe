@@ -128,6 +128,9 @@ class TaskManager:
 
         env = self.app_state.snapshot_env()
 
+        # start_new_session detaches the child so Ctrl+C on the REPL does not
+        # also kill a job that was deliberately backgrounded. It is POSIX-only.
+        extra: dict[str, Any] = {"start_new_session": True} if os.name == "posix" else {}
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -135,7 +138,7 @@ class TaskManager:
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=working_dir or self.app_state.get_cwd(),
                 env=env,
-                start_new_session=True,
+                **extra,
             )
         except Exception as e:
             state.status = TaskStatus.FAILED

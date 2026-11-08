@@ -532,6 +532,33 @@ class REPL:
         if self._cache_monitor is not None:
             self._cache_monitor.observe(usage, model=self.app_state.session_config.model)
 
+    def _drain_task_notices(self) -> list[str]:
+        """Report background tasks that finished since the last turn.
+
+        Without this the model has to remember to poll, which it does not; the
+        notice costs one short line and turns a silently finished job into
+        something the next turn can act on.
+        """
+        seen = getattr(self, "_notified_tasks", None)
+        if seen is None:
+            seen = set()
+            self._notified_tasks = seen
+
+        notices: list[str] = []
+        for task in self.app_state.get_all_tasks():
+            if task.id in seen or not task.end_time:
+                continue
+            status = task.status.value
+            if status in ("running", "pending"):
+                continue
+            seen.add(task.id)
+            code = "" if task.exit_code is None else f", exit code {task.exit_code}"
+            notices.append(
+                f"[background task {task.id} {status}{code}: {task.description[:80]}. "
+                f"Read it with Bg(action='tail', task_id='{task.id}').]"
+            )
+        return notices
+
     def _memory_digest(self) -> str:
         """A short index of stored notes, so the model knows what it can ask for.
 
@@ -709,6 +736,9 @@ class REPL:
                     UserMessage(role=MessageRole.USER, content=queued), persist=False
                 )
                 messages.append({"role": "user", "content": queued})
+
+            for notice in self._drain_task_notices():
+                messages.append({"role": "user", "content": notice, "system_injected": True})
 
             turn_start_index = len(messages)
             await self._fire_turn_hook(
