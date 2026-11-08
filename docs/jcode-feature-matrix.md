@@ -43,7 +43,7 @@
 | skill_manage | `InvokeSkill` + `/skill` | P16 | **已实现**（list / reload / activate / `info <name>` / `off <name>` / clear） |
 | mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
 | codemode | `CodeMode` | P14 | **已实现**（`core/code_sandbox.py`：独立解释器 `python -I -B`、环境变量清空、open 限定工作区、屏蔽进程/网络/FFI 模块与 os.system、CPU/内存 rlimit、超时杀进程、输出上限；文档写明这不是对抗恶意代码的边界） |
-| swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
+| swarm | `Swarm` | P15 | **已实现**（`core/swarm.py`：最多 6 条泳道并发跑子代理，start 立即返回、await 带超时、status 看状态与结果、note/messages 共享板、cancel 收尾；`contextvars` 记当前泳道，Write/Edit/ApplyPatch 的每次落盘都记进触碰台账并归属到具体 worker） |
 | panel / side_panel | `Panel` | P17 | **已实现**（`core/panel_render.py` 自带一个小 markdown 子集渲染器与内联 CSS，输出单文件 HTML，raw HTML 先转义、javascript: 链接不生成；可 `open_in_browser`） |
 | open | `Open` | P17 | **已实现**（仅 http(s) URL 与工作区内路径，其他 scheme 与越界路径一律拒绝；按平台用 open/xdg-open/start） |
 | browser | `Browser` | P18 | **可选扩展**（需 `enable_browser=true` 且 selenium 可导入，二者缺一就不注册；open/text/links/script 四个动作；缺依赖时报清楚原因并建议用 WebFetch） |
@@ -74,8 +74,8 @@
 | 生命周期钩子 8 键 + 独立超时 + pre_tool 闸门 + post_tool_feedback | HOOKS.md:8 | P6 | **已实现**（19 个扩展点，新增 turn_start/turn_end/tool_gate/tool_feedback，旧名 pre_tool/post_tool/pre_tool_transform/post_tool_feedback 为别名；每个钩子可设 timeout_ms，async 钩子用 asyncio.wait_for 截断并计入 stats；tool_gate 在权限检查之前可否决，tool_feedback 的文本入输入队列交给模型） |
 | 工具超时自动转后台（auto_background_timeout_ms=3000） | TOOL_BACKGROUND_TIMEOUT.md | P7 | **已实现**（`Bash` 超过阈值即转后台并返回 task id，显式 timeout 才杀进程；日志写文件，不再按块 `_persist`） |
 | 编辑统计（增删行，按会话落盘） | SESSION_EDIT_STATS.md | P7 | **已实现**（`core/edit_stats.py` 用序列比对算真实增删行，Write/Edit 记账，`/edits` 查看，随会话持久化） |
-| 计划图上限 MAX_PLAN_ITEMS=1024 | jcode-plan | P15 | 待做 |
-| swarm 输出预算（报告 4000 字、尾部 1000 token） | jcode-swarm-core | P15 | 待做 |
+| 计划图上限 MAX_PLAN_ITEMS=1024 | jcode-plan | P15 | **已实现**（`core/todo_engine.py:MAX_PLAN_ITEMS`，超出时拒绝新增并回一条 warning） |
+| swarm 输出预算 | jcode-swarm-core | P15 | **已实现**（`Swarm.report(max_chars=4000)` 按泳道均分，单条超长截断并注明，整份再兜一次上限） |
 | KV cache 监视与未命中分类 | HARNESS.md:131 | P6 | **已实现**（`core/cache_monitor.py`：按 model/system/tools/历史消息做前缀指纹，排除最新一条避免每轮误报；读 provider 的 cache_read/cache_creation 与 OpenAI 的 prompt_tokens_details.cached_tokens；`/cache` 报告命中率、前缀是否变化、连续未命中） |
 | schema 方言集中归一 | jcode-schema-dialect | P3 | 部分（已有 schema 消毒，要集中成一层） |
 | 会话级环境变量（作业快照） | HARNESS.md:3-86 | P7 | **已实现**（`AppState.snapshot_env/set_env_var/unset_env_var`；每个作业在启动时取一次快照，之后改会话变量不影响已运行作业） |

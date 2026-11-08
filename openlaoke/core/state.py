@@ -105,6 +105,8 @@ class AppState:
     _memory_store: Any = None
     _mcp_runtime: Any = None
     _scheduler: Any = None
+    _swarm: Any = None
+    _swarm_board: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:

@@ -48,6 +48,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         ConversationSearchTool,
         SessionSearchTool,
     )
+    from openlaoke.tools.swarm_tool import SwarmTool
     from openlaoke.tools.todo_tool import TodoTool
     from openlaoke.tools.viewer_tools import OpenTool, PanelTool
     from openlaoke.tools.webfetch_tool import WebFetchTool
@@ -67,6 +68,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         PanelTool(),
         OpenTool(),
         ScheduleTool(),
+        SwarmTool(),
         BgTool(),
         CodeModeTool(),
         CompileTool(),

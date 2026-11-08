@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Swarm` tool** (`core/swarm.py`): up to six workers on separate lanes, each a
+  sub-agent with its own context. `start` returns immediately with worker ids,
+  `await` collects them with a timeout, `status` shows state and results, `note` and
+  `messages` are a shared board, `cancel` stops the rest. Every write made by a worker
+  is attributed to that worker through a context variable and recorded in a touch
+  ledger, so "two lanes edited the same file" is visible instead of inferred. The
+  final report is bounded and split evenly between lanes.
 - **Shared agent loop** (`core/engine.py`): one implementation of the request /
   tool-call / result cycle, used now by the sub-agent runner and the non-interactive
   CLI. It adds what the two small loops were missing - argument validation, a tool

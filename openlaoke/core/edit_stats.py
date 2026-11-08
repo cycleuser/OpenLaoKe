@@ -123,3 +123,11 @@ def record_edit(app_state: Any, path: str, before: str, after: str, created: boo
     stats = EditStats.from_dict(getattr(app_state, "edit_stats", None))
     stats.record(path, before, after, created)
     app_state.edit_stats = stats.to_dict()
+
+    # When workers run in lanes, the touch ledger is how the parent finds out
+    # that two of them wrote the same file.
+    board = getattr(app_state, "_swarm_board", None)
+    if board is not None:
+        from openlaoke.core.swarm import CURRENT_MEMBER
+
+        board.touch(path, CURRENT_MEMBER.get())
