@@ -175,6 +175,8 @@ class SessionManager:
                 app_state.guard_state = data["guard_state"]
             if data.get("compact_state"):
                 app_state.compact_state = data["compact_state"]
+            if data.get("todo"):
+                app_state.todo_state = data["todo"]
 
             cost_data = data.get("cost_info", {})
             if cost_data:

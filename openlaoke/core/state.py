@@ -84,6 +84,7 @@ class AppState:
     thinking_enabled: bool = True
     guard_state: dict[str, Any] = field(default_factory=dict)
     compact_state: dict[str, Any] = field(default_factory=dict)
+    todo_state: dict[str, Any] = field(default_factory=dict)
     language: str = "en"
     caveman_mode: bool = False
     max_tool_history: int = 4096
@@ -250,6 +251,7 @@ class AppState:
                 "insomnia_log_path": self.insomnia_log_path,
                 "guard_state": self.guard_state,
                 "compact_state": self.compact_state,
+                "todo": self.todo_state,
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

@@ -343,6 +343,18 @@ def _parse_amount(raw: str) -> int:
         raise ValueError(f"Not a token amount: {raw}") from exc
 
 
+class TodosCommand(SlashCommand):
+    name = "todos"
+    description = "Show the session task list"
+    aliases = ["todo"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.todo_engine import TodoStore
+
+        store = TodoStore(ctx.app_state.todo_state)
+        return CommandResult(message=store.render(detail=True))
+
+
 class ResumeCommand(SlashCommand):
     name = "resume"
     description = "Resume the most recent session"

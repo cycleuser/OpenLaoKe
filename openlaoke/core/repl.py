@@ -105,6 +105,8 @@ class REPL:
         from openlaoke.core.result_ledger import ResultLedger
 
         self._ledger = ResultLedger()
+        self._poke_budget = 3
+        self._poke_signature = ""
         self._output_compressor = TerminalOutputCompressor()
         self._tool_validator = ToolCallValidator()
         self._hook_system = HookRegistry.get()
@@ -469,6 +471,43 @@ class REPL:
     def _resolve_max_iterations(self) -> int:
         steps = getattr(self.app_state, "max_steps", 0) or 0
         return steps if steps > 0 else 100
+
+    def _todo_auto_continue(self, messages: list[Any]) -> bool:
+        """Wake the model when it stops with tasks still open.
+
+        The budget is per task-list state, not per session: any change to the
+        list refills it, and an unchanged list gets at most three pokes so a
+        stuck model cannot burn turns forever.  Blocked tasks never consume it.
+        """
+        from openlaoke.core.todo_engine import MAX_AUTO_POKES, TodoStore
+
+        store = TodoStore(self.app_state.todo_state)
+        open_items = store.open_items()
+        if not open_items:
+            self._poke_signature = ""
+            self._poke_budget = MAX_AUTO_POKES
+            return False
+
+        signature = store.signature()
+        if signature != self._poke_signature:
+            self._poke_signature = signature
+            self._poke_budget = MAX_AUTO_POKES
+        if self._poke_budget <= 0:
+            return False
+        if not store.actionable_items() and not any(item.external_blocker for item in open_items):
+            return False
+
+        self._poke_budget -= 1
+        prompt = store.digest()
+        messages.append({"role": "user", "content": prompt, "system_injected": True})
+        self.app_state.add_message(
+            UserMessage(role=MessageRole.USER, content=prompt), persist=False
+        )
+        self.console.print(
+            f"  [{self._c('muted')}](auto-continue: {len(open_items)} task(s) open, "
+            f"{self._poke_budget} reminder(s) left)[/]"
+        )
+        return True
 
     def _note_context_usage(self, usage: Any) -> None:
         """Record what the provider says this turn actually occupied."""
@@ -912,6 +951,8 @@ class REPL:
                         ):
                             self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
                             break
+                        if self._todo_auto_continue(messages):
+                            continue
                         break
 
                     # Parallel dispatch for read-only tool batches

@@ -37,6 +37,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
     from openlaoke.tools.invoke_skill_tool import InvokeSkillTool
     from openlaoke.tools.ls_tool import ListDirectoryTool
     from openlaoke.tools.read_tool import ReadTool
+    from openlaoke.tools.todo_tool import TodoTool
     from openlaoke.tools.write_tool import WriteTool
 
     tools = [
@@ -46,6 +47,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         GrepTool(),
         GlobTool(),
         ListDirectoryTool(),
+        TodoTool(),
     ]
     if _has_bash():
         from openlaoke.tools.bash_tool import BashTool

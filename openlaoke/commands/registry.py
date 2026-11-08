@@ -15,6 +15,7 @@ from openlaoke.commands.base import (
     SlashCommand,
     ThemeCommand,
     ThinkingCommand,
+    TodosCommand,
 )
 from openlaoke.commands.pi_commands import (
     ChangelogCommand,
@@ -54,6 +55,7 @@ def register_all() -> None:
         SettingsCommand(),
         ThemeCommand(),
         ThinkingCommand(),
+        TodosCommand(),
         ChangelogCommand(),
         CloneCommand(),
         CopyCommand(),

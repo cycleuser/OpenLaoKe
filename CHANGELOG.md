@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Session context budget** (`core/context_budget.py`, `/context`): the effective
+  budget is the smaller of the model window and a per-session cap, the cap may
+  raise or lower the global `context_cap_tokens` but never exceeds the window, and
+  the provider's reported usage is preferred over estimation. `/context 24k` sets a
+  cap for this session, `/context clear` removes it.
+- **Result ledger** (`core/result_ledger.py`): a tool result the model has already
+  been shown collapses to a pointer naming the earlier call and the token count
+  saved; a result above 1500 tokens is returned as head+tail with its cost stated,
+  and only sent in full when the call repeats with `accept_large_output=true`.
+- **Structure-aware search**: `Grep` now annotates each hit with the class or
+  function containing it and its line range, and gained `mode='find'` (match file
+  names) and `mode='outline'` (list a file's definitions), plus `paths_only` and
+  `max_regions` for cheap passes.
+- **`intent` on every tool**: each call carries a short label for why it was made,
+  shown at the end of the tool line.
+- **`Todo` tool and `/todos`**: named tasks with phases, lanes, `after`
+  prerequisites, `blocked_reason` and required `evidence`. A task cannot be
+  recorded done without saying what proved it, and while tasks stay open the loop
+  sends at most three continuation prompts per unchanged list.
+- `--max-steps` is honoured (it was written to state but never read).
+
+### Fixed
+- `build_compact_prompt` raised `ModuleNotFoundError` for any call with user input
+  (two imports pointed at modules that do not exist); `hook_system.v2` imported a
+  missing module the first time it was touched.
+- `AppState._persist` wrote `guard_state` and `compact_state` from attributes that
+  do not exist, so both were silently dropped on every save.
+- Token estimation counted CJK text as `len()//4`, undercounting Chinese by roughly
+  a factor of two to three; eight call sites in the pruner now use a CJK-aware
+  estimator.
+- `mypy openlaoke` reports no errors (was 6), and `ruff format --check` is clean.
+
 ## [0.1.44] - 2026-09-19
 
 ### Changed

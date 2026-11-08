@@ -32,7 +32,7 @@
 | apply_patch（含 `patch` 别名） | `ApplyPatch` | P11 | 待做（Codex `*** Begin Patch` + unified diff） |
 | agentgrep（grep/find/outline） | `Grep` 三模式 | P3 | **已实现**（find 按名匹配、outline 列定义、grep 结果标注所属定义、paths_only、max_regions） |
 | bash | `Bash` | — | 已有，P7 补后台化与超时接管 |
-| todo | `Todo` | P4 | 待做（phases/lanes/items、`completely_blocked`、`external_blocker`、评估字段） |
+| todo | `Todo` + `/todos` | P4 | **已实现**（phase/lane/after/completely_blocked/external_blocker/assessment，done 必须带 evidence，否则降级 in_progress） |
 | bg | `Bg` | P7 | 待做（list/status/output/tail/cancel/wait/watch） |
 | batch | `Batch` | P8 | 待做（1-10 并发、禁止嵌套、默认关闭，靠配置开） |
 | webfetch | `WebFetch` | P12 | 待做 |
@@ -66,7 +66,7 @@
 | 会话上下文上限 / effective_budget | HARNESS.md:87 | P2 | **已实现**（2b85890） |
 | token 账本用真实 usage | token-accounting-reliability.md | P2 | **已实现** |
 | 结果账本：内容去重 + 超大先扣住 | agentgrep + accept_large_output | P3 | **已实现**（`core/result_ledger.py`，重复内容换指针，超 1500 token 先摘要并报价，`accept_large_output` 才发全文） |
-| todo 策略：自动续跑预算 3 次、gate digest、完成置信度 | jcode-todo-policy、TODO_FOLLOWUP_CONFIGURATION.md | P4 | 待做 |
+| todo 策略：自动续跑预算 3 次、清单变化重置、完成置信度 | jcode-todo-policy、TODO_FOLLOWUP_CONFIGURATION.md | P4 | **已实现**（`core/todo_engine.py` + `repl._todo_auto_continue`；blocked 条目不消耗预算） |
 | 命令风险四级（Safe/Low/Confirm/Catastrophic） | jcode-command-risk | P5 | 待做（现有 classifier 两级，要扩成四级 + justification） |
 | 安全两层权限（无 always-deny） | SAFETY_SYSTEM.md:83 | P5 | 待做 |
 | 软中断：生成中入队、安全点注入 | SOFT_INTERRUPT.md | P6 | 部分（已有输入队列，补 urgent 标记与安全点） |
