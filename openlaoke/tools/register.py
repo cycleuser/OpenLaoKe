@@ -53,6 +53,17 @@ def register_all_tools(registry: ToolRegistry) -> None:
         WebFetchTool(),
         BgTool(),
     ]
+    from openlaoke.utils.config import load_config
+
+    try:
+        batch_enabled = bool(load_config().enable_batch)
+    except Exception:
+        batch_enabled = False
+    if batch_enabled:
+        from openlaoke.tools.batch_tool import BatchTool
+
+        tools.append(BatchTool())
+
     if _has_bash():
         from openlaoke.tools.bash_tool import BashTool
 

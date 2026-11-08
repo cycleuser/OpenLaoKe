@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Batch` tool** (off by default): 1-10 independent calls in one turn, run
+  concurrently. Destructive tools are refused because a batch bypasses the
+  interactive permission prompt, nesting a batch is refused, and `/batch on|off`
+  toggles it for the session (`enable_batch` in the config file).
 - **Background jobs** (`core/task.py`, `Bg` tool): a `Bash` command still running
   after `auto_background_timeout_ms` (default 3000) is handed to the background and
   its task id is returned, so a slow build no longer blocks the turn; `timeout` stays

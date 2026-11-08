@@ -34,7 +34,7 @@
 | bash | `Bash` | — | 已有，P7 补后台化与超时接管 |
 | todo | `Todo` + `/todos` | P4 | **已实现**（phase/lane/after/completely_blocked/external_blocker/assessment，done 必须带 evidence，否则降级 in_progress） |
 | bg | `Bg` | P7 | **已实现**（list/status/output/tail/wait/watch/cancel；日志落文件，output 支持 offset 续读，wait/watch 不靠轮询） |
-| batch | `Batch` | P8 | 待做（1-10 并发、禁止嵌套、默认关闭，靠配置开） |
+| batch | `Batch` | P8 | **已实现**（1-10 并发、禁止嵌套、默认关闭，`config.enable_batch` 或 `/batch on` 打开；破坏性工具一律拒绝，因为批内调用绕过交互式授权） |
 | webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
 | websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
 | memory | `Memory` | P9 | 待做（remember/recall/search/list/forget/tag/link/related，本地 BM25） |

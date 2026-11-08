@@ -76,6 +76,9 @@ class REPL:
         self.app_state = app_state
         self.console = Console(force_terminal=True)
         self.registry = ToolRegistry()
+        # Tools like Batch resolve their siblings through the session, not a
+        # parameter, so the registry has to be reachable from AppState.
+        app_state._tool_registry = self.registry
         self.api: MultiProviderClient | None = None
         self._running = False
         self._last_thinking: str = ""

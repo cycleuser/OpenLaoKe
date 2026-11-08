@@ -266,6 +266,10 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
 
+    def unregister(self, name: str) -> bool:
+        """Remove a tool; returns whether it was there."""
+        return self._tools.pop(name, None) is not None
+
     def register_deferred(
         self, name: str, loader: Callable[[], Tool] | Callable[[], Awaitable[Tool]]
     ) -> None:

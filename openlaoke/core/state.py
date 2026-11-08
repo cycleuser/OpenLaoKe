@@ -100,6 +100,7 @@ class AppState:
     _cache_guard: Any = None
     _cache_monitor: Any = None
     _task_manager: Any = None
+    _tool_registry: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:

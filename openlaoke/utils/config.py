@@ -42,6 +42,7 @@ class AppConfig:
     show_cost: bool = True
     max_output_lines: int = 500
     enable_mcp: bool = True
+    enable_batch: bool = False
     mcp_servers: dict[str, Any] = field(default_factory=dict)
     custom_system_prompt: str = ""
     env_vars: dict[str, str] = field(default_factory=dict)
@@ -139,6 +140,7 @@ def load_config() -> AppConfig:
                 show_cost=data.get("show_cost", True),
                 max_output_lines=data.get("max_output_lines", 500),
                 enable_mcp=data.get("enable_mcp", True),
+                enable_batch=bool(data.get("enable_batch", False)),
                 mcp_servers=data.get("mcp_servers", {}),
                 custom_system_prompt=data.get("custom_system_prompt", ""),
                 env_vars=data.get("env_vars", {}),
@@ -201,6 +203,7 @@ def save_config(config: AppConfig) -> None:
         "show_cost": config.show_cost,
         "max_output_lines": config.max_output_lines,
         "enable_mcp": config.enable_mcp,
+        "enable_batch": config.enable_batch,
         "mcp_servers": config.mcp_servers,
         "custom_system_prompt": config.custom_system_prompt,
         "env_vars": config.env_vars,

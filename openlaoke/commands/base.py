@@ -343,6 +343,43 @@ def _parse_amount(raw: str) -> int:
         raise ValueError(f"Not a token amount: {raw}") from exc
 
 
+class BatchCommand(SlashCommand):
+    name = "batch"
+    description = "Turn the Batch tool (parallel tool calls) on or off"
+    aliases = []
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        registry = getattr(ctx.app_state, "_tool_registry", None)
+        if registry is None:
+            return CommandResult(
+                success=False, message="No tool registry on this session; Batch cannot be toggled."
+            )
+        arg = ctx.args.strip().lower()
+        enabled = registry.get("Batch") is not None
+        if not arg:
+            state = "on" if enabled else "off"
+            return CommandResult(
+                message=(
+                    f"Batch is {state}. '/batch on' enables parallel tool calls "
+                    "(1-10 read-only calls per turn); '/batch off' disables it."
+                )
+            )
+        if arg in ("on", "enable", "true", "1"):
+            from openlaoke.tools.batch_tool import BatchTool
+
+            registry.register(BatchTool())
+            registry.thaw()
+            return CommandResult(
+                message="Batch enabled for this session. Read-only calls only; writes still go "
+                "through the permission prompt one at a time."
+            )
+        if arg in ("off", "disable", "false", "0"):
+            registry.unregister("Batch")
+            registry.thaw()
+            return CommandResult(message="Batch disabled for this session.")
+        return CommandResult(success=False, message="Use '/batch on' or '/batch off'.")
+
+
 class EditsCommand(SlashCommand):
     name = "edits"
     description = "Show what this session changed on disk"
