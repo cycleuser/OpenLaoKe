@@ -63,6 +63,32 @@ class PreviewResult:
         return self.summary or "No effect"
 
 
+SOFT_REQUIRED_FIELDS = {"intent"}
+
+
+def with_common_fields(schema: dict[str, Any]) -> dict[str, Any]:
+    """Add the fields every tool accepts: ``intent`` and ``accept_large_output``.
+
+    ``intent`` is asked of the model on every call so each step leaves a readable
+    reason behind; it is not enforced by validation because a missing label must
+    never cost a retry on a weak model.
+    """
+    from openlaoke.core.result_ledger import (
+        ACCEPT_DESCRIPTION,
+        ACCEPT_FIELD,
+        INTENT_DESCRIPTION,
+        INTENT_FIELD,
+    )
+
+    properties = schema.setdefault("properties", {})
+    properties.setdefault(INTENT_FIELD, {"type": "string", "description": INTENT_DESCRIPTION})
+    properties.setdefault(ACCEPT_FIELD, {"type": "boolean", "description": ACCEPT_DESCRIPTION})
+    required = schema.setdefault("required", [])
+    if INTENT_FIELD not in required:
+        required.insert(0, INTENT_FIELD)
+    return schema
+
+
 class Tool(ABC):
     """Base class for all tools. Subclasses implement specific capabilities."""
 
@@ -121,8 +147,8 @@ class Tool(ABC):
         # Strict OpenAI-compatible providers (DeepSeek, etc.) reject empty
         # parameter schemas; normalize to a valid empty object schema.
         if not schema:
-            return {"type": "object", "properties": {}}
-        return schema
+            schema = {"type": "object", "properties": {}}
+        return with_common_fields(schema)
 
     def validate_input(self, input_data: dict[str, Any]) -> ValidationResult:
         """Validate tool input before execution with full type checking."""

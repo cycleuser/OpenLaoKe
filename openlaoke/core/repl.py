@@ -102,6 +102,9 @@ class REPL:
         self._read_loop_tracker = ReadLoopTracker()
         self._guard: SmallModelGuard | None = None
         self._budget: Any = None
+        from openlaoke.core.result_ledger import ResultLedger
+
+        self._ledger = ResultLedger()
         self._output_compressor = TerminalOutputCompressor()
         self._tool_validator = ToolCallValidator()
         self._hook_system = HookRegistry.get()
@@ -1249,7 +1252,11 @@ class REPL:
                 )
 
         tool_icon = "\u2219" if not self.app_state.insomnia_mode else "\u2615"
-        self.console.print(f"  [{self._c('secondary')}]{tool_icon}{tool_use.name}[/]")
+        intent_label = str(tool_input.get("intent") or "").strip()
+        if len(intent_label) > 60:
+            intent_label = intent_label[:57] + "..."
+        suffix = f" [dim]{intent_label}[/]" if intent_label else ""
+        self.console.print(f"  [{self._c('secondary')}]{tool_icon}{tool_use.name}[/]{suffix}")
 
         ctx = ToolContext(
             app_state=self.app_state,
@@ -1272,9 +1279,22 @@ class REPL:
 
         result_content = result.content if isinstance(result.content, str) else str(result.content)
 
+        # The ledger runs before the fixed cap: a body the model has already seen
+        # collapses to a pointer, and an oversized one is withheld until the model
+        # explicitly accepts its cost.
+        accepts_large = bool(tool_input.get("accept_large_output"))
+        if not result.is_error:
+            guarded = self._ledger.guard(tool_use.name, tool_input, result_content)
+            if guarded != result_content:
+                result_content = guarded
+                result = ToolResultBlock(
+                    tool_use_id=result.tool_use_id, content=guarded, is_error=False
+                )
+
         # Truncate tool output for history: keep head 70% + tail 30%
-        # to preserve both beginning and end of long outputs.
-        _max_tool_out = self.app_state.max_tool_history
+        # to preserve both beginning and end of long outputs.  An explicitly
+        # accepted result keeps 4x the normal cap, still bounded.
+        _max_tool_out = self.app_state.max_tool_history * (4 if accepts_large else 1)
         if len(result_content.encode("utf-8")) > _max_tool_out:
             from openlaoke.core.tool import truncate_tool_history
 
