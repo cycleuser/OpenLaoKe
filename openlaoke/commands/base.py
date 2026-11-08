@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from abc import ABC, abstractmethod
@@ -279,6 +280,67 @@ class CompactCommand(SlashCommand):
             ctx.app_state.messages.extend(pruned)
         after = len(ctx.app_state.messages)
         return CommandResult(message=f"Compacted context: {before} -> {after} message(s).")
+
+
+class ContextCommand(SlashCommand):
+    name = "context"
+    description = "Show or set the context budget for this session"
+    aliases = ["ctx"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.context_budget import resolve_budget
+        from openlaoke.utils.config import load_config
+
+        state = ctx.app_state
+        arg = ctx.args.strip().lower()
+
+        if arg:
+            if arg in ("clear", "reset", "none", "0"):
+                state.set_context_cap(None)
+                return CommandResult(message="Session context cap cleared; global default applies.")
+            try:
+                tokens = _parse_amount(arg)
+            except ValueError as exc:
+                return CommandResult(success=False, message=str(exc))
+            if tokens < 1024:
+                return CommandResult(
+                    success=False, message="Session cap must be at least 1024 tokens."
+                )
+            state.set_context_cap(tokens)
+            return CommandResult(message=f"Session context cap set to {tokens:,} tokens.")
+
+        config = load_config()
+        window = state.compact_state.get("model_window")
+        if not isinstance(window, int) or window <= 0:
+            window = None
+            provider = config.providers.get_active_provider()
+            if provider is not None:
+                with contextlib.suppress(Exception):
+                    from openlaoke.core.model_discovery import get_effective_context_limit
+
+                    window = await get_effective_context_limit(provider, state.session_config.model)
+
+        used = state.compact_state.get("used_tokens") or 0
+        source = state.compact_state.get("used_source") or "estimate"
+        budget = resolve_budget(
+            model_window=window,
+            session_cap=state.context_cap,
+            global_cap=config.context_cap_tokens,
+            used_tokens=int(used),
+            source=source,
+        )
+        return CommandResult(message=budget.render())
+
+
+def _parse_amount(raw: str) -> int:
+    multipliers = {"k": 1024, "m": 1024 * 1024}
+    tail = raw[-1].lower()
+    try:
+        if tail in multipliers:
+            return int(float(raw[:-1]) * multipliers[tail])
+        return int(float(raw))
+    except ValueError as exc:
+        raise ValueError(f"Not a token amount: {raw}") from exc
 
 
 class ResumeCommand(SlashCommand):

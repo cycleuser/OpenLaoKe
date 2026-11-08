@@ -5,6 +5,7 @@ from __future__ import annotations
 from openlaoke.commands.base import (
     ClearCommand,
     CompactCommand,
+    ContextCommand,
     ExitCommand,
     ExportCommand,
     HelpCommand,
@@ -44,6 +45,7 @@ def register_all() -> None:
     commands = [
         ClearCommand(),
         CompactCommand(),
+        ContextCommand(),
         ExitCommand(),
         ExportCommand(),
         HelpCommand(),

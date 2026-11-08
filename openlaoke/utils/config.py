@@ -32,6 +32,7 @@ class AppConfig:
     temperature: float = 1.0
     thinking_budget: int = 0
     local_n_ctx: int = 8192
+    context_cap_tokens: int = 0
     permission_mode: str = "auto"
     auto_approve_all: bool = False
     auto_accept_tools: list[str] = field(default_factory=list)
@@ -128,6 +129,7 @@ def load_config() -> AppConfig:
                 temperature=data.get("temperature", 1.0),
                 thinking_budget=data.get("thinking_budget", 0),
                 local_n_ctx=data.get("local_n_ctx", 8192),
+                context_cap_tokens=data.get("context_cap_tokens", 0),
                 permission_mode=data.get("permission_mode", "auto"),
                 auto_approve_all=data.get("auto_approve_all", False),
                 theme=data.get("theme", "dark")
@@ -191,6 +193,7 @@ def save_config(config: AppConfig) -> None:
         "temperature": config.temperature,
         "thinking_budget": config.thinking_budget,
         "local_n_ctx": config.local_n_ctx,
+        "context_cap_tokens": config.context_cap_tokens,
         "permission_mode": config.permission_mode,
         "auto_approve_all": config.auto_approve_all,
         "theme": config.theme,

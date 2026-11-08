@@ -199,6 +199,18 @@ class AppState:
     def set_persist_path(self, path: str) -> None:
         self._persist_path = path
 
+    @property
+    def context_cap(self) -> int | None:
+        cap = self.compact_state.get("context_cap")
+        return cap if isinstance(cap, int) and cap > 0 else None
+
+    def set_context_cap(self, tokens: int | None) -> None:
+        if tokens and tokens > 0:
+            self.compact_state["context_cap"] = int(tokens)
+        else:
+            self.compact_state.pop("context_cap", None)
+        self._persist()
+
     def _persist(self) -> None:
         if not self._persist_path:
             return
@@ -236,8 +248,8 @@ class AppState:
                 "insomnia_max_iterations": self.insomnia_max_iterations,
                 "insomnia_auto_accept": self.insomnia_auto_accept,
                 "insomnia_log_path": self.insomnia_log_path,
-                "guard_state": getattr(self, "_guard_state", {}),
-                "compact_state": getattr(self, "_compact_state", {}),
+                "guard_state": self.guard_state,
+                "compact_state": self.compact_state,
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

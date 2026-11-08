@@ -101,6 +101,7 @@ class REPL:
 
         self._read_loop_tracker = ReadLoopTracker()
         self._guard: SmallModelGuard | None = None
+        self._budget: Any = None
         self._output_compressor = TerminalOutputCompressor()
         self._tool_validator = ToolCallValidator()
         self._hook_system = HookRegistry.get()
@@ -466,6 +467,19 @@ class REPL:
         steps = getattr(self.app_state, "max_steps", 0) or 0
         return steps if steps > 0 else 100
 
+    def _note_context_usage(self, usage: Any) -> None:
+        """Record what the provider says this turn actually occupied."""
+        if usage is None:
+            return
+        total = sum(
+            int(getattr(usage, name, 0) or 0)
+            for name in ("input_tokens", "output_tokens", "cache_read_input_tokens")
+        )
+        if total <= 0:
+            return
+        self.app_state.compact_state["used_tokens"] = total
+        self.app_state.compact_state["used_source"] = "provider_usage"
+
     async def _run_api_loop(self) -> None:
         max_iterations = self._resolve_max_iterations()
         iteration = 0
@@ -620,11 +634,20 @@ class REPL:
                 "medium": 16384,
                 "large": 32768,
             }.get(model_size, 8192)
-            max_ctx = context_limit or fallback_ctx
-            # Reserve room for the model's reply and keep a proportional tail
-            # verbatim instead of the small 8k default.
-            ctx_budget = max(2048, int(max_ctx * 0.8))
-            keep_tail = max(2048, ctx_budget // 3)
+            from openlaoke.core.context_budget import estimate_messages_tokens, resolve_budget
+            from openlaoke.utils.config import load_config
+
+            budget = resolve_budget(
+                model_window=context_limit or fallback_ctx,
+                session_cap=self.app_state.context_cap,
+                global_cap=load_config().context_cap_tokens,
+                used_tokens=estimate_messages_tokens(messages),
+            )
+            self._budget = budget
+            self.app_state.compact_state["model_window"] = context_limit or fallback_ctx
+            self.app_state.compact_state["used_tokens"] = budget.used_tokens
+            self.app_state.compact_state["used_source"] = budget.source
+            ctx_budget, keep_tail = budget.prune_targets()
 
             if len(messages) > 10:
                 if model_size in ("tiny", "small"):
@@ -849,6 +872,7 @@ class REPL:
                     if usage and cost:
                         self.app_state.accumulate_tokens(usage)
                         self.app_state.accumulate_cost(cost)
+                    self._note_context_usage(usage)
 
                     if content_text or tool_uses or usage:
                         msg = AssistantMessage(
@@ -997,6 +1021,7 @@ class REPL:
 
                     self.app_state.accumulate_tokens(usage)
                     self.app_state.accumulate_cost(cost)
+                    self._note_context_usage(usage)
 
                     if response.thinking:
                         self._last_thinking = response.thinking

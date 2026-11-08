@@ -29,6 +29,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from openlaoke.core.context_budget import estimate_text_tokens
+
 if TYPE_CHECKING:
     from openlaoke.types.core_types import Message
 
@@ -205,7 +207,7 @@ def fast_prune(
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
     contents = [_extract_content(m) for m in messages]
-    token_list = [len(c) // 4 for c in contents]
+    token_list = [estimate_text_tokens(c) for c in contents]
     total_tokens = sum(token_list)
     if total_tokens <= max_tokens:
         return PruneResult(
@@ -292,7 +294,7 @@ def fast_prune(
                     if isinstance(truncated_msg, dict):
                         truncated_msg["content"] = truncated
                 new_messages.append(truncated_msg)
-                new_tokens += len(truncated) // 4
+                new_tokens += estimate_text_tokens(truncated)
             else:
                 new_messages.append(msg)
                 new_tokens += tokens
@@ -306,7 +308,7 @@ def fast_prune(
         if i in sample_idx and digest_tokens < max_tokens // 16:
             digest_parts.extend(extract_keywords(content, max_keywords=20))
             digest_parts.extend(extract_decisions(content, max_lines=4))
-            digest_tokens += sum(len(k) for k in digest_parts[-24:]) // 4
+            digest_tokens += estimate_text_tokens("".join(digest_parts[-24:]))
 
     middle_summary = None
     if elided_tokens > 0:
@@ -320,7 +322,7 @@ def fast_prune(
             f"[Context digest: {elided_tokens} tokens of assistant prose elided. "
             "Key information preserved:]\n" + "\n".join(f"- {kw}" for kw in unique_kw[:60])
         )
-        summary_tokens = len(summary_content) // 4
+        summary_tokens = estimate_text_tokens(summary_content)
         if summary_tokens < elided_tokens:
             middle_summary = SystemMessage(
                 role=MessageRole.SYSTEM,
@@ -377,7 +379,7 @@ def fast_prune_aggressive(
         return PruneResult(messages=[], tokens_before=0, tokens_after=0)
 
     contents = [_extract_content(m) for m in messages]
-    token_list = [len(c) // 4 for c in contents]
+    token_list = [estimate_text_tokens(c) for c in contents]
     total_tokens = sum(token_list)
     if total_tokens <= max_tokens:
         return PruneResult(
@@ -414,7 +416,7 @@ def fast_prune_aggressive(
                     subtype=msg.subtype,
                 )
             )
-            truncated_tokens.append(len(truncated) // 4)
+            truncated_tokens.append(estimate_text_tokens(truncated))
             truncated_contents.append(truncated)
             continue
         truncated_messages.append(msg)
@@ -487,7 +489,7 @@ def fast_prune_aggressive(
                     if isinstance(truncated_msg, dict):
                         truncated_msg["content"] = truncated
                 new_messages.append(truncated_msg)
-                new_tokens += len(truncated) // 4
+                new_tokens += estimate_text_tokens(truncated)
             else:
                 new_messages.append(msg)
                 new_tokens += tokens
@@ -509,7 +511,7 @@ def fast_prune_aggressive(
             f"[Context digest: {elided_tokens} tokens elided. Key info:]\n"
             + "\n".join(f"- {kw}" for kw in unique_kw[:40])
         )
-        summary_tokens = len(summary_content) // 4
+        summary_tokens = estimate_text_tokens(summary_content)
         if summary_tokens < elided_tokens:
             summary_msg = SystemMessage(
                 role=MessageRole.SYSTEM,
