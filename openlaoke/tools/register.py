@@ -46,6 +46,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
     )
     from openlaoke.tools.todo_tool import TodoTool
     from openlaoke.tools.webfetch_tool import WebFetchTool
+    from openlaoke.tools.websearch_tool import WebSearchTool
     from openlaoke.tools.write_tool import WriteTool
 
     tools = [
@@ -57,6 +58,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         ListDirectoryTool(),
         TodoTool(),
         WebFetchTool(),
+        WebSearchTool(),
         BgTool(),
         ApplyPatchTool(),
         MemoryTool(),

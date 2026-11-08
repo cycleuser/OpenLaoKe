@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`WebSearch` tool**: queries the DuckDuckGo HTML endpoint (no API key, no JS),
+  unwraps its redirect links, and returns titles, URLs and snippets; pair it with
+  `WebFetch` to read the result that matters. A challenge page or a markup change is
+  reported as "no results parsed" rather than as invented hits.
 - **`SessionSearch`, `ConversationSearch`, `/search` and `/sessions`**: BM25 over the
   saved sessions on disk (filterable by age, directory and role) and over the live
   conversation, including messages compaction has removed from view. Tool results are
