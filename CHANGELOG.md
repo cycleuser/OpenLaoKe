@@ -10,10 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Background task notices**: when a job started with `Bash(background=...)` finishes,
   the next turn receives one line naming the task and its exit code, so the model does
   not have to remember to poll. Each task is announced once.
-
-### Fixed
-- Bash spawns with `start_new_session` only on POSIX; the keyword is unsupported on
-  Windows and would have raised on a git-bash setup.
 - **`WebSearch` tool**: queries the DuckDuckGo HTML endpoint (no API key, no JS),
   unwraps its redirect links, and returns titles, URLs and snippets; pair it with
   `WebFetch` to read the result that matters. A challenge page or a markup change is
@@ -99,6 +95,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `--max-steps` is honoured (it was written to state but never read).
 
 ### Fixed
+- Bash spawns with `start_new_session` only on POSIX; the keyword is unsupported on
+  Windows and would have raised on a git-bash setup.
 - `build_compact_prompt` raised `ModuleNotFoundError` for any call with user input
   (two imports pointed at modules that do not exist); `hook_system.v2` imported a
   missing module the first time it was touched.
