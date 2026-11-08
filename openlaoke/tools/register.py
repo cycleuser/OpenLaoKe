@@ -33,6 +33,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
     """Register the built-in tools for this host."""
     from openlaoke.tools.apply_patch_tool import ApplyPatchTool
     from openlaoke.tools.bg_tool import BgTool
+    from openlaoke.tools.codemode_tool import CodeModeTool
     from openlaoke.tools.edit_tool import EditTool
     from openlaoke.tools.glob_tool import GlobTool
     from openlaoke.tools.grep_tool import GrepTool
@@ -60,6 +61,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         WebFetchTool(),
         WebSearchTool(),
         BgTool(),
+        CodeModeTool(),
         ApplyPatchTool(),
         MemoryTool(),
         SessionSearchTool(),

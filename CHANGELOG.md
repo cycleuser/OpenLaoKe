@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`CodeMode` tool and sandbox** (`core/code_sandbox.py`): runs a Python script over
+  the workspace so "parse these forty files and print five lines" is one call instead
+  of forty. Each run is a fresh `python -I -B` process with a scrubbed environment, a
+  guarded `open` that refuses paths outside the workspace, an import hook that refuses
+  process/network/FFI modules, `os.system` neutralised, CPU and address-space rlimits,
+  a wall-clock timeout that kills the process, and capped output. Helpers:
+  `read/write/append/ls/exists/glob/walk/grep`. The docstring says plainly that this
+  stops accidents, not a determined attacker, since the guards run inside the child.
 - **`/stats` dashboard**: one screen with tokens in/out, cache hit rate, estimated
   cost, tool-call counts, edit totals, task-list state, running background jobs,
   memory size and the recent cache hit rate. Tool calls are now counted per name and
