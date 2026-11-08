@@ -19,6 +19,13 @@ class BashInput(BaseModel):
     command: str = Field(description="The bash command to execute")
     description: str = Field(default="", description="Brief description of what this command does")
     timeout: float | None = Field(default=None, description="Timeout in seconds")
+    justification: str = Field(
+        default="",
+        description=(
+            "Required when the result says the command needs one: name the target and how the "
+            "change can be undone. Ignored for commands that do not ask for it."
+        ),
+    )
 
 
 class BashTool(Tool):
@@ -36,6 +43,25 @@ class BashTool(Tool):
     is_concurrency_safe = False
     requires_approval = True
 
+    @staticmethod
+    def _record_risk(ctx: ToolContext, command: str, reason: str, justification: str) -> None:
+        """Keep a bounded trail of low-risk but destructive commands."""
+        events = getattr(ctx.app_state, "risk_events", None)
+        if not isinstance(events, list):
+            return
+        import time as _time
+
+        events.append(
+            {
+                "tier": "low",
+                "command": command[:400],
+                "reason": reason,
+                "justification": justification[:400],
+                "at": _time.time(),
+            }
+        )
+        del events[:-200]
+
     async def call(self, ctx: ToolContext, **kwargs: Any) -> ToolResultBlock:
         command = kwargs.get("command", "")
         description = kwargs.get("description", "")
@@ -50,6 +76,36 @@ class BashTool(Tool):
 
         classification = classify_bash_command(command)
 
+        # Four-tier blast radius on top of the pattern classifier: a catastrophic
+        # command is refused outright, and a command whose target cannot be read
+        # off the text has to come back with a justification.
+        from openlaoke.utils.permissions.command_risk import CATASTROPHIC, CONFIRM, assess
+
+        risk = assess(command, ctx.app_state.get_cwd())
+        justification = str(kwargs.get("justification") or "").strip()
+        if risk.tier == CATASTROPHIC:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Refused: {risk.reason}. No justification unlocks this class of command.",
+                is_error=True,
+            )
+        if risk.tier == CONFIRM and not justification:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=(
+                    f"Needs justification: {risk.reason}\n"
+                    'Re-send the same command with justification="what this targets and how to '
+                    'undo it" if you still mean it.'
+                ),
+                is_error=True,
+            )
+        if risk.records:
+            self._record_risk(ctx, command, risk.reason, justification)
+
+        # The four-tier reading is more precise than the pattern classifier, so a
+        # command it places in safe or low skips the older dangerous branches.
+        suppress_legacy_dangerous = risk.tier in ("safe", "low")
+
         if classification.safety_level == CommandSafetyLevel.DESTRUCTIVE:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
@@ -61,7 +117,8 @@ class BashTool(Tool):
         perm_mode = ctx.app_state.permission_config.mode
 
         if (
-            perm_mode == PermissionMode.DEFAULT
+            not suppress_legacy_dangerous
+            and perm_mode == PermissionMode.DEFAULT
             and classification.safety_level == CommandSafetyLevel.DANGEROUS
         ):
             return ToolResultBlock(
@@ -72,9 +129,13 @@ class BashTool(Tool):
                 is_error=True,
             )
 
-        if perm_mode == PermissionMode.AUTO and (
-            classification.safety_level == CommandSafetyLevel.DANGEROUS
-            and classification.confidence == ConfidenceLevel.HIGH
+        if (
+            not suppress_legacy_dangerous
+            and perm_mode == PermissionMode.AUTO
+            and (
+                classification.safety_level == CommandSafetyLevel.DANGEROUS
+                and classification.confidence == ConfidenceLevel.HIGH
+            )
         ):
             # AUTO auto-approves anything except high-confidence dangerous
             # matches (rm -rf, curl|sh, interpreter inline code, file-writing

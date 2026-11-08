@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Four-tier command risk** (`utils/permissions/command_risk.py`): shell lines are
+  classified offline by blast radius - `safe`, `low` (destructive but bounded to the
+  working directory: runs and is recorded in `risk_events`), `confirm` (target comes
+  from a glob, variable, or reaches outside the directory: the call must come back with
+  a `justification`), and `catastrophic` (filesystem root, device nodes, credential
+  stores, `sudo`: refused, and a justification does not unlock it).
 - **Session context budget** (`core/context_budget.py`, `/context`): the effective
   budget is the smaller of the model window and a per-session cap, the cap may
   raise or lower the global `context_cap_tokens` but never exceeds the window, and

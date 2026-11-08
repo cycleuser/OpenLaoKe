@@ -85,6 +85,7 @@ class AppState:
     guard_state: dict[str, Any] = field(default_factory=dict)
     compact_state: dict[str, Any] = field(default_factory=dict)
     todo_state: dict[str, Any] = field(default_factory=dict)
+    risk_events: list[dict[str, Any]] = field(default_factory=list)
     language: str = "en"
     caveman_mode: bool = False
     max_tool_history: int = 4096
@@ -252,6 +253,7 @@ class AppState:
                 "guard_state": self.guard_state,
                 "compact_state": self.compact_state,
                 "todo": self.todo_state,
+                "risk_events": self.risk_events[-200:],
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

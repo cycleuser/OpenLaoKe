@@ -67,7 +67,7 @@
 | token 账本用真实 usage | token-accounting-reliability.md | P2 | **已实现** |
 | 结果账本：内容去重 + 超大先扣住 | agentgrep + accept_large_output | P3 | **已实现**（`core/result_ledger.py`，重复内容换指针，超 1500 token 先摘要并报价，`accept_large_output` 才发全文） |
 | todo 策略：自动续跑预算 3 次、清单变化重置、完成置信度 | jcode-todo-policy、TODO_FOLLOWUP_CONFIGURATION.md | P4 | **已实现**（`core/todo_engine.py` + `repl._todo_auto_continue`；blocked 条目不消耗预算） |
-| 命令风险四级（Safe/Low/Confirm/Catastrophic） | jcode-command-risk | P5 | 待做（现有 classifier 两级，要扩成四级 + justification） |
+| 命令风险四级（safe/low/confirm/catastrophic） | jcode-command-risk | P5 | **已实现**（`utils/permissions/command_risk.py` 按爆炸半径判定，Bash 新增 `justification` 入参，catastrophic 硬拒且 justification 解不开，low 放行并留痕） |
 | 安全两层权限（无 always-deny） | SAFETY_SYSTEM.md:83 | P5 | 待做 |
 | 软中断：生成中入队、安全点注入 | SOFT_INTERRUPT.md | P6 | 部分（已有输入队列，补 urgent 标记与安全点） |
 | 生命周期钩子 8 键 + 独立超时 + pre_tool 闸门 + post_tool_feedback | HOOKS.md:8 | P6 | 待做（现有 hook_system 键名不同，要对齐） |
