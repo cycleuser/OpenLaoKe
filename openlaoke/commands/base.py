@@ -343,6 +343,27 @@ def _parse_amount(raw: str) -> int:
         raise ValueError(f"Not a token amount: {raw}") from exc
 
 
+class MemoryCommand(SlashCommand):
+    name = "memory"
+    description = "Show, search or clear this project's stored notes"
+    aliases = ["mem"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.memory_store import get_store
+
+        store = get_store(ctx.app_state)
+        arg = ctx.args.strip()
+        if not arg:
+            return CommandResult(
+                message=store.stats() + "\n" + store.render(store.recent(limit=10))
+            )
+        if arg.lower() in ("clear", "wipe"):
+            count = store.clear()
+            return CommandResult(message=f"Cleared {count} note(s) from {store.path}.")
+        entries = store.recall(arg, limit=8)
+        return CommandResult(message=store.render(entries) if entries else "No matching notes.")
+
+
 class BatchCommand(SlashCommand):
     name = "batch"
     description = "Turn the Batch tool (parallel tool calls) on or off"

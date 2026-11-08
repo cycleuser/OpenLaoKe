@@ -532,6 +532,30 @@ class REPL:
         if self._cache_monitor is not None:
             self._cache_monitor.observe(usage, model=self.app_state.session_config.model)
 
+    def _memory_digest(self) -> str:
+        """A short index of stored notes, so the model knows what it can ask for.
+
+        Only ids and one-line previews go in the prompt: full notes come back
+        through Memory(recall=...), which keeps the fixed cost small however
+        much has accumulated.
+        """
+        from openlaoke.core.memory_store import get_store
+
+        try:
+            store = get_store(self.app_state)
+        except OSError:
+            return ""
+        entries = store.recent(limit=8)
+        if not entries:
+            return ""
+        rows = [f"- {entry.id} {entry.text[:90]}" for entry in entries]
+        return (
+            "<memory-index>\n"
+            + "\n".join(rows)
+            + "\n(call Memory(action='recall', text=...) for the full note)\n"
+            + "</memory-index>"
+        )
+
     async def _fire_turn_hook(self, hook_type: str, **fields: Any) -> None:
         """Run a turn-level hook; a hook never gets to break the loop."""
         if not self._hook_system.has_hooks(hook_type):
@@ -599,6 +623,9 @@ class REPL:
             world_ctx = self._world_sensor.to_context_block()
             if world_ctx:
                 runtime_blocks.append(f"<sc:context>{world_ctx}</sc:context>")
+        memory_block = self._memory_digest()
+        if memory_block:
+            runtime_blocks.append(memory_block)
 
         from openlaoke.core.small_model_optimizations import (
             apply_structured_thinking_prefix,

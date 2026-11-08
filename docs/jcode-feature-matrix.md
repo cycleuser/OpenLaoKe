@@ -37,7 +37,7 @@
 | batch | `Batch` | P8 | **已实现**（1-10 并发、禁止嵌套、默认关闭，`config.enable_batch` 或 `/batch on` 打开；破坏性工具一律拒绝，因为批内调用绕过交互式授权） |
 | webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
 | websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
-| memory | `Memory` | P9 | 待做（remember/recall/search/list/forget/tag/link/related，本地 BM25） |
+| memory | `Memory` + `/memory` | P9 | **已实现**（remember/recall/search/list/forget/tag/link/related/stats；`core/memory_store.py` 每项目一个 JSON，BM25 检索、中文按字二元切分；系统提示里只注入 id 与摘要，正文靠 recall 取） |
 | session_search | `SessionSearch` | P10 | 待做 |
 | conversation_search | `ConversationSearch` | P10 | 待做 |
 | skill_manage | `InvokeSkill` + `/skills` | — | 已有，P16 补 manage 子命令 |

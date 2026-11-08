@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Memory` tool and `/memory`**: durable project notes in a JSON file under
+  `~/.openlaoke/memory/`, one store per working directory, retrieved with BM25 over
+  words plus CJK character bigrams. Actions are remember, recall, search, list,
+  forget, tag, link, related and stats; identical text is stored once. The system
+  prompt gets a short index of note ids and previews only, so the fixed cost does not
+  grow with what has been remembered.
 - **`ApplyPatch` tool**: applies a multi-file patch given either as the
   `*** Begin Patch` envelope (`*** Add File` / `*** Update File` with `@@` hunks /
   `*** Delete File`) or as a unified diff. Every hunk is matched in memory before
