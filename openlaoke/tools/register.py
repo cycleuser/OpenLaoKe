@@ -34,6 +34,8 @@ def register_all_tools(registry: ToolRegistry) -> None:
     from openlaoke.tools.apply_patch_tool import ApplyPatchTool
     from openlaoke.tools.bg_tool import BgTool
     from openlaoke.tools.codemode_tool import CodeModeTool
+    from openlaoke.tools.compile_tool import CompileTool
+    from openlaoke.tools.docs_tool import OpenLaoKeDocsTool
     from openlaoke.tools.edit_tool import EditTool
     from openlaoke.tools.glob_tool import GlobTool
     from openlaoke.tools.grep_tool import GrepTool
@@ -62,6 +64,8 @@ def register_all_tools(registry: ToolRegistry) -> None:
         WebSearchTool(),
         BgTool(),
         CodeModeTool(),
+        CompileTool(),
+        OpenLaoKeDocsTool(),
         ApplyPatchTool(),
         MemoryTool(),
         SessionSearchTool(),

@@ -40,16 +40,16 @@
 | memory | `Memory` + `/memory` | P9 | **已实现**（remember/recall/search/list/forget/tag/link/related/stats；`core/memory_store.py` 每项目一个 JSON，BM25 检索、中文按字二元切分；系统提示里只注入 id 与摘要，正文靠 recall 取） |
 | session_search | `SessionSearch` | P10 | **已实现**（BM25 扫描 ~/.openlaoke/sessions，可按 days/cwd/role 过滤，回 session id + 消息序号 + 时间 + 摘要） |
 | conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
-| skill_manage | `InvokeSkill` + `/skills` | — | 已有，P16 补 manage 子命令 |
+| skill_manage | `InvokeSkill` + `/skill` | P16 | **已实现**（list / reload / activate / `info <name>` / `off <name>` / clear） |
 | mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
 | codemode | `CodeMode` | P14 | **已实现**（`core/code_sandbox.py`：独立解释器 `python -I -B`、环境变量清空、open 限定工作区、屏蔽进程/网络/FFI 模块与 os.system、CPU/内存 rlimit、超时杀进程、输出上限；文档写明这不是对抗恶意代码的边界） |
 | swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
 | panel / side_panel | `Panel` | P17 | 待做（终端内 markdown 面板 → 落 HTML 供浏览器打开） |
 | open | `Open` | P17 | 待做 |
 | browser | `Browser` | P18 | 可选扩展，需 selenium，默认不注册 |
-| jcode_docs | `OpenLaoKeDocs` | P16 | 待做（读 `docs/`） |
+| jcode_docs | `OpenLaoKeDocs` | P16 | **已实现**（list/search/read，检索 `docs/` 与根目录 README/CHANGELOG/AGENTS，按标题切段后 BM25 排序，read 可只取某一节） |
 | schedule / end_ambient_cycle / schedule_ambient | `Schedule` | P18 | 待做（本地计划任务，ambient 默认关） |
-| compile_remote | `Compile` | P16 | 待做（本地隔离编译） |
+| compile_remote | `Compile` | P16 | **已实现**（白名单 latexmk/pdflatex、pandoc、typst、py_compile；在源文件目录内执行、带超时、报告产物与新文件，缺哪个二进制就点名哪个；改成本地执行，不把文档送去远端） |
 | gmail / calendar | 可选扩展 | P20 | 默认不注册 |
 | selfdev / desktop_selfdev | 不做 | — | 明确不移植（审计面过大，与弱模型可控性相反） |
 | maintainainer_feedback | 不做 | — | 反馈改为 GitHub issue 流程 |

@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`OpenLaoKeDocs` tool**: lists, searches and reads this repository's own docs
+  (`docs/` plus the root README/CHANGELOG/AGENTS), splitting markdown by heading and
+  ranking sections with the shared BM25 scorer, so "how does the context budget work"
+  is answered from the actual document.
+- **`Compile` tool**: builds a document locally with a whitelist - `latexmk`/`pdflatex`,
+  `pandoc`, `typst`, or `py_compile` - in the source directory with a timeout, reporting
+  the files it produced and naming a missing binary instead of failing obscurely.
+- **`/skill info <name>` and `/skill off <name>`**: show a skill's body, or deactivate
+  one without clearing the rest.
 - **`CodeMode` tool and sandbox** (`core/code_sandbox.py`): runs a Python script over
   the workspace so "parse these forty files and print five lines" is one call instead
   of forty. Each run is a fresh `python -I -B` process with a scrubbed environment, a

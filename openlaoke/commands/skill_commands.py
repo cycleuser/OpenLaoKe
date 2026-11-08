@@ -39,8 +39,23 @@ class SkillCommand(SlashCommand):
             count = rescan_skills()
             return CommandResult(message=f"Reloaded {count} skill(s).")
         if action in ("off", "clear"):
+            if len(parts) > 1 and action == "off":
+                target = parts[1]
+                if target not in ctx.app_state.active_skills:
+                    return CommandResult(message=f"Skill not active: {target}")
+                ctx.app_state.active_skills.remove(target)
+                return CommandResult(message=f"Deactivated skill: {target}")
             ctx.app_state.active_skills.clear()
             return CommandResult(message="All skills deactivated.")
+        if action in ("info", "show"):
+            if len(parts) < 2:
+                return CommandResult(success=False, message="Use '/skill info <name>'.")
+            skill = get_skill_registry().get_skill(parts[1])
+            if skill is None:
+                return CommandResult(success=False, message=f"Unknown skill: {parts[1]}")
+            body = getattr(skill, "instructions", "") or getattr(skill, "content", "")
+            header = f"{skill.name}: {skill.description}"
+            return CommandResult(message=(header + "\n\n" + str(body))[:4000])
 
         name = parts[0]
         registry = get_skill_registry()
