@@ -87,6 +87,12 @@ def register_all_tools(registry: ToolRegistry) -> None:
 
         tools.append(BatchTool())
 
+    if getattr(load_config(), "enable_browser", False):
+        from openlaoke.tools.browser_tool import BrowserTool, selenium_available
+
+        if selenium_available():
+            tools.append(BrowserTool())
+
     if _has_bash():
         from openlaoke.tools.bash_tool import BashTool
 

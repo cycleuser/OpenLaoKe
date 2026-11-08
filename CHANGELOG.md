@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Browser` tool** (optional extension, off by default): open a page, read its
+  rendered text, list links, or run JavaScript. It only registers when both
+  `enable_browser` is set and `selenium` imports; a missing dependency is reported
+  with a pointer to `WebFetch` instead of a tool that fails on every call.
 - **`Schedule` tool and `/schedule`** (`core/scheduler.py`): local entries in three
   forms only - `every 30m`, `daily 09:00`, and a one-shot `2026-11-09T08:30` - that
   either queue a prompt for the next turn or run a shell command in the background.

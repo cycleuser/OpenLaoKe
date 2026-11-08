@@ -44,6 +44,7 @@ class AppConfig:
     enable_mcp: bool = True
     enable_batch: bool = False
     enable_scheduler: bool = False
+    enable_browser: bool = False
     mcp_servers: dict[str, Any] = field(default_factory=dict)
     custom_system_prompt: str = ""
     env_vars: dict[str, str] = field(default_factory=dict)
@@ -143,6 +144,7 @@ def load_config() -> AppConfig:
                 enable_mcp=data.get("enable_mcp", True),
                 enable_batch=bool(data.get("enable_batch", False)),
                 enable_scheduler=bool(data.get("enable_scheduler", False)),
+                enable_browser=bool(data.get("enable_browser", False)),
                 mcp_servers=data.get("mcp_servers", {}),
                 custom_system_prompt=data.get("custom_system_prompt", ""),
                 env_vars=data.get("env_vars", {}),
@@ -207,6 +209,7 @@ def save_config(config: AppConfig) -> None:
         "enable_mcp": config.enable_mcp,
         "enable_batch": config.enable_batch,
         "enable_scheduler": config.enable_scheduler,
+        "enable_browser": config.enable_browser,
         "mcp_servers": config.mcp_servers,
         "custom_system_prompt": config.custom_system_prompt,
         "env_vars": config.env_vars,

@@ -46,7 +46,7 @@
 | swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
 | panel / side_panel | `Panel` | P17 | **已实现**（`core/panel_render.py` 自带一个小 markdown 子集渲染器与内联 CSS，输出单文件 HTML，raw HTML 先转义、javascript: 链接不生成；可 `open_in_browser`） |
 | open | `Open` | P17 | **已实现**（仅 http(s) URL 与工作区内路径，其他 scheme 与越界路径一律拒绝；按平台用 open/xdg-open/start） |
-| browser | `Browser` | P18 | 可选扩展，需 selenium，默认不注册 |
+| browser | `Browser` | P18 | **可选扩展**（需 `enable_browser=true` 且 selenium 可导入，二者缺一就不注册；open/text/links/script 四个动作；缺依赖时报清楚原因并建议用 WebFetch） |
 | jcode_docs | `OpenLaoKeDocs` | P16 | **已实现**（list/search/read，检索 `docs/` 与根目录 README/CHANGELOG/AGENTS，按标题切段后 BM25 排序，read 可只取某一节） |
 | schedule | `Schedule` + `/schedule` | P18 | **已实现**（`core/scheduler.py`：every/daily/一次性三种写法，条目可排队提示或跑后台命令，JSON 持久化；循环默认关，`enable_scheduler` 打开；会话关着不触发） |
 | compile_remote | `Compile` | P16 | **已实现**（白名单 latexmk/pdflatex、pandoc、typst、py_compile；在源文件目录内执行、带超时、报告产物与新文件，缺哪个二进制就点名哪个；改成本地执行，不把文档送去远端） |
