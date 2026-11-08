@@ -33,7 +33,7 @@
 | agentgrep（grep/find/outline） | `Grep` 三模式 | P3 | **已实现**（find 按名匹配、outline 列定义、grep 结果标注所属定义、paths_only、max_regions） |
 | bash | `Bash` | — | 已有，P7 补后台化与超时接管 |
 | todo | `Todo` + `/todos` | P4 | **已实现**（phase/lane/after/completely_blocked/external_blocker/assessment，done 必须带 evidence，否则降级 in_progress） |
-| bg | `Bg` | P7 | 待做（list/status/output/tail/cancel/wait/watch） |
+| bg | `Bg` | P7 | **已实现**（list/status/output/tail/wait/watch/cancel；日志落文件，output 支持 offset 续读，wait/watch 不靠轮询） |
 | batch | `Batch` | P8 | 待做（1-10 并发、禁止嵌套、默认关闭，靠配置开） |
 | webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
 | websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
@@ -71,13 +71,13 @@
 | 安全两层权限（无 always-deny） | SAFETY_SYSTEM.md:83 | P5 | 待做 |
 | 软中断：生成中入队、安全点注入 | SOFT_INTERRUPT.md | P6 | 部分（已有输入队列，补 urgent 标记与安全点） |
 | 生命周期钩子 8 键 + 独立超时 + pre_tool 闸门 + post_tool_feedback | HOOKS.md:8 | P6 | **已实现**（19 个扩展点，新增 turn_start/turn_end/tool_gate/tool_feedback，旧名 pre_tool/post_tool/pre_tool_transform/post_tool_feedback 为别名；每个钩子可设 timeout_ms，async 钩子用 asyncio.wait_for 截断并计入 stats；tool_gate 在权限检查之前可否决，tool_feedback 的文本入输入队列交给模型） |
-| 工具超时自动转后台（auto_background_timeout_ms=3000） | TOOL_BACKGROUND_TIMEOUT.md | P7 | 待做 |
-| 编辑统计（增删行，按会话落盘） | SESSION_EDIT_STATS.md | P7 | 待做 |
+| 工具超时自动转后台（auto_background_timeout_ms=3000） | TOOL_BACKGROUND_TIMEOUT.md | P7 | **已实现**（`Bash` 超过阈值即转后台并返回 task id，显式 timeout 才杀进程；日志写文件，不再按块 `_persist`） |
+| 编辑统计（增删行，按会话落盘） | SESSION_EDIT_STATS.md | P7 | **已实现**（`core/edit_stats.py` 用序列比对算真实增删行，Write/Edit 记账，`/edits` 查看，随会话持久化） |
 | 计划图上限 MAX_PLAN_ITEMS=1024 | jcode-plan | P15 | 待做 |
 | swarm 输出预算（报告 4000 字、尾部 1000 token） | jcode-swarm-core | P15 | 待做 |
 | KV cache 监视与未命中分类 | HARNESS.md:131 | P6 | **已实现**（`core/cache_monitor.py`：按 model/system/tools/历史消息做前缀指纹，排除最新一条避免每轮误报；读 provider 的 cache_read/cache_creation 与 OpenAI 的 prompt_tokens_details.cached_tokens；`/cache` 报告命中率、前缀是否变化、连续未命中） |
 | schema 方言集中归一 | jcode-schema-dialect | P3 | 部分（已有 schema 消毒，要集中成一层） |
-| 会话级环境变量（替换而非合并，作业快照） | HARNESS.md:3-86 | P7 | 待做 |
+| 会话级环境变量（作业快照） | HARNESS.md:3-86 | P7 | **已实现**（`AppState.snapshot_env/set_env_var/unset_env_var`；每个作业在启动时取一次快照，之后改会话变量不影响已运行作业） |
 | 会话休眠释放派生缓存 | SESSION_HIBERNATION.md | P19 | 待做（单进程下等价物是释放快照与索引） |
 | 模糊匹配（替换/换位/加权） | jcode-fuzzy | P16 | 待做 |
 | 终端图片协议（kitty/sixel/iterm2） | jcode-terminal-image | P17 | 待做（纯 Python 可实现 Kitty 协议） |

@@ -179,6 +179,8 @@ class SessionManager:
                 app_state.todo_state = data["todo"]
             if isinstance(data.get("risk_events"), list):
                 app_state.risk_events = data["risk_events"]
+            if isinstance(data.get("edit_stats"), dict):
+                app_state.edit_stats = data["edit_stats"]
 
             cost_data = data.get("cost_info", {})
             if cost_data:

@@ -86,6 +86,7 @@ class AppState:
     compact_state: dict[str, Any] = field(default_factory=dict)
     todo_state: dict[str, Any] = field(default_factory=dict)
     risk_events: list[dict[str, Any]] = field(default_factory=list)
+    edit_stats: dict[str, Any] = field(default_factory=dict)
     language: str = "en"
     caveman_mode: bool = False
     max_tool_history: int = 4096
@@ -98,6 +99,7 @@ class AppState:
     _insomnia_engine: Any = None
     _cache_guard: Any = None
     _cache_monitor: Any = None
+    _task_manager: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
@@ -120,6 +122,21 @@ class AppState:
         env = os.environ.copy()
         env.update(self.env_vars)
         return env
+
+    def snapshot_env(self) -> dict[str, str]:
+        """Take a snapshot of the environment for one job.
+
+        A job keeps the environment it was started with: changing a session
+        variable later must not silently change the meaning of a command that
+        is already running.
+        """
+        return self.get_env_vars()
+
+    def set_env_var(self, name: str, value: str) -> None:
+        self.env_vars[name] = value
+
+    def unset_env_var(self, name: str) -> bool:
+        return self.env_vars.pop(name, None) is not None
 
     def add_message(self, message: Message, persist: bool = True) -> None:
         """Add message to history with timestamp, notify listeners, and persist.
@@ -255,6 +272,7 @@ class AppState:
                 "compact_state": self.compact_state,
                 "todo": self.todo_state,
                 "risk_events": self.risk_events[-200:],
+                "edit_stats": self.edit_stats,
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)

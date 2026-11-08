@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Background jobs** (`core/task.py`, `Bg` tool): a `Bash` command still running
+  after `auto_background_timeout_ms` (default 3000) is handed to the background and
+  its task id is returned, so a slow build no longer blocks the turn; `timeout` stays
+  a hard deadline that kills the process. Output is streamed to a per-task log file
+  instead of an in-memory buffer, `Bg` reads it by `tail`, `output` (with a character
+  offset to resume), `wait`, `watch` or cancels it, and `background=true` starts a
+  command there directly.
+- **Edit accounting** (`core/edit_stats.py`, `/edits`): `Write` and `Edit` record
+  created versus modified files and the true lines added and removed (sequence
+  match, not a line-total subtraction), persisted with the session.
+- **Session environment snapshots** (`AppState.snapshot_env`): each job captures
+  the environment once at spawn, so changing a session variable mid-run cannot
+  change the meaning of a command already in flight.
 - **Turn and tool hook points** (`core/hook_system.py`): `turn_start`, `turn_end`,
   `tool_gate` and `tool_feedback` join the existing extension points, and the names
   jcode uses (`pre_tool`, `post_tool`, `pre_tool_transform`, `post_tool_feedback`)

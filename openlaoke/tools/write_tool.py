@@ -138,6 +138,10 @@ class WriteTool(Tool):
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
+            from openlaoke.core.edit_stats import record_edit
+
+            record_edit(ctx.app_state, abs_path, old_content, content, was_new)
+
             # Compute and append diff
             diff_text = diff_lines(abs_path, old_content, content, not was_new)
 

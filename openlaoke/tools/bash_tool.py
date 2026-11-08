@@ -18,7 +18,23 @@ from openlaoke.utils.permissions.bash_classifier import (
 class BashInput(BaseModel):
     command: str = Field(description="The bash command to execute")
     description: str = Field(default="", description="Brief description of what this command does")
-    timeout: float | None = Field(default=None, description="Timeout in seconds")
+    timeout: float | None = Field(
+        default=None,
+        description=(
+            "Hard deadline in seconds. When it passes the command is killed. "
+            "Leave unset to let a slow command move to the background instead."
+        ),
+    )
+    auto_background_timeout_ms: float = Field(
+        default=3000,
+        description=(
+            "After this many milliseconds a still-running command is moved to the background "
+            "and its task id is returned, so it does not block the turn. 0 disables."
+        ),
+    )
+    background: bool = Field(
+        default=False, description="Start in the background immediately and return the task id"
+    )
     justification: str = Field(
         default="",
         description=(
@@ -35,7 +51,9 @@ class BashTool(Tool):
     description = (
         "Execute a bash command in the current working directory. "
         "Use this for running scripts, installing packages, git operations, etc. "
-        "Long-running commands will stream output."
+        "A command still running after auto_background_timeout_ms (default 3000) is moved to "
+        "the background and its task id is returned; read it with Bg. Pass timeout only when "
+        "you want the command killed at a deadline."
     )
     input_schema = BashInput
     is_read_only = False
@@ -149,25 +167,65 @@ class BashTool(Tool):
                 is_error=True,
             )
 
-        from openlaoke.core.task import TaskManager
+        from openlaoke.core.task import DEFAULT_AUTO_BACKGROUND_MS, get_task_manager
 
-        task_mgr = TaskManager(ctx.app_state)
+        auto_bg = kwargs.get("auto_background_timeout_ms", DEFAULT_AUTO_BACKGROUND_MS)
         try:
-            output, exit_code = await task_mgr.run_bash(
+            auto_bg_ms = float(auto_bg) if auto_bg is not None else None
+        except (TypeError, ValueError):
+            auto_bg_ms = DEFAULT_AUTO_BACKGROUND_MS
+
+        force_background = bool(kwargs.get("background"))
+        effective_bg_ms = 0.0 if force_background else auto_bg_ms
+
+        task_mgr = get_task_manager(ctx.app_state)
+        try:
+            outcome = await task_mgr.run_bash(
                 command=command,
                 description=description or command[:100],
                 timeout=timeout,
                 tool_use_id=ctx.tool_use_id,
                 working_dir=ctx.app_state.get_cwd(),
+                auto_background_ms=effective_bg_ms,
             )
 
             max_output = 30000
+            output = outcome.output
             original_len = len(output)
             truncated = False
             if original_len > max_output:
                 output = f"{output[:max_output]}\n\n... (output truncated, {original_len - max_output} chars omitted)"
                 truncated = True
 
+            if outcome.backgrounded:
+                why = (
+                    "started in the background"
+                    if force_background
+                    else f"still running after {effective_bg_ms:.0f}ms; moved to the background"
+                )
+                head = (
+                    f"Command {why} as task {outcome.task_id}.\n"
+                    f"Read it with Bg(action='tail', task_id='{outcome.task_id}'), "
+                    f"wait with Bg(action='wait', ...), cancel with Bg(action='cancel', ...)."
+                )
+                body = f"\n\nOutput so far:\n{output}" if output.strip() else ""
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id, content=head + body, is_error=False
+                )
+
+            if outcome.timed_out:
+                return ToolResultBlock(
+                    tool_use_id=ctx.tool_use_id,
+                    content=(
+                        f"Command timed out after {timeout}s and was killed (task {outcome.task_id}).\n\n"
+                        f"Output before the timeout:\n{output or '(none)'}\n\n"
+                        "Pass a larger timeout, or leave timeout unset so a slow command is "
+                        "moved to the background instead of killed."
+                    ),
+                    is_error=True,
+                )
+
+            exit_code = outcome.exit_code or 0
             if exit_code != 0:
                 return ToolResultBlock(
                     tool_use_id=ctx.tool_use_id,

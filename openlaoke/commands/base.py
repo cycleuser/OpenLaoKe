@@ -343,6 +343,18 @@ def _parse_amount(raw: str) -> int:
         raise ValueError(f"Not a token amount: {raw}") from exc
 
 
+class EditsCommand(SlashCommand):
+    name = "edits"
+    description = "Show what this session changed on disk"
+    aliases = ["diffstat"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.edit_stats import EditStats
+
+        stats = EditStats.from_dict(ctx.app_state.edit_stats)
+        return CommandResult(message=stats.render())
+
+
 class CacheCommand(SlashCommand):
     name = "cache"
     description = "Show prompt-cache hit rate and prefix stability"

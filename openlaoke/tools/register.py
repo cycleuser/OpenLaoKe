@@ -31,6 +31,7 @@ def _has_powershell() -> bool:
 
 def register_all_tools(registry: ToolRegistry) -> None:
     """Register the built-in tools for this host."""
+    from openlaoke.tools.bg_tool import BgTool
     from openlaoke.tools.edit_tool import EditTool
     from openlaoke.tools.glob_tool import GlobTool
     from openlaoke.tools.grep_tool import GrepTool
@@ -50,6 +51,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         ListDirectoryTool(),
         TodoTool(),
         WebFetchTool(),
+        BgTool(),
     ]
     if _has_bash():
         from openlaoke.tools.bash_tool import BashTool
