@@ -32,6 +32,7 @@ from openlaoke.commands.registry import get_command, parse_command, register_all
 from openlaoke.core.cache_guard import CacheGuard
 from openlaoke.core.cache_monitor import CacheMonitor
 from openlaoke.core.config_wizard import get_proxy_url
+from openlaoke.core.mcp_runtime import MCPRuntime
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.prompt_input import (
     PromptSessionManager,
@@ -120,6 +121,8 @@ class REPL:
         self._cache_split = PromptCacheSplit()
         self._cache_monitor = CacheMonitor()
         app_state._cache_monitor = self._cache_monitor
+        self._mcp_runtime = MCPRuntime()
+        app_state._mcp_runtime = self._mcp_runtime
         self._last_usage: Any = None
 
         # Interrupt + queued-input state (B1/B2 harness fixes):
@@ -210,6 +213,8 @@ class REPL:
 
         self.api = MultiProviderClient(config, proxy=self._proxy)
 
+        await self._start_mcp()
+
         try:
             while self._running:
                 await self._handle_input()
@@ -218,9 +223,40 @@ class REPL:
         finally:
             for task in self._active_tasks:
                 task.cancel()
+            await self._stop_mcp()
             if self.api:
                 await self.api.close()
             self._reset_terminal()
+
+    async def _start_mcp(self) -> None:
+        """Start the configured MCP servers and add their tools.
+
+        A server that fails is reported once and skipped: the session still
+        starts, and the reason is available in `/mcp`.
+        """
+        config = self.app_config
+        if config is None or not getattr(config, "enable_mcp", True):
+            return
+        servers = getattr(config, "mcp_servers", None) or {}
+        if not servers:
+            return
+
+        added = await self._mcp_runtime.start(servers, self.registry)
+        for name, reason in self._mcp_runtime.failures.items():
+            self.console.print(f"  [{self._c('warning')}]MCP '{name}' unavailable: {reason}[/]")
+        if not added:
+            return
+        self.registry.thaw()
+        self.registry.freeze()
+        self._tool_validator.set_tools(self.registry)
+        self.console.print(
+            f"  [{self._c('muted')}]MCP: {len(added)} tool(s) from "
+            f"{len(self._mcp_runtime.clients)} server(s)[/]"
+        )
+
+    async def _stop_mcp(self) -> None:
+        with contextlib.suppress(Exception):
+            await self._mcp_runtime.stop()
 
     async def _handle_input(self) -> None:
         self.console.print()

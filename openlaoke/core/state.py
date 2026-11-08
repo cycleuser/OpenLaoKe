@@ -102,6 +102,7 @@ class AppState:
     _task_manager: Any = None
     _tool_registry: Any = None
     _memory_store: Any = None
+    _mcp_runtime: Any = None
     _plan_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:

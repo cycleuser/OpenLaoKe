@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **MCP support** (`core/mcp_client.py`, `core/mcp_runtime.py`, `/mcp`): servers
+  configured under `mcp_servers` are started over stdio at session start, their
+  `tools/list` becomes local tools named `mcp__server__tool`, and calls go through
+  `tools/call`. Server tools get the same `intent` field and the same result ledger as
+  built-in ones. A server that cannot start is reported in `/mcp` and skipped instead
+  of blocking the session.
 - **Background task notices**: when a job started with `Bash(background=...)` finishes,
   the next turn receives one line naming the task and its exit code, so the model does
   not have to remember to poll. Each task is announced once.

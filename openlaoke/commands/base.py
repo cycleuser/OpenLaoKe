@@ -455,6 +455,32 @@ class EditsCommand(SlashCommand):
         return CommandResult(message=stats.render())
 
 
+class McpCommand(SlashCommand):
+    name = "mcp"
+    description = "Show MCP servers and the tools they contributed"
+    aliases = []
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        runtime = getattr(ctx.app_state, "_mcp_runtime", None)
+        if runtime is None:
+            return CommandResult(
+                message="MCP runtime is not attached to this session (it starts with the REPL)."
+            )
+        tools = (
+            sorted(
+                tool.name
+                for tool in ctx.app_state._tool_registry.get_all()
+                if tool.name.startswith("mcp__")
+            )
+            if getattr(ctx.app_state, "_tool_registry", None)
+            else []
+        )
+        lines = [runtime.summary()]
+        if tools:
+            lines.append("tools: " + ", ".join(tools))
+        return CommandResult(message="\n".join(lines))
+
+
 class CacheCommand(SlashCommand):
     name = "cache"
     description = "Show prompt-cache hit rate and prefix stability"

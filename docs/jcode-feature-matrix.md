@@ -41,7 +41,7 @@
 | session_search | `SessionSearch` | P10 | **已实现**（BM25 扫描 ~/.openlaoke/sessions，可按 days/cwd/role 过滤，回 session id + 消息序号 + 时间 + 摘要） |
 | conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
 | skill_manage | `InvokeSkill` + `/skills` | — | 已有，P16 补 manage 子命令 |
-| mcp | `Mcp` | P13 | 待做（配置里已有 `mcp_servers`，运行时没接） |
+| mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
 | codemode | `CodeMode` | P14 | 待做（Python 受限沙箱） |
 | swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
 | panel / side_panel | `Panel` | P17 | 待做（终端内 markdown 面板 → 落 HTML 供浏览器打开） |
