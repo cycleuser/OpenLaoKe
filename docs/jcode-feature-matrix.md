@@ -44,8 +44,8 @@
 | mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
 | codemode | `CodeMode` | P14 | **已实现**（`core/code_sandbox.py`：独立解释器 `python -I -B`、环境变量清空、open 限定工作区、屏蔽进程/网络/FFI 模块与 os.system、CPU/内存 rlimit、超时杀进程、输出上限；文档写明这不是对抗恶意代码的边界） |
 | swarm | `Swarm` | P15 | 待做（泳道 worker、消息、`await_members`、文件触碰通知） |
-| panel / side_panel | `Panel` | P17 | 待做（终端内 markdown 面板 → 落 HTML 供浏览器打开） |
-| open | `Open` | P17 | 待做 |
+| panel / side_panel | `Panel` | P17 | **已实现**（`core/panel_render.py` 自带一个小 markdown 子集渲染器与内联 CSS，输出单文件 HTML，raw HTML 先转义、javascript: 链接不生成；可 `open_in_browser`） |
+| open | `Open` | P17 | **已实现**（仅 http(s) URL 与工作区内路径，其他 scheme 与越界路径一律拒绝；按平台用 open/xdg-open/start） |
 | browser | `Browser` | P18 | 可选扩展，需 selenium，默认不注册 |
 | jcode_docs | `OpenLaoKeDocs` | P16 | **已实现**（list/search/read，检索 `docs/` 与根目录 README/CHANGELOG/AGENTS，按标题切段后 BM25 排序，read 可只取某一节） |
 | schedule / end_ambient_cycle / schedule_ambient | `Schedule` | P18 | 待做（本地计划任务，ambient 默认关） |

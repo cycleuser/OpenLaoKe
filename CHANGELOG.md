@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`Panel` tool** (`core/panel_render.py`): renders markdown to one self-contained
+  HTML file with inline CSS - headings, lists, fenced code, inline code,
+  bold/italic, links, quotes and rules. Raw HTML in the input is escaped and
+  `javascript:` links are not emitted; the file can be opened immediately.
+- **`Open` tool**: hands an http(s) URL or a workspace path to the platform opener;
+  other schemes and paths outside the workspace are refused by name.
 - **`OpenLaoKeDocs` tool**: lists, searches and reads this repository's own docs
   (`docs/` plus the root README/CHANGELOG/AGENTS), splitting markdown by heading and
   ranking sections with the shared BM25 scorer, so "how does the context budget work"

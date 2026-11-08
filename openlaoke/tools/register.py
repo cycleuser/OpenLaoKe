@@ -48,6 +48,7 @@ def register_all_tools(registry: ToolRegistry) -> None:
         SessionSearchTool,
     )
     from openlaoke.tools.todo_tool import TodoTool
+    from openlaoke.tools.viewer_tools import OpenTool, PanelTool
     from openlaoke.tools.webfetch_tool import WebFetchTool
     from openlaoke.tools.websearch_tool import WebSearchTool
     from openlaoke.tools.write_tool import WriteTool
@@ -62,6 +63,8 @@ def register_all_tools(registry: ToolRegistry) -> None:
         TodoTool(),
         WebFetchTool(),
         WebSearchTool(),
+        PanelTool(),
+        OpenTool(),
         BgTool(),
         CodeModeTool(),
         CompileTool(),
