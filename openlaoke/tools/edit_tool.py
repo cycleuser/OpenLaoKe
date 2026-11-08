@@ -121,7 +121,12 @@ class EditTool(Tool):
 
             track_file_edit(abs_path, ctx.app_state.session_id)
 
-            if old_text not in original:
+            from openlaoke.utils.fuzzy import MODE_EXACT, find_fuzzy
+
+            fuzzy = find_fuzzy(original, old_text)
+            replacement_note = ""
+
+            if fuzzy is None:
                 lines = original.splitlines()
                 similar = []
                 old_lower = old_text.lower()
@@ -148,25 +153,41 @@ class EditTool(Tool):
                     is_error=True,
                 )
 
-            # Uniqueness check: count occurrences (like sekrun's replace tool)
-            first_idx = original.find(old_text)
-            if replace_all:
-                occurrences = original.count(old_text)
-                new_content = original.replace(old_text, new_text)
-            else:
-                second_idx = original.find(old_text, first_idx + 1)
-                if second_idx != -1:
+            if fuzzy.mode != MODE_EXACT:
+                # A whitespace-only difference: apply the span the matcher found
+                # and say so, rather than presenting it as an exact edit.
+                if replace_all:
                     return ToolResultBlock(
                         tool_use_id=ctx.tool_use_id,
                         content=(
-                            f"Error: old_text matches multiple locations in {file_path}. "
-                            "Provide more surrounding context to make it unique, "
-                            "or set replace_all=true to replace all occurrences."
+                            f"Error: old_text only matches {file_path} after ignoring whitespace, "
+                            "so replace_all is not safe. Pass the exact text, or edit each spot."
                         ),
                         is_error=True,
                     )
                 occurrences = 1
-                new_content = original.replace(old_text, new_text, 1)
+                new_content = original[: fuzzy.start] + new_text + original[fuzzy.end :]
+                replacement_note = f" ({fuzzy.mode})"
+            # Uniqueness check: count occurrences (like sekrun's replace tool)
+            else:
+                first_idx = original.find(old_text)
+                if replace_all:
+                    occurrences = original.count(old_text)
+                    new_content = original.replace(old_text, new_text)
+                else:
+                    second_idx = original.find(old_text, first_idx + 1)
+                    if second_idx != -1:
+                        return ToolResultBlock(
+                            tool_use_id=ctx.tool_use_id,
+                            content=(
+                                f"Error: old_text matches multiple locations in {file_path}. "
+                                "Provide more surrounding context to make it unique, "
+                                "or set replace_all=true to replace all occurrences."
+                            ),
+                            is_error=True,
+                        )
+                    occurrences = 1
+                    new_content = original.replace(old_text, new_text, 1)
 
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
@@ -180,7 +201,7 @@ class EditTool(Tool):
             result_content = (
                 f"Replaced {occurrences} occurrence(s) in {abs_path}"
                 if replace_all
-                else f"Edited {abs_path}"
+                else f"Edited {abs_path}{replacement_note}"
             )
             if diff_text and diff_text != "(no changes)":
                 result_content += f"\n{diff_text}"

@@ -525,6 +525,50 @@ class StatsCommand(SlashCommand):
         return CommandResult(message="\n".join(lines))
 
 
+class SleepCommand(SlashCommand):
+    name = "sleep"
+    description = "Release derived caches without ending the session"
+    aliases = ["hibernate"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        import gc
+
+        state = ctx.app_state
+        released: list[str] = []
+
+        swarm = getattr(state, "_swarm", None)
+        if swarm is not None and swarm.running():
+            return CommandResult(
+                success=False,
+                message="Refusing to hibernate while swarm workers are running; cancel them first.",
+            )
+
+        if getattr(state, "_memory_store", None) is not None:
+            state._memory_store = None
+            released.append("memory index")
+        monitor = getattr(state, "_cache_monitor", None)
+        if monitor is not None and getattr(monitor, "readings", None):
+            count = len(monitor.readings)
+            monitor.readings.clear()
+            released.append(f"cache readings ({count})")
+        if getattr(state, "_swarm", None) is not None:
+            state._swarm = None
+            state._swarm_board = None
+            released.append("swarm board")
+        if getattr(state, "_task_manager", None) is not None:
+            manager = state._task_manager
+            manager._procs.clear()
+            manager._handles.clear()
+            released.append("task handles")
+
+        collected = gc.collect()
+        body = ", ".join(released) if released else "nothing to release"
+        return CommandResult(
+            message=f"Released {body}. Collected {collected} object(s). "
+            "Stores reload from disk on next use."
+        )
+
+
 class ScheduleCommand(SlashCommand):
     name = "schedule"
     description = "Show the local schedule"

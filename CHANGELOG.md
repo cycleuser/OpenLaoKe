@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Whitespace-tolerant `Edit`** (`utils/fuzzy.py`): when the exact text is not
+  found, the tool retries ignoring trailing whitespace, then comparing with runs of
+  whitespace collapsed; the replacement is applied at the matched span and the result
+  says which mode was used. `replace_all` refuses a fuzzy match, since "replace every
+  occurrence of something that only roughly matched" is not a safe instruction.
+- **`/sleep` (hibernate)**: releases the memory index, cache readings, swarm board and
+  task handles and runs a collection pass, refusing while swarm workers are running.
+  Each store rebuilds itself from disk on next use, so nothing is lost.
 - **`Swarm` tool** (`core/swarm.py`): up to six workers on separate lanes, each a
   sub-agent with its own context. `start` returns immediately with worker ids,
   `await` collects them with a timeout, `status` shows state and results, `note` and

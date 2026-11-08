@@ -36,7 +36,7 @@
 | bg | `Bg` | P7 | **已实现**（list/status/output/tail/wait/watch/cancel；日志落文件，output 支持 offset 续读，wait/watch 不靠轮询） |
 | batch | `Batch` | P8 | **已实现**（1-10 并发、禁止嵌套、默认关闭，`config.enable_batch` 或 `/batch on` 打开；破坏性工具一律拒绝，因为批内调用绕过交互式授权） |
 | webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
-| websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
+| websearch | `WebSearch` | P12 | **已实现**（DuckDuckGo HTML 端点，无需 key；解析 title/url/snippet，失败时明确说没解析到而不是编结果） |
 | memory | `Memory` + `/memory` | P9 | **已实现**（remember/recall/search/list/forget/tag/link/related/stats；`core/memory_store.py` 每项目一个 JSON，BM25 检索、中文按字二元切分；系统提示里只注入 id 与摘要，正文靠 recall 取） |
 | session_search | `SessionSearch` | P10 | **已实现**（BM25 扫描 ~/.openlaoke/sessions，可按 days/cwd/role 过滤，回 session id + 消息序号 + 时间 + 摘要） |
 | conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
@@ -79,8 +79,8 @@
 | KV cache 监视与未命中分类 | HARNESS.md:131 | P6 | **已实现**（`core/cache_monitor.py`：按 model/system/tools/历史消息做前缀指纹，排除最新一条避免每轮误报；读 provider 的 cache_read/cache_creation 与 OpenAI 的 prompt_tokens_details.cached_tokens；`/cache` 报告命中率、前缀是否变化、连续未命中） |
 | schema 方言集中归一 | jcode-schema-dialect | P3 | 部分（已有 schema 消毒，要集中成一层） |
 | 会话级环境变量（作业快照） | HARNESS.md:3-86 | P7 | **已实现**（`AppState.snapshot_env/set_env_var/unset_env_var`；每个作业在启动时取一次快照，之后改会话变量不影响已运行作业） |
-| 会话休眠释放派生缓存 | SESSION_HIBERNATION.md | P19 | 待做（单进程下等价物是释放快照与索引） |
-| 模糊匹配（替换/换位/加权） | jcode-fuzzy | P16 | 待做 |
+| 会话休眠释放派生缓存 | SESSION_HIBERNATION.md | P19 | **已实现（单进程等价物）**：`/sleep` 释放记忆索引、缓存读数、swarm 板与任务句柄并 gc；有泳道在跑时拒绝执行；各类存储下次用到时自行从磁盘重建 |
+| 模糊匹配（空白容差） | jcode-fuzzy | P16 | **已实现**（`utils/fuzzy.py`：先精确，再逐行忽略行尾空白，最后把连续空白归一后匹配；命中位置按区间替换，并在结果里注明是哪一档，`replace_all` 与模糊匹配组合会被拒绝） |
 | 终端图片协议（kitty/sixel/iterm2） | jcode-terminal-image | P17 | 待做（纯 Python 可实现 Kitty 协议） |
 | 生产力仪表盘 | jcode-productivity-core | P20 | **Markdown 版已实现**（`scripts/productivity_report.py` 扫会话出逐日活动/项目分布/工具用量；另加 `/stats` 会话内仪表盘）。PNG 版本未做 |
 | 开销门禁 | bench_startup.py 等 | P6 | **已实现**（`scripts/bench_startup.py`：冷解释器测入口模块导入耗时与峰值 RSS，超预算非零退出，可 `--max-ms/--max-mb/--json`；仓库无 CI，以脚本退出码当门禁） |
