@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`SessionSearch`, `ConversationSearch`, `/search` and `/sessions`**: BM25 over the
+  saved sessions on disk (filterable by age, directory and role) and over the live
+  conversation, including messages compaction has removed from view. Tool results are
+  truncated before indexing so one large read cannot outrank a discussion. The shared
+  tokeniser now also splits mixed alphanumeric runs, so `3000` matches `3000ms`.
 - **`Memory` tool and `/memory`**: durable project notes in a JSON file under
   `~/.openlaoke/memory/`, one store per working directory, retrieved with BM25 over
   words plus CJK character bigrams. Actions are remember, recall, search, list,

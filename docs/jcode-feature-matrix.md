@@ -38,8 +38,8 @@
 | webfetch | `WebFetch` | P12 | **已实现**（httpx + stdlib HTMLParser，去脚本样式、抽标题、按 max_chars 截断，不引新依赖） |
 | websearch | `WebSearch` | P12 | 待做（可配后端，未配置不注册） |
 | memory | `Memory` + `/memory` | P9 | **已实现**（remember/recall/search/list/forget/tag/link/related/stats；`core/memory_store.py` 每项目一个 JSON，BM25 检索、中文按字二元切分；系统提示里只注入 id 与摘要，正文靠 recall 取） |
-| session_search | `SessionSearch` | P10 | 待做 |
-| conversation_search | `ConversationSearch` | P10 | 待做 |
+| session_search | `SessionSearch` | P10 | **已实现**（BM25 扫描 ~/.openlaoke/sessions，可按 days/cwd/role 过滤，回 session id + 消息序号 + 时间 + 摘要） |
+| conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
 | skill_manage | `InvokeSkill` + `/skills` | — | 已有，P16 补 manage 子命令 |
 | mcp | `Mcp` | P13 | 待做（配置里已有 `mcp_servers`，运行时没接） |
 | codemode | `CodeMode` | P14 | 待做（Python 受限沙箱） |

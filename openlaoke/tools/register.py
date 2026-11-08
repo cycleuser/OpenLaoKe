@@ -40,6 +40,10 @@ def register_all_tools(registry: ToolRegistry) -> None:
     from openlaoke.tools.ls_tool import ListDirectoryTool
     from openlaoke.tools.memory_tool import MemoryTool
     from openlaoke.tools.read_tool import ReadTool
+    from openlaoke.tools.session_search_tool import (
+        ConversationSearchTool,
+        SessionSearchTool,
+    )
     from openlaoke.tools.todo_tool import TodoTool
     from openlaoke.tools.webfetch_tool import WebFetchTool
     from openlaoke.tools.write_tool import WriteTool
@@ -56,6 +60,8 @@ def register_all_tools(registry: ToolRegistry) -> None:
         BgTool(),
         ApplyPatchTool(),
         MemoryTool(),
+        SessionSearchTool(),
+        ConversationSearchTool(),
     ]
     from openlaoke.utils.config import load_config
 

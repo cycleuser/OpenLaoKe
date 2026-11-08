@@ -72,6 +72,11 @@ def tokenize(text: str) -> list[str]:
     """Lowercase words plus CJK character bigrams."""
     lowered = text.lower()
     tokens = [word for word in _WORD.findall(lowered) if word not in _STOPWORDS]
+    # Mixed alphanumeric runs ("3000ms", "sha256sum") also index their parts, so a
+    # query for "3000" or "sha256" matches the way a reader expects.
+    for word in list(tokens):
+        if word.isalnum() and not word.isdigit() and not word.isalpha():
+            tokens.extend(part for part in re.findall(r"[a-z]+|[0-9]+", word) if part)
     for run in _CJK.findall(lowered):
         if len(run) == 1:
             tokens.append(run)

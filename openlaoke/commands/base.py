@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -341,6 +342,47 @@ def _parse_amount(raw: str) -> int:
         return int(float(raw))
     except ValueError as exc:
         raise ValueError(f"Not a token amount: {raw}") from exc
+
+
+class SessionsCommand(SlashCommand):
+    name = "sessions"
+    description = "List saved sessions"
+    aliases = ["ls-sessions"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.sessions import SessionManager
+
+        manager = SessionManager()
+        sessions = manager.list_sessions()
+        if not sessions:
+            return CommandResult(message="No saved sessions yet.")
+        rows = []
+        for info in sessions[:25]:
+            stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(info.created_at))
+            current = " *" if info.session_id == ctx.app_state.session_id else "  "
+            rows.append(
+                f"{current}{info.session_id}  {stamp}  {info.message_count:>3} msg  "
+                f"{info.model}  {info.cwd or '-'}"
+            )
+        header = f"{len(sessions)} session(s); * marks this one"
+        return CommandResult(message=header + "\n" + "\n".join(rows))
+
+
+class SearchCommand(SlashCommand):
+    name = "search"
+    description = "Search saved sessions for a phrase"
+    aliases = ["find-session"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.session_index import search_sessions
+
+        query = ctx.args.strip()
+        if not query:
+            return CommandResult(success=False, message="Use '/search <query>'.")
+        hits = search_sessions(query, limit=10)
+        if not hits:
+            return CommandResult(message=f"No session messages match '{query}'.")
+        return CommandResult(message="\n\n".join(hit.line() for hit in hits))
 
 
 class MemoryCommand(SlashCommand):
