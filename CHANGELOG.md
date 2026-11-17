@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Bot mode** (`core/bot_mode.py`, `/bot`, optional `MessageAgent` tool): a roster of
+  named agents, each with a title, role, optional model/persona/skills and one canonical
+  chat under `~/.openlaoke/bots/`. `/bot use <name>` routes plain input to that bot;
+  `/bot room new <room> <bot> <bot>` opens a bounded shared conversation (three serial
+  rounds, ten replies, one turn per member per message, `@name` handoffs, `@user` stops
+  the room, `[SILENT]` skips). Bots message each other through a JSON inbox drained after
+  each turn; `MessageAgent(wait=true)` is refused while the target is mid-turn instead of
+  deadlocking. Routines are ordinary scheduler entries named `[bot:<name>] ...`, and
+  `openlaoke --bot <name> "..."` / `--room <room> "..."` run a single turn outside the
+  REPL. `--readonly` bots get a read/search/web tool allow-list.
 - **Generated tool and command reference** (`docs/tool-reference.md`,
   `scripts/dump_tool_reference.py`): built from the registry and the command list, with
   `--check` exiting non-zero when the file is stale, and a test that keeps it honest.

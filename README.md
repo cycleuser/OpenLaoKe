@@ -147,6 +147,42 @@ Skills follow the [Agent Skills](https://agentskills.io) standard: a directory w
 
 Only the name and description enter the system prompt; the body is read when `InvokeSkill` is called. `/skill` lists what is installed and activates one.
 
+## Bot mode
+
+Bot mode turns the roster into a small team of named agents. A bot is a profile —
+name, title, role, optional model, persona, skills — plus one canonical chat that
+survives restarts. State lives in `~/.openlaoke/bots/`.
+
+```text
+/bot new Alice --title "Lead engineer" --desc "plans and reviews work" --readonly
+/bot use alice          # plain messages now go to @alice
+/bot dm bob "check the failing test"   # one-off message, reply printed now
+/bot off                # back to the normal agent
+```
+
+Bots can message each other with the `MessageAgent` tool: delivery is queued, and
+the REPL drains the inbox after each turn. A room puts two to six bots in one
+conversation — `/bot room new dev alice bob`, then `/bot room use dev`. One user
+message starts at most three serial rounds and ten replies; a member speaks at
+most once per message, `@name` hands work to a teammate, `@user` stops the room and
+flags it as waiting on you, and `[SILENT]` means "nothing to add".
+
+Routines attach to a bot and run through the existing scheduler:
+
+```text
+/bot routine add alice "daily 09:00" summarize the inbox
+/bot routine list
+```
+
+Results land in that bot's chat. From the command line, `openlaoke --bot alice
+"status?"` and `openlaoke --room dev "what changed?"` run a single bot turn without
+the REPL.
+
+Two limits are deliberate. A bot chat runs tools without the interactive permission
+prompt, which is why `--readonly` exists (read/search/web only). And bot-to-bot
+delivery happens between turns, not mid-turn, so a queued reply arrives after the
+sender finishes.
+
 ## Prompt templates
 
 Reusable Markdown prompts, pi-style. Drop a file in `~/.openlaoke/prompts/review.md` and invoke it:

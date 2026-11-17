@@ -27,6 +27,7 @@ from openlaoke.commands.base import (
     ThinkingCommand,
     TodosCommand,
 )
+from openlaoke.commands.bot_commands import BotCommand
 from openlaoke.commands.pi_commands import (
     ChangelogCommand,
     CloneCommand,
@@ -94,6 +95,7 @@ def register_all() -> None:
         TreeCommand(),
         TrustCommand(),
         SkillCommand(),
+        BotCommand(),
     ]
     for cmd in commands:
         _commands[cmd.name] = cmd

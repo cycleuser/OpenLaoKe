@@ -49,6 +49,8 @@ def main() -> None:
                 "--max-tokens",
                 "--thinking-budget",
                 "--cors",
+                "--bot",
+                "--room",
             ):
                 val = next(args_iter, "")
                 if val:
@@ -175,6 +177,16 @@ def main() -> None:
         default=100,
         help="Max agent steps per turn (default: 100)",
     )
+    parser.add_argument(
+        "--bot",
+        default=None,
+        help="Send the prompt to a named bot (bot mode)",
+    )
+    parser.add_argument(
+        "--room",
+        default=None,
+        help="Send the prompt to a bot group room (implies --bot mode)",
+    )
 
     args = parser.parse_args(filtered_argv)
     args.prompt = " ".join(prompt_parts) if prompt_parts else None
@@ -272,7 +284,12 @@ def main() -> None:
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
 
-    if args.prompt:
+    if args.bot or args.room:
+        if not args.prompt:
+            console.print("[bold red]--bot/--room needs a prompt to send.[/bold red]")
+            sys.exit(2)
+        asyncio.run(_run_bot_prompt(args.prompt, app_state, config, args.bot, args.room))
+    elif args.prompt:
         asyncio.run(_run_non_interactive(args.prompt, app_state, config))
     else:
         asyncio.run(_run_interactive(app_state, config))
@@ -282,6 +299,40 @@ async def _run_interactive(app_state, config) -> None:
     repl = REPL(app_state)
     repl.app_config = config
     await repl.run()
+
+
+async def _run_bot_prompt(
+    prompt: str,
+    app_state,
+    config,
+    bot: str | None,
+    room: str | None,
+) -> None:
+    from openlaoke.core.bot_mode import get_bot_mode, slug
+
+    console = Console()
+    mode = get_bot_mode(app_state)
+    try:
+        if room:
+            turns = await mode.room_send(room, prompt)
+            if not turns:
+                console.print("(nobody in the room had anything to add)")
+            for turn in turns:
+                print(f"@{slug(turn.member)}: {turn.text}")
+        else:
+            assert bot is not None
+            reply = await mode.ask(bot, prompt)
+            print(reply or "(the bot stayed silent)")
+        for item in await mode.drain():
+            print(
+                f"🔔 @{slug(item['bot'])} <- @{slug(item['from'])}: "
+                f"{item.get('reply') or '(stayed silent)'}"
+            )
+    except ValueError as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        sys.exit(1)
+
+    print(f"\n--- Session cost: ${app_state.cost_info.total_cost:.4f} ---")
 
 
 async def _run_non_interactive(prompt: str, app_state, config) -> None:

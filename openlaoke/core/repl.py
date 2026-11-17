@@ -291,6 +291,13 @@ class REPL:
                         auto_background_ms=0.0,
                     )
                     notice = f"[scheduled command '{entry.name}' started in the background]"
+                elif entry.prompt:
+                    bot_notice = await self._run_bot_routine(entry)
+                    if bot_notice is None:
+                        notice = f"[scheduled reminder '{entry.name}': {entry.prompt}]"
+                        self._input_queue.append(notice)
+                    else:
+                        notice = bot_notice
                 else:
                     notice = f"[scheduled reminder '{entry.name}': {entry.prompt}]"
                     self._input_queue.append(notice)
@@ -368,7 +375,78 @@ class REPL:
             await self._handle_command(name, args)
             return
 
+        if await self._handle_bot_input(user_input):
+            return
+
         await self._handle_chat(user_input)
+
+    async def _handle_bot_input(self, user_input: str) -> bool:
+        """Route plain input to the active bot or room when bot mode is on."""
+        from openlaoke.core.bot_mode import get_bot_mode, slug
+
+        mode = get_bot_mode(self.app_state)
+        if not mode.enabled:
+            return False
+
+        def stream(text: str) -> None:
+            self.console.print(text, end="", markup=False)
+
+        try:
+            if mode.active_room:
+                turns = await mode.room_send(mode.active_room, user_input)
+                if not turns:
+                    self.console.print(
+                        f"[{self._c('muted')}](nobody in #{mode.active_room} had anything to add)[/]"
+                    )
+                for turn in turns:
+                    self.console.print(
+                        f"\n[{self._c('accent')}]@{slug(turn.member)}:[/] {turn.text}"
+                    )
+            else:
+                profile = mode.require_bot(mode.active_bot)
+                self.console.print(f"[{self._c('muted')}]@{slug(profile.name)} is thinking...[/]")
+                reply = await mode.ask(profile.name, user_input, on_text=stream)
+                if reply:
+                    self.console.print()
+                else:
+                    self.console.print(
+                        f"[{self._c('muted')}](@{slug(profile.name)} stayed silent)[/]"
+                    )
+        except ValueError as exc:
+            self.console.print(f"[{self._c('error')}]{exc}[/]")
+            return True
+
+        await self._deliver_bot_inbox(mode)
+        return True
+
+    async def _deliver_bot_inbox(self, mode: Any) -> None:
+        """Run messages bots left for each other and print the replies."""
+        from openlaoke.core.bot_mode import slug
+
+        try:
+            delivered = await mode.drain()
+        except Exception as exc:  # noqa: BLE001 - delivery must not break the REPL
+            self.console.print(f"  [{self._c('warning')}]bot delivery failed: {exc}[/]")
+            return
+        for item in delivered:
+            self.console.print(
+                f"  [{self._c('muted')}]🔔 @{slug(item['bot'])} <- @{slug(item['from'])}[/]"
+            )
+            body = item.get("reply") or "(stayed silent)"
+            self.console.print(f"    {body}")
+
+    async def _run_bot_routine(self, entry: Any) -> str | None:
+        """Run a schedule entry that belongs to a bot; None if it is a plain reminder."""
+        from openlaoke.core.bot_mode import get_bot_mode
+
+        mode = get_bot_mode(self.app_state)
+        bot_name = mode.routine_bot(entry.name)
+        profile = mode.get_bot(bot_name) if bot_name else None
+        if profile is None:
+            return None
+        reply = await mode.ask(profile.name, f"[routine] {entry.prompt}")
+        await self._deliver_bot_inbox(mode)
+        return f"[routine for @{bot_name}] " + (reply or "(the bot stayed silent)")
 
     async def _handle_command(self, name: str, args: str) -> None:
         from openlaoke.commands.base import CommandContext
