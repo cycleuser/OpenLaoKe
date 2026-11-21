@@ -260,6 +260,25 @@ openlaoke --provider openai_compatible \
 
 Local endpoints need no real API key. LM Studio (port 1234), vLLM, and any other OpenAI-compatible server work the same way.
 
+On Apple Silicon, MLX is the fastest backend for 2-4B models. Qwen3.5-2B in
+4-bit is a good default:
+
+```bash
+modelscope download --model mlx-community/Qwen3.5-2B-4bit \
+  --local-dir ~/models/qwen3.5-2b-mlx4
+mlx_lm.server --model ~/models/qwen3.5-2b-mlx4 --port 11434
+
+openlaoke --provider openai_compatible \
+  --base-url http://127.0.0.1:11434/v1 --api-key local \
+  --model ~/models/qwen3.5-2b-mlx4
+```
+
+Some small-model servers leave Qwen-style `<tool_call>` XML in the assistant
+text when their parser does not recognize the format. OpenLaoKe recovers those
+calls and runs them, so tool use still works. For the most predictable tool
+loop, llama.cpp with `--jinja` or vLLM/SGLang with `--tool-call-parser
+qwen3_coder` are the safer runtimes.
+
 Two things are tuned for local servers. Unless you turn thinking on, OpenLaoKe asks a
 local thinking model to skip its reasoning phase — a 2B model otherwise spends minutes
 per turn and can burn the whole token budget before emitting a tool call. And the

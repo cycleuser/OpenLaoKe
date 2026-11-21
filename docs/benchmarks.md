@@ -260,6 +260,53 @@ Caveat: one run per cell, and the tasks still sit inside the model's one-shot
 ability. A quality difference would need tasks where the baseline fails, which
 would measure the model more than the harness.
 
+## Part 7 — Tool calls across harnesses and model sizes
+
+Five document tasks with filesystem verification: append to an existing DOCX,
+add a summary sheet with a `SUM` formula to an XLSX, convert a generated PDF to
+Markdown while keeping headings and a table, write a DOCX from a Python script,
+and turn a CSV into JSON. Every agent runs in an isolated directory with the
+same seeded files and a hidden `py_check`.
+
+Harness comparison, same `halogen` model on llm.cycleuser.com:
+
+| Harness | Passed | Average |
+|---------|--------|---------|
+| OpenLaoKe | 5/5 | 67.9 s |
+| pi | 5/5 | 72.3 s |
+| Jcode | 5/5 | 73.2 s |
+| OpenCode | 5/5 | 93.1 s |
+
+Model comparison, all through OpenLaoKe:
+
+| Model | Passed | Average | Notes |
+|-------|--------|---------|-------|
+| `glm-5.3` (Ollama Cloud) | 5/5 | 7.3 s | fastest; clean tool loop |
+| `halogen` (llm.cycleuser.com) | 5/5 | 18.7 s | stable |
+| Qwen3.5-2B MLX 4-bit (local) | 0/5 | 125.5 s | calls tools, but cannot finish |
+
+Findings:
+
+1. **Tool calling is table stakes.** Every harness could drive Python and the
+   shell to edit DOCX/XLSX and convert PDF. No harness needed document-specific
+   tools; a capable model plus `python-docx`, `openpyxl`, and PDF extraction was
+   enough.
+2. **Harness differences are cost, not correctness.** All four passed every
+   document task. OpenLaoKe was fastest in this run, OpenCode slowest.
+3. **Model size dominates document work.** The 2B called tools and read files,
+   but looped on PDF extraction, wrote invalid JSON, and could not reliably use
+   `python-docx`. Recovering Qwen XML tool calls from text removed the transport
+   failure, not the knowledge gap.
+4. **MLX is fast, but the server parser matters.** On this M4, Qwen3.5-2B MLX
+   4-bit generated about 34 tokens/s warm, versus 21.7 tokens/s under
+   llama.cpp. MLX returned some Qwen tool calls as plain XML; OpenLaoKe now
+   recovers those, but a server with native `qwen3_coder` parsing is more
+   predictable.
+
+Caveat: one run per cell. The harness matrix ran four agents concurrently, so
+its absolute times are higher than the model matrix. Compare within a table,
+not across tables.
+
 ## Findings
 
 1. **The harness is not the bottleneck.** OpenLaoKe (42/60) and pi (41/60) are

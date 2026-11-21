@@ -4,7 +4,7 @@ All notable changes to OpenLaoKe will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.45] - 2026-11-21
 
 ### Changed
 - **Reasoning effort is configurable and defaults to low** (`utils/config.py`,
@@ -28,6 +28,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   paths.
 
 ### Fixed
+- **Text tool calls are recovered** (`core/text_tool_calls.py`,
+  `core/engine.py`): when a local runtime returns Qwen-style
+  `<tool_call><function=...>` XML as plain assistant text, OpenLaoKe now parses
+  it back into real tool calls and executes them. The XML is removed from the
+  visible answer. This keeps 2B models useful when the server's parser misses
+  their format.
 - **Local endpoints are free** (`core/multi_provider_api.py`): cost
   calculation now returns zero when the active base URL is localhost, instead
   of charging an unknown local model at the default cloud price.
@@ -48,6 +54,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `reasoning_content` as well as `reasoning`/`thinking`.
 
 ### Added
+- **Document tool-use benchmark** (`bench/agent_compare.py`,
+  `docs/benchmarks.md`): five seeded DOCX/XLSX/PDF/CSV tasks with hidden
+  filesystem checks, plus harness and model matrices. All four harnesses pass
+  5/5 on `halogen`; Ollama Cloud `glm-5.3` is the fastest model; a local
+  Qwen3.5-2B completes 0/5 document tasks despite calling tools.
 - **Switchable harness modes** (`core/harness_modes.py`, `/mode`, `--mode`):
   `balanced` (default), `pi`, `jcode`, `opencode`, and `deep` bundle the reference
   agents' temperaments: reasoning effort, step budget, tool profile, and

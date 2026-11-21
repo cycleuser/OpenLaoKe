@@ -210,13 +210,22 @@ async def run_loop(
                 on_usage(usage, cost)
 
             content = getattr(response, "content", "") or ""
+            tool_uses = getattr(response, "tool_uses", None) or []
+            if not tool_uses and content:
+                from openlaoke.core.text_tool_calls import parse_text_tool_calls
+
+                cleaned, recovered = parse_text_tool_calls(content)
+                if recovered:
+                    content = cleaned
+                    tool_uses = recovered
+                    response.content = cleaned
+                    response.tool_uses = recovered
             if content:
                 result.text_parts.append(content)
                 if policy.on_text is not None:
                     policy.on_text(content)
 
             messages.append(assistant_message(response))
-            tool_uses = getattr(response, "tool_uses", None) or []
 
             if policy.save_state is not None:
                 policy.save_state(iteration, messages, result.text_parts, "running")

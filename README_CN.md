@@ -220,6 +220,23 @@ openlaoke --provider openai_compatible \
 
 本地端点不需要真的 API key。LM Studio（端口 1234）、vLLM，以及任何其它 OpenAI 兼容服务都一样。
 
+在 Apple Silicon 上，2-4B 模型用 MLX 最快。Qwen3.5-2B 的 4bit 版是个不错的默认选择：
+
+```bash
+modelscope download --model mlx-community/Qwen3.5-2B-4bit \
+  --local-dir ~/models/qwen3.5-2b-mlx4
+mlx_lm.server --model ~/models/qwen3.5-2b-mlx4 --port 11434
+
+openlaoke --provider openai_compatible \
+  --base-url http://127.0.0.1:11434/v1 --api-key local \
+  --model ~/models/qwen3.5-2b-mlx4
+```
+
+有些小模型服务会把 Qwen 风格的 `<tool_call>` XML 留在正文里，而不是解析成工具调用。
+OpenLaoKe 会把这些文本工具调用恢复出来并执行，所以工具链仍然可用。想要最稳定的
+工具循环，优先用 llama.cpp `--jinja`，或 vLLM/SGLang 配合
+`--tool-call-parser qwen3_coder`。
+
 针对本地服务做了两处专门的适配。除你显式打开 thinking，否则 OpenLaoKe 会让本地思考型模型
 跳过推理阶段——2B 模型否则一轮就能想上几分钟，常常在发出工具调用之前就把 token 预算烧光。
 上下文预算则取自服务端实际提供的窗口（Ollama 的 `num_ctx`，从 `/api/ps` 读取），而不是
