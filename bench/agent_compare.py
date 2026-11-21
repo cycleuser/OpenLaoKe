@@ -221,6 +221,136 @@ TASKS: list[Task] = [
         ),
         verify={"contains": "notes.md:## Todo", "contains2": "notes.md:- ship it"},
     ),
+    # --- tasks that need more reasoning than pattern matching ---
+    Task(
+        id="hard-expr-eval",
+        category="hard",
+        prompt=(
+            "Create calc.py with eval_expr(text) that evaluates an arithmetic expression "
+            "containing integers or decimals, +, -, *, /, parentheses, and unary minus, "
+            "with normal precedence. Raise ValueError on malformed input. Do not use "
+            "Python's eval()."
+        ),
+        verify={
+            "file_exists": "calc.py",
+            "py_check": (
+                "import ast\n"
+                "tree = ast.parse(open('calc.py').read())\n"
+                "assert not [n for n in ast.walk(tree) if isinstance(n, ast.Call) "
+                "and isinstance(n.func, ast.Name) and n.func.id == 'eval'], "
+                "'eval() is not allowed'\n"
+                "from calc import eval_expr\n"
+                "cases = {'1+2*3': 7, '(1+2)*3': 9, '-2*3': -6, '8/2-1': 3, "
+                "'2*(3+4)-5': 9, '10/4': 2.5}\n"
+                "for text, want in cases.items():\n"
+                "    got = eval_expr(text)\n"
+                "    assert abs(got - want) < 1e-9, (text, got, want)\n"
+                "for bad in ['1+', '(1+2', '1//2', '']:\n"
+                "    try:\n"
+                "        eval_expr(bad)\n"
+                "    except ValueError:\n"
+                "        pass\n"
+                "    else:\n"
+                "        raise AssertionError('expected ValueError for ' + repr(bad))\n"
+            ),
+        },
+    ),
+    Task(
+        id="hard-csv-parse",
+        category="hard",
+        prompt=(
+            "Create csvparse.py with parse_csv(text) returning a list of rows, each row a "
+            "list of string fields. Support commas, quoted fields, doubled quotes inside "
+            'quotes (""), and newlines inside quoted fields. Drop one trailing newline. '
+            "Do not use Python's csv module."
+        ),
+        verify={
+            "file_exists": "csvparse.py",
+            "py_check": (
+                "import ast\n"
+                "tree = ast.parse(open('csvparse.py').read())\n"
+                "mods = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) "
+                "for a in n.names}\n"
+                "mods |= {str(n.module or '') for n in ast.walk(tree) "
+                "if isinstance(n, ast.ImportFrom)}\n"
+                "assert 'csv' not in mods, 'csv module is not allowed'\n"
+                "from csvparse import parse_csv\n"
+                "assert parse_csv('a,b\\n1,2\\n') == [['a', 'b'], ['1', '2']]\n"
+                "assert parse_csv('a,\"b,c\",d\\n') == [['a', 'b,c', 'd']]\n"
+                "assert parse_csv('a,\"b\"\"c\"\\n') == [['a', 'b\"c']]\n"
+                "assert parse_csv('a,\"line1\\nline2\",b\\n') == "
+                "[['a', 'line1\\nline2', 'b']]\n"
+                "assert parse_csv('') == []\n"
+            ),
+        },
+    ),
+    Task(
+        id="hard-lru-cache",
+        category="hard",
+        prompt=(
+            "Create lru.py with class LRUCache(capacity) supporting get(key, default=None), "
+            "put(key, value), and len(cache). put() and a successful get() refresh recency. "
+            "When full, put() evicts the least-recently-used key."
+        ),
+        verify={
+            "file_exists": "lru.py",
+            "py_check": (
+                "from lru import LRUCache\n"
+                "cache = LRUCache(2)\n"
+                "cache.put('a', 1)\n"
+                "cache.put('b', 2)\n"
+                "assert cache.get('a') == 1\n"
+                "cache.put('c', 3)\n"
+                "assert cache.get('b') is None\n"
+                "assert cache.get('a') == 1\n"
+                "assert cache.get('c') == 3\n"
+                "cache.put('a', 9)\n"
+                "assert cache.get('a') == 9\n"
+                "assert len(cache) == 2\n"
+                "assert cache.get('missing', 'd') == 'd'\n"
+            ),
+        },
+    ),
+    Task(
+        id="hard-debug-median",
+        category="hard",
+        setup={
+            "stats.py": (
+                "def mean(values):\n"
+                "    return sum(values) / len(values)\n"
+                "\n"
+                "\n"
+                "def median(values):\n"
+                "    values = values.sort()\n"
+                "    n = len(values)\n"
+                "    if n % 2:\n"
+                "        return values[n // 2]\n"
+                "    return (values[n // 2 - 1] + values[n // 2]) / 2\n"
+            )
+        },
+        prompt=(
+            "Fix the bug in stats.py so median() works for odd and even length lists, "
+            "including unsorted input, without mutating the caller's list. mean([]) must "
+            "raise ValueError. Keep the function names and signatures."
+        ),
+        verify={
+            "file_exists": "stats.py",
+            "py_check": (
+                "from stats import mean, median\n"
+                "xs = [3, 1, 2]\n"
+                "assert median(xs) == 2, median(xs)\n"
+                "assert xs == [3, 1, 2], 'median must not mutate input'\n"
+                "assert median([4, 1, 3, 2]) == 2.5\n"
+                "assert mean([2, 4, 6]) == 4\n"
+                "try:\n"
+                "    mean([])\n"
+                "except ValueError:\n"
+                "    pass\n"
+                "else:\n"
+                "    raise AssertionError('mean([]) must raise ValueError')\n"
+            ),
+        },
+    ),
 ]
 
 

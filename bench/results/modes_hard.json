@@ -1,0 +1,223 @@
+{
+  "model": "halogen",
+  "summary": {
+    "openlaoke-deep": {
+      "passed": 4,
+      "total": 4,
+      "score": 1.0,
+      "avg_ms": 185776
+    },
+    "openlaoke-opencode": {
+      "passed": 4,
+      "total": 4,
+      "score": 1.0,
+      "avg_ms": 140144
+    },
+    "openlaoke-balanced": {
+      "passed": 4,
+      "total": 4,
+      "score": 1.0,
+      "avg_ms": 122339
+    }
+  },
+  "results": [
+    {
+      "task": "hard-expr-eval",
+      "category": "hard",
+      "agent": "openlaoke-deep",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 196060,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "calc.py"
+      ],
+      "stdout_tail": "oracle:\nCreated `calc.py` with `eval_expr(text)` \u2014 a tokenizer + recursive-descent evaluator, no `eval()`.\n\n**Design**\n- Grammar: `expr := term (('+'|'-') term)*`, `term := unary (('*'|'/') unary)*`, `unary := ('+'|'-') unary | atom`, `atom := NUMBER | '(' expr ')'`. `*`/`/` bind tighter than `+`/`-`; unary binds tighter than `*`/`/` (so `-2*3 == -6`), and `**` is not accepted.\n- Numbers: integers and decimals, with or without a leading/trailing digit part (`2.50`, `.5`); a lone `.` is rejected. Whitespace ignored.\n- Any malformed input (empty, `1 +`, `(1`, `1 2`, `()`, `3 ** 2`, `1e5`, `1..2`, bad chars, non-str) raises `ValueError` with a position/message.\n- Division by zero raises `DivisionByZero(ValueError, ZeroDivisionError)`, so it satisfies a caller catching either name.\n\n**Verification** (Bash is unavailable in this sandbox, so I ran it via the CodeMode interpreter)\n- 23 fixed value cases: all correct (`2+3*4\u219214`, `(2+3)*4\u219220`, `--3\u21923`, `2*-3\u2192-6`, `-(2+3)*2\u2192-10`, `100-20/4+3\u219298`, `.5+.25\u21920.75`, \u2026).\n- 21 malformed inputs: all raised `ValueError` (none leaked another exception type, none silently returned).\n- Randomized differential test: 5000 generated expressions compared against an independent `ast`/`ast.literal_eval`-style oracle allowing only arithmetic nodes \u2014 **0 mismatches**, and the 39 division-by-zero cases matched on both sides.\n\n`grep` confirms no `eval(` call in the file.\n[stats] steps=8 input_tokens=108816 output_tokens=6879\n\n--- Session cost: $0.4296 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-expr-eval",
+      "category": "hard",
+      "agent": "openlaoke-opencode",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 167142,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        ".pytest_cache",
+        "__pycache__",
+        "calc.py",
+        "test_calc.py"
+      ],
+      "stdout_tail": "n't recognize `python3` as an allowed command. Let me check what's available and try with justification.\n`which` works. The allowlist doesn't recognize `python3` directly \u2014 let me pass justification as the error suggests.\nAll 66 tests pass. Let me do one final smoke check via the module's CLI entry point.\nDone. `calc.py` implements `eval_expr(text)` with a hand-written tokenizer + recursive-descent parser \u2014 no `eval()` anywhere (a test even greps for it).\n\n**Grammar** (normal precedence, `* /` tighter than `+ -`, parens override):\n```\nexpr  := term (('+' | '-') term)*\nterm  := unary (('*' | '/') unary)*\nunary := ('+' | '-') unary | atom\natom  := NUMBER | '(' expr ')'\n```\n\n**Behavior**\n- Integers and decimals (`42`, `3.5`, `.5`, `5.`); rejects `1e0`/`1.2.3` as malformed\n- Unary `+`/`-`, including chained (`--1 \u2192 1.0`) and after operators (`2 * -3 \u2192 -6.0`)\n- Returns `float`\n- `ValueError` on: empty input, unknown chars, unbalanced/empty parens, missing operands (`1 +`, `1 2`), division by zero, and non-string input\n\n**Verification:** `python3 -m pytest test_calc.py -q` \u2192 **66 passed** (31 valid-expression cases, 29 malformed cases, plus div-by-zero, type rejection, no-eval source check, deep nesting, 200-term chain). CLI smoke test: `1 + 2 * 3 \u2192 7.0`, `-(2.5 + 1) / 2 \u2192 -1.75`, `((1+2)*(3+4)) \u2192 21.0`.\n\nAlso created `test_calc.py` (the test suite above) \u2014 say the word if you'd like it removed.\n[stats] steps=10 input_tokens=143500 output_tokens=4747\n\n--- Session cost: $0.5017 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-expr-eval",
+      "category": "hard",
+      "agent": "openlaoke-balanced",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 154002,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "calc.py"
+      ],
+      "stdout_tail": ".\nAll 18 valid cases and 11 malformed-input cases pass. Removing the scratch test file so only the requested file remains:\nCleanup complete. calc.py is the only source file. Should I also delete __pycache__? This was created by running the tests. It's a trivial thing. I'll delete it for cleanliness.\n\nActually, I'll leave it \u2014 it's a standard build artifact. But to keep the directory clean per \"don't add unrequested extra stuff,\" I'll delete it.\nDone. Created `calc.py` with `eval_expr(text)`.\n\n**Implementation:** A recursive descent parser (no `eval()`) with this grammar, which encodes normal precedence:\n- `expr = term (('+' | '-') term)*` \u2014 lowest precedence\n- `term = factor (('*' | '/') factor)*` \u2014 higher precedence\n- `factor = ('-' | '+') factor | '(' expr ')' | number` \u2014 unary ops and grouping bind tightest\n\n**Coverage verified** (all passed, then the temp test file was removed):\n- Precedence: `2 + 3 * 4` \u2192 14, `(2 + 3) * 4` \u2192 20\n- Unary minus/plus: `-5 + 3` \u2192 -2, `-(2 + 3)` \u2192 -5, `2 * -3` \u2192 -6, `--5` \u2192 5, `-.5` \u2192 -0.5\n- Decimals: `3.5 * 2` \u2192 7.0, `1.5 + 2.25` \u2192 3.75\n- Nested parens, whitespace, left-associative division: `100 / 10 / 2` \u2192 5.0\n\n**ValueError raised** for: empty input, trailing operator (`2 +`), leading operator (`* 3`), unbalanced parens, invalid chars (`abc`, `//`), adjacent numbers (`1 2`), and malformed numbers (`.5.`, `3.4.5`). Division by zero also raises `ValueError`.\n[stats] steps=8 input_tokens=61509 output_tokens=4625\n\n--- Session cost: $0.2539 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-csv-parse",
+      "category": "hard",
+      "agent": "openlaoke-deep",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 276728,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "csvparse.py",
+        "test_csvparse.py"
+      ],
+      "stdout_tail": " yields 'ab'. Fine, not tested but consistent.\n\nI'm done. Report concisely.\n\nLet me do one quick demo run to show real output.\nDone. `csvparse.py` implements `parse_csv(text)` as a single-pass state machine (no `csv` import), plus `test_csvparse.py` with 30 passing tests.\n\n**Behavior**\n- `,` separates fields; `\"` opens a quoted field only at field start (a stray `\"` mid-field stays literal, matching `csv.reader`).\n- `\"\"` inside quotes \u2192 one literal `\"`; commas and newlines inside quotes are kept verbatim.\n- Exactly one trailing line break is dropped: `\"a,b\\n\"` \u2192 `[['a','b']]`, `\"a,b\\n\\n\"` \u2192 `[['a','b'], ['']]`, `\"\"` \u2192 `[]`.\n- Line breaks accepted as `\\n`, `\\r\\n`, or lone `\\r`; an unterminated quoted field is closed at EOF instead of corrupting the row.\n\n**Verification**\n- `python3 -m unittest test_csvparse -v` \u2192 `Ran 30 tests ... OK`, including 600 randomized documents round-tripped through `csv.writer` and compared against `csv.reader`, and a subprocess check that `csv` never appears in `sys.modules` after `import csvparse`.\n- Demo (`printf 'name,note\\n\"Smith, J.\",\"line1\\nline2\"\\nx,\"say \"\"hi\"\"\"\\n' | python3 csvparse.py`):\n  ```\n  ['name', 'note']\n  ['Smith, J.', 'line1\\nline2']\n  ['x', 'say \"hi\"']\n  ```\n\nJudgment calls I made where the spec was silent, all documented in the docstring and covered by tests: a blank line yields `['']` (one empty field), and non-`str` input raises `TypeError`.\n[stats] steps=8 input_tokens=110621 output_tokens=7824\n\n--- Session cost: $0.4492 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-csv-parse",
+      "category": "hard",
+      "agent": "openlaoke-opencode",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 162640,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "csvparse.py",
+        "test_csvparse.py"
+      ],
+      "stdout_tail": "ll with the arguments as shown in the tool schema using JSON.<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\nMy test expectation was wrong again: `\"\\n\"` is a single trailing newline, which is dropped, leaving empty input \u2192 `[]`. Fixing the test:\nNow, note: parse_csv(\"a\\n\\n\") should be [[\"a\"],[\"\"]] \u2014 the first \\n terminates the row \"a\", then what remains is \"\\n\", and one trailing newline gets stripped... no wait, I first strip the trailing newline from the entire text: \"a\\n\\n\" \u2192 \"a\\n\", then the scan: \"a\", then \\n terminates the row \u2192 rows=[[\"a\"]], then since the text is non-empty we flush the remainder \u2192 [[\"a\"],[\"\"]]. Okay, that passes.\n\nLet me run it again.\nDone. `csvparse.py` implements `parse_csv(text)` as a character state machine (no `csv` module):\n\n- **Commas** separate fields; **quoted fields** protect commas and newlines.\n- **Doubled quotes** (`\"\"`) inside a quoted field become one literal `\"`.\n- **Newlines inside quotes** are kept in the field; LF and CRLF both end rows.\n- **One trailing newline is dropped** (so `\"a,b\\n\"` and `\"a,b\"` parse identically); a second trailing newline still yields a blank row.\n\nVerified with `test_csvparse.py` (18 cases: quoting, escaping, embedded newlines, CRLF, empty fields/rows, edge cases like `\"\"` and lone `\"\\n\"`) \u2014 all pass. I left the test file in the workspace so you can re-run `python3 test_csvparse.py`; say the word if you'd like it removed.\n[stats] steps=16 input_tokens=215350 output_tokens=6523\n\n--- Session cost: $0.7439 ---\n",
+      "attempts": 2
+    },
+    {
+      "task": "hard-csv-parse",
+      "category": "hard",
+      "agent": "openlaoke-balanced",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 102126,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "csvparse.py"
+      ],
+      "stdout_tail": "ften welcome, but the instructions say make the smallest change and don't add unrequested extras. I'll remove it.\n\nHmm, but then the verification can't be re-run. I think it's fine to delete it since verification was done. Actually let me just delete it to comply with \"Do not add unrequested extras.\"\n\nActually, a test file is a reasonable artifact. But the guidance is explicit. I'll delete it and mention it was temporary.\nThe __pycache__ was also created from importing test files. Let's clean it up.\nCreated `csvparse.py` with `parse_csv(text)` \u2014 a single-pass character scanner (no `csv` module).\n\n**Behavior implemented:**\n- Commas separate fields; `\\n` and `\\r\\n` (and lone `\\r`) separate rows.\n- A `\"` at the start of a field opens a quoted field; inside it, commas and newlines are literal.\n- `\"\"` inside a quoted field becomes a literal `\"`; a single `\"` closes the field.\n- Exactly one trailing newline (`\\n`, `\\r\\n`, or `\\r`) is dropped before parsing, so `\"a,b\\n\\n\"` yields `[['a','b'], ['']]`.\n- Empty input returns `[]`.\n\n**Verification:** ran 12 hand-written edge cases (quoted commas, doubled quotes, embedded newlines, CRLF row separators, empty fields, quoted empty fields, lone CR in quotes) plus a 2000-case randomized cross-check against `csv.reader` as an oracle \u2014 all passed with 0 mismatches. The temporary test script was removed after verification; `csvparse.py` is the only file added.\n[stats] steps=8 input_tokens=53619 output_tokens=3912\n\n--- Session cost: $0.2195 ---\n",
+      "attempts": 2
+    },
+    {
+      "task": "hard-lru-cache",
+      "category": "hard",
+      "agent": "openlaoke-deep",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 150957,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "lru.py"
+      ],
+      "stdout_tail": "ping tests might be considered unrequested extra. Delete it.\n\nLet me delete via Bash rm with justification.\nClean up __pycache__ too, since it's a byproduct. Then done.\n`lru.py` created in the working directory with `LRUCache` backed by an `OrderedDict` (O(1) get/put/evict).\n\n**Semantics implemented**\n- `get(key, default=None)` \u2014 hit returns the value and moves the key to most-recently-used; a miss returns `default` and leaves recency untouched.\n- `put(key, value)` \u2014 inserts or updates, marks the key most-recently-used; an update never evicts. A new key at capacity evicts the least-recently-used one.\n- `len(cache)` via `__len__`; plus a read-only `.capacity` and a debug-friendly `__repr__`.\n- `capacity=0` is allowed (stores nothing); a negative capacity raises `ValueError`.\n\n**Verification** \u2014 ran a throwaway script (`_check_lru.py`, since removed along with `__pycache__`) that asserted the docstring scenario, that a `get` miss does not refresh recency, that `put` refreshes recency even for an unchanged value, that updating at capacity evicts nothing, capacity-0 and negative-capacity behavior, and then diffed recency order, length, and return values against a naive list-based reference model over 300 randomized trials \u00d7 200 ops (capacities 1\u20135):\n\n```\nall checks passed\nlen: 2 repr: LRUCache(2) {'a': 1, 'c': 3}\n```\n\nOnly `lru.py` remains in the workspace, and it imports cleanly after cleanup.\n[stats] steps=9 input_tokens=115470 output_tokens=4628\n\n--- Session cost: $0.4158 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-lru-cache",
+      "category": "hard",
+      "agent": "openlaoke-opencode",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 109529,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "lru.py",
+        "test_lru.py"
+      ],
+      "stdout_tail": "mentation.\nI spotted a bug in my `__repr__` (`{{items}}` renders literally). Fixing it, then verifying with a test:\nThe user's message is empty (just the conversation start marker). There's no actual question or request to respond to. I should give no content or wait for an actual query.\nThe command guard blocked the inline heredoc. I'll write a test file and run it with justification.\nThe test has a subtle issue: `assert c.get(\"a\") == 1` at the top refreshes 'a', then `c.put(\"c\", 3)` should evict 'b' (the LRU). That's what I test. Good.\n\nNow run it with pytest or python.\nDone. `lru.py` implements `LRUCache` backed by an `OrderedDict`:\n\n- **`get(key, default=None)`** \u2014 returns the value and moves it to most-recently-used; a miss returns `default` without touching recency.\n- **`put(key, value)`** \u2014 inserts/overwrites and marks MRU; overwriting doesn't grow the cache. At capacity, evicts the least-recently-used key (`popitem(last=False)`).\n- **`len(cache)`** \u2014 via `__len__`.\n\nPlus `__contains__`, `pop`, `clear`, and capacity validation (`ValueError` for negative, `TypeError` for non-int) as small extras.\n\n**Verification:** wrote `test_lru.py` covering eviction order, recency refresh from both `get` and `put`, `capacity=0`, storing `None` as a value, and bad-capacity handling. `python3 test_lru.py` prints `all assertions passed`, and the `repr` confirms `{'a': 1, 'c': 3}` after `b` was evicted.\n[stats] steps=7 input_tokens=79723 output_tokens=2874\n\n--- Session cost: $0.2823 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-lru-cache",
+      "category": "hard",
+      "agent": "openlaoke-balanced",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 152482,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "lru.py",
+        "test_lru.py"
+      ],
+      "stdout_tail": "I'll create the LRU cache, then verify it with a quick test script.\nThe heredoc got intercepted by the shell wrapper. I'll write the test file directly instead.\nNow I'm executing the test file.\nThe sandbox doesn't recognize python3. Let me try `python` or add justification.\nGood \u2014 the test caught a bug in my *reference model*, not the cache: in the `put`-update branch I reordered `ref`/`order` but never assigned the new value. Fixing the test:\nThe edit worked, so I'm running the test again to verify it passes.\nDone. `lru.py` contains `LRUCache(capacity)` backed by a hash map plus a doubly-linked recency list, so `get`/`put`/eviction are all O(1):\n\n- `get(key, default=None)` \u2014 returns the value (refreshing recency) or `default` on a miss without touching the list.\n- `put(key, value)` \u2014 insert or update, refreshing recency; evicts the least-recently-used key when full.\n- `len(cache)` \u2014 current entry count.\n- Edge cases handled: `capacity=0` stores nothing, `None`/falsy values are distinguishable from misses, overwriting an existing key doesn't evict.\n\nVerified with `test_lru.py` (fixed one bug in the test's reference model along the way): targeted cases plus 20k randomized ops cross-checked against a reference model, including final recency order \u2014 `all tests passed`.\n[stats] steps=7 input_tokens=58942 output_tokens=4809\n\n--- Session cost: $0.2490 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-debug-median",
+      "category": "hard",
+      "agent": "openlaoke-deep",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 119361,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "stats.py"
+      ],
+      "stdout_tail": "stification. Let me re-send with justification as instructed.\nAll checks pass. Let me clean up the scratch test file so only the requested fix remains.\nPath typo on my part \u2014 the shell already starts in the working directory, so I'll use relative paths.\nRemove the __pycache__ too and generate a response.\nFixed. Two bugs in `stats.py`:\n\n1. **`median()`**: `values = values.sort()` \u2014 `list.sort()` sorts in place and returns `None`, so the next `len(values)` raised `TypeError`, and it mutated the caller's list. Now uses `sorted(values)` to build a new sorted list, leaving the input untouched. The odd/even index math was already correct and is unchanged.\n2. **`mean([])`**: raised `ZeroDivisionError`; now raises `ValueError` first.\n\nI also made `median([])` raise `ValueError` instead of a confusing `IndexError` from the even-length branch \u2014 say the word if you'd rather keep it exactly as it was.\n\nVerification (ran `python3 check_stats.py` on odd/even, sorted/unsorted, negatives, duplicates, and a tuple input, then deleted the scratch file so only `stats.py` remains):\n\n```\nmedian([3, 1, 2]) = 2        median([4, 1, 3, 2]) = 2.5\nmedian([5]) = 5              median([-5,10,3,3,99,0]) = 3.0\nmean([]) -> ValueError: mean requires at least one data point\nmedian([]) -> ValueError: median requires at least one data point\nnon-mutation OK: [3, 1, 2]\nALL CHECKS PASSED\n```\n\nNames and signatures are unchanged.\n[stats] steps=11 input_tokens=124823 output_tokens=3434\n\n--- Session cost: $0.4260 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-debug-median",
+      "category": "hard",
+      "agent": "openlaoke-opencode",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 121264,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "stats.py"
+      ],
+      "stdout_tail": " check and clean it up to keep the workspace minimal.\n`shutil` is blocked in the sandbox; using `os` instead:\nFixed in `stats.py`:\n\n```python\ndef mean(values):\n    if not values:\n        raise ValueError(\"mean() requires at least one value\")\n    return sum(values) / len(values)\n\n\ndef median(values):\n    values = sorted(values)\n    n = len(values)\n    if n % 2:\n        return values[n // 2]\n    return (values[n // 2 - 1] + values[n // 2]) / 2\n```\n\n**Root cause:** `values.sort()` sorts in place and returns `None`, so `values` became `None` and every `median()` call died with `AttributeError` \u2014 and had it worked, it would have reordered the caller's list. Replaced with `sorted(values)`, which returns a new sorted list and leaves the input untouched. Added the explicit `ValueError` for `mean([])`, which otherwise surfaced as `ZeroDivisionError`. Function names and signatures are unchanged.\n\n**Verified** by importing the real module and asserting: odd/even lengths, single-element and two-element lists, unsorted input (`[5,3,8,1,9,2]` \u2192 `4.0`) with the caller's list compared before/after to prove no mutation, and `mean([])` raising `ValueError`. All 11 checks passed. There were no existing tests or `AGENTS.md`/README in the directory.\n\nOne thing I left alone since it wasn't in scope: `median([])` still raises `IndexError` rather than `ValueError`. Say the word if you'd like it to match `mean()`.\n[stats] steps=10 input_tokens=109592 output_tokens=3672\n\n--- Session cost: $0.3839 ---\n",
+      "attempts": 1
+    },
+    {
+      "task": "hard-debug-median",
+      "category": "hard",
+      "agent": "openlaoke-balanced",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 80747,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "__pycache__",
+        "stats.py"
+      ],
+      "stdout_tail": "tion since python3 was unrecognised. Let me provide justification.\nAll checks passed. Now let's show final file.\nFixed. Two bugs in `stats.py`:\n\n1. **`median`**: `values = values.sort()` \u2014 `list.sort()` sorts in place and returns `None`, so the subsequent indexing raised `AttributeError`/`TypeError` *and* mutated the caller's list. Replaced with `values = sorted(values)`, which returns a new sorted list and leaves the input untouched. The odd/even index logic was already correct once the sort returns a list.\n2. **`mean`**: `sum([])/len([])` raised `ZeroDivisionError`, not `ValueError`. Added an explicit `ValueError`, materializing the input via `list(values)` first so the emptiness check works for any iterable without consuming a generator twice.\n\nFunction names and signatures unchanged.\n\nVerified with a throwaway script (created, run, then deleted):\n\n```\nmean([]) -> ValueError mean() requires at least one value\nall checks passed\n```\n\nCases covered: odd-length unsorted `[5,1,3] \u2192 3`, even-length unsorted `[4,1,2,3] \u2192 2.5`, `[10,10] \u2192 10`, `[2,1] \u2192 1.5`, negatives, single element, caller-list non-mutation, `mean` on a list and on a generator, and `mean([]) \u2192 ValueError`.\n\nOne thing I left alone as out of scope: `median([])` still raises `IndexError` (the even-branch indexes `values[-1]`), since the requirement only specified `mean([])`. Say the word if you want that to raise `ValueError` too.\n[stats] steps=8 input_tokens=39908 output_tokens=2055\n\n--- Session cost: $0.1505 ---\n",
+      "attempts": 1
+    }
+  ]
+}

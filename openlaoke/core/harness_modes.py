@@ -102,6 +102,28 @@ OPENCODE = HarnessMode(
     ),
 )
 
+DEEP = HarnessMode(
+    key="deep",
+    label="deep",
+    summary="Maximum reasoning: root-cause analysis, explicit plan, strict verification.",
+    reasoning_effort="high",
+    max_steps=80,
+    tools="all",
+    repair_tool_calls=True,
+    max_repeat_calls=4,
+    parallel_readonly=True,
+    verify="strict",
+    plan_first=True,
+    directives=(
+        "Think before acting: identify the root cause, the constraints, and the edge "
+        "cases, then choose the smallest robust fix.",
+        "For non-trivial work, state a brief plan and the evidence that would prove it correct.",
+        "Verify with the project's real test, lint, or build command, then re-check the "
+        "diff for regressions.",
+        "If the first approach fails, diagnose why instead of retrying variations blindly.",
+    ),
+)
+
 BALANCED = HarnessMode(
     key="balanced",
     label="balanced",
@@ -121,7 +143,7 @@ BALANCED = HarnessMode(
     ),
 )
 
-MODES: dict[str, HarnessMode] = {mode.key: mode for mode in (BALANCED, PI, JCODE, OPENCODE)}
+MODES: dict[str, HarnessMode] = {mode.key: mode for mode in (BALANCED, PI, JCODE, OPENCODE, DEEP)}
 
 DEFAULT_MODE = BALANCED.key
 
@@ -135,6 +157,9 @@ ALIASES: dict[str, str] = {
     "robust": "jcode",
     "strict": "opencode",
     "thorough": "opencode",
+    "high": "deep",
+    "max": "deep",
+    "reasoning": "deep",
 }
 
 

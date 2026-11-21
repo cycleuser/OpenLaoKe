@@ -63,9 +63,11 @@ difference is policy, not model quality:
 | `pi` | low | 25 | core | act immediately, keep context small, stop early |
 | `jcode` | low | 35 | core | repair bad calls, guard loops, verify once, stop |
 | `opencode` | medium | 60 | all | read conventions, plan multi-file work, verify strictly |
+| `deep` | high | 80 | all | root-cause analysis, explicit plan, strict verification |
 
-Switch at runtime with `/mode pi`, `/mode jcode`, `/mode opencode`, or start with
-`openlaoke --mode opencode "..."`. Aliases: `fast`, `robust`, `thorough`. A mode
+Switch at runtime with `/mode pi`, `/mode jcode`, `/mode opencode`, `/mode deep`, or start with
+`openlaoke --mode opencode "..."`. `deep` turns reasoning up to high for hard
+debugging and design work. Aliases: `fast`, `robust`, `thorough`, `max`. A mode
 sets reasoning effort, step budget, and system-prompt directives; `--reasoning-effort`
 still overrides the effort for that run. `/mode` applies from the next turn.
 

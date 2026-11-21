@@ -237,6 +237,29 @@ the `response` stream, so text appears immediately (with thinking markers).
 - **Responsiveness** favours LiquidAI on short prompts (no thinking delay), at
   the cost of thinking markers in the output.
 
+## Part 6 — Harness modes (halogen)
+
+The same model (`halogen`) and filesystem verifier, run in four modes. The
+basic suite is generation, editing, refactoring, and a constraint; the hard
+suite is an expression parser, a CSV parser with quoted newlines, an LRU
+cache, and a median bug fix with hidden tests.
+
+| Mode | 4 basic, avg | 6 mixed, avg | 4 hard, avg |
+|------|--------------|--------------|-------------|
+| `balanced` | 21.5 s | 37.1 s | 122.3 s |
+| `pi` | 23.9 s | - | - |
+| `opencode` | 34.1 s | 47.2 s | 140.1 s |
+| `deep` (high reasoning) | - | 53.3 s | 185.8 s |
+
+Every mode passed every task (4/4, 6/6, 4/4). High reasoning did not change
+the pass rate on this set; it cost about 50% more wall time on the hard suite
+(185.8 s vs 122.3 s for `balanced`). Treat `deep` as a tool for a stuck or
+genuinely hard task, not as a default.
+
+Caveat: one run per cell, and the tasks still sit inside the model's one-shot
+ability. A quality difference would need tasks where the baseline fails, which
+would measure the model more than the harness.
+
 ## Findings
 
 1. **The harness is not the bottleneck.** OpenLaoKe (42/60) and pi (41/60) are

@@ -162,7 +162,7 @@ def main() -> None:
         "--mode",
         default=None,
         help=(
-            "Harness temperament: balanced (default), pi, jcode, or opencode. "
+            "Harness temperament: balanced (default), pi, jcode, opencode, or deep. "
             "Sets reasoning effort, step budget, tool profile, and prompt directives."
         ),
     )
@@ -293,7 +293,7 @@ def main() -> None:
 
     if args.mode is not None and not is_valid_mode(args.mode):
         console.print(
-            f"[red]Unknown mode: {args.mode}[/red] (choose balanced, pi, jcode, or opencode)"
+            f"[red]Unknown mode: {args.mode}[/red] (choose balanced, pi, jcode, opencode, or deep)"
         )
         return
 

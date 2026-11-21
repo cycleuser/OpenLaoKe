@@ -378,7 +378,7 @@ class ModeCommand(SlashCommand):
                 lines.append(f" {marker} {mode.key:<9} {mode.summary}")
                 lines.append(f"   effort={effort}  steps={mode.max_steps}  tools={mode.tools}")
             lines.append("")
-            lines.append("Switch: /mode <name>    aliases: fast, robust, thorough")
+            lines.append("Switch: /mode <name>    aliases: fast, robust, thorough, max")
             return CommandResult(message="\n".join(lines))
 
         if not is_valid_mode(args):

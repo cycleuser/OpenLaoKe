@@ -42,11 +42,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - **Switchable harness modes** (`core/harness_modes.py`, `/mode`, `--mode`):
-  `balanced` (default), `pi`, `jcode`, and `opencode` bundle the reference
+  `balanced` (default), `pi`, `jcode`, `opencode`, and `deep` bundle the reference
   agents' temperaments: reasoning effort, step budget, tool profile, and
   system-prompt directives. `/mode` switches mid-session (applies from the next
   turn and invalidates the cached prompt); `--mode` selects one for a single
-  run; aliases `fast`, `robust`, and `thorough` are accepted. The same knobs
+  run; `deep` uses high reasoning for hard debugging and design work; aliases
+  `fast`, `robust`, `thorough`, and `max` are accepted. The same knobs
   feed `EnginePolicy` in headless, sub-agent, and bot loops, so the mode is not
   cosmetic.
 - **Provider experience matches Jcode** (`core/provider_presets.py`,

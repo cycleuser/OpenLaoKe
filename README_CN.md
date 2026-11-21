@@ -61,9 +61,11 @@ pi 的内置命令一一对应地实现了：
 | `pi` | low | 25 | 核心 | 立即行动、上下文最小、尽早停止 |
 | `jcode` | low | 35 | 核心 | 修复坏调用、防循环、验证一次就停 |
 | `opencode` | medium | 60 | 全部 | 先读规范、多文件先列计划、严格验证 |
+| `deep` | high | 80 | 全部 | 根因分析、显式计划、严格验证 |
 
-运行时用 `/mode pi`、`/mode jcode`、`/mode opencode` 切换，或启动时
-`openlaoke --mode opencode "..."`。别名：`fast`、`robust`、`thorough`。
+运行时用 `/mode pi`、`/mode jcode`、`/mode opencode`、`/mode deep` 切换，或启动时
+`openlaoke --mode opencode "..."`。`deep` 把推理强度提到 high，适合难调试和
+设计类任务。别名：`fast`、`robust`、`thorough`、`max`。
 模式会设置推理强度、步数预算和系统提示词指令；单次运行仍可用
 `--reasoning-effort` 覆盖强度。`/mode` 从下一轮开始生效。
 
