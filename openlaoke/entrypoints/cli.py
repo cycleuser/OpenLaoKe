@@ -178,6 +178,14 @@ def main() -> None:
         help="Max agent steps per turn (default: 100)",
     )
     parser.add_argument(
+        "--all-tools",
+        action="store_true",
+        help=(
+            "Headless runs: expose the full tool set (web, panel, swarm, memory, ...) "
+            "instead of the focused core coding tools."
+        ),
+    )
+    parser.add_argument(
         "--bot",
         default=None,
         help="Send the prompt to a named bot (bot mode)",
@@ -280,6 +288,7 @@ def main() -> None:
         app_state.max_tool_history = args.max_tool_history
     if args.max_steps:
         app_state.max_steps = args.max_steps
+    app_state.use_all_tools = args.all_tools
 
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
@@ -339,13 +348,16 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     from openlaoke.core.engine import STOP_ERROR, EnginePolicy, run_loop
     from openlaoke.core.system_prompt import build_system_prompt
     from openlaoke.core.tool import ToolRegistry
-    from openlaoke.tools.register import register_core_tools
+    from openlaoke.tools.register import register_all_tools, register_core_tools
     from openlaoke.types.core_types import MessageRole, UserMessage
 
     console = Console()
 
     registry = ToolRegistry()
-    register_core_tools(registry)
+    if getattr(app_state, "use_all_tools", False):
+        register_all_tools(registry)
+    else:
+        register_core_tools(registry)
 
     proxy_url = get_proxy_url(config)
     api = MultiProviderClient(config.providers, proxy=proxy_url)

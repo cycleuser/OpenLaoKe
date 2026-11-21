@@ -275,15 +275,11 @@ async def run_loop(
                 for idx, out in zip(runnable_idx, gathered, strict=True):
                     tu = tool_uses[idx]
                     results[idx] = (
-                        _error(tu.id, f"Error: {out}")
-                        if isinstance(out, BaseException)
-                        else out
+                        _error(tu.id, f"Error: {out}") if isinstance(out, BaseException) else out
                     )
             else:
                 for idx in runnable_idx:
-                    results[idx] = await execute_tool(
-                        app_state, registry, tool_uses[idx], policy
-                    )
+                    results[idx] = await execute_tool(app_state, registry, tool_uses[idx], policy)
 
             for tu, res in zip(tool_uses, results, strict=True):
                 assert res is not None

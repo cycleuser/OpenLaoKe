@@ -6,7 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Focused tool profile for headless runs** (`tools/register.py`,
+  `entrypoints/cli.py`): `openlaoke "<prompt>"` now sends only the nine core
+  coding tools (Read, Write, Edit, Grep, Glob, ListDirectory, ApplyPatch,
+  InvokeSkill, shell) instead of all 23. Tool-schema prompt tokens drop by
+  roughly 65% per model call; `--all-tools` restores the full surface.
+- **The headless loop matches the REPL's reliability** (`core/engine.py`):
+  tool-name/argument repair, an identical-call loop guard, and parallel
+  dispatch of read-only tool batches.
+- **Clearer base system prompt** (`core/cache_guard.py`): explicit
+  act-inspect-edit-verify workflow, evidence-based completion, and relative
+  paths.
+
+### Fixed
+- **Cloudflare-fronted gateways** (`core/multi_provider_api.py`): send a
+  browser-compatible `User-Agent` and `Accept: application/json`; plain
+  library User-Agents were answered with a 403 challenge page even for valid
+  keys. Override with `OPENLAOKE_HTTP_USER_AGENT`.
+- **Edit argument aliases** (`core/small_model_optimizations.py`):
+  `old_string`/`new_string` now map to the tool's real `old_text`/`new_text`
+  schema instead of the reverse.
+- **Truncated model output** (`core/engine.py`): an empty answer with
+  `finish_reason=length` is reported as an error instead of a silent success.
+- **Reasoning-model fallback** (`core/multi_provider_api.py`): read
+  `reasoning_content` as well as `reasoning`/`thinking`.
+
 ### Added
+- **Cross-agent benchmark** (`bench/agent_compare.py`): runs OpenLaoKe, Jcode
+  and OpenCode on the same tasks and model in isolated sandboxes, verifies on
+  the filesystem, retries infrastructure failures, and emits a comparison
+  JSON. The API key is read from `OPENLAOKE_BENCH_API_KEY`.
 - **Bot mode** (`core/bot_mode.py`, `/bot`, optional `MessageAgent` tool): a roster of
   named agents, each with a title, role, optional model/persona/skills and one canonical
   chat under `~/.openlaoke/bots/`. `/bot use <name>` routes plain input to that bot;

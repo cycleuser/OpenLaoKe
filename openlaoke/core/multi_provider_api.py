@@ -43,6 +43,7 @@ _DEFAULT_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+
 def _default_http_headers() -> dict[str, str]:
     return {
         "User-Agent": os.environ.get("OPENLAOKE_HTTP_USER_AGENT", _DEFAULT_USER_AGENT),
