@@ -28,6 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   paths.
 
 ### Fixed
+- **Local endpoints are free** (`core/multi_provider_api.py`): cost
+  calculation now returns zero when the active base URL is localhost, instead
+  of charging an unknown local model at the default cloud price.
+- **Small models keep files in the workspace** (`core/cache_guard.py`): the
+  base prompt now says to use paths relative to the working directory and not
+  `/tmp`. A local 2B model otherwise wrote `fib.py` to `/tmp` and then
+  reported success.
 - **Cloudflare-fronted gateways** (`core/multi_provider_api.py`): send a
   browser-compatible `User-Agent` and `Accept: application/json`; plain
   library User-Agents were answered with a 403 challenge page even for valid

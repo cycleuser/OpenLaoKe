@@ -711,6 +711,9 @@ class MultiProviderClient:
         )
 
     def _calculate_cost(self, usage: dict[str, int], model: str) -> CostInfo:
+        provider = self.config.get_active_provider() if self.config else None
+        if provider is not None and (provider.is_local or _is_local_url(provider.base_url)):
+            return CostInfo()
         pricing = MODEL_PRICES.get(model, DEFAULT_PRICING)
         input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
         output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
