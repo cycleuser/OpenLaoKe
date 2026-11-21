@@ -339,13 +339,13 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     from openlaoke.core.engine import STOP_ERROR, EnginePolicy, run_loop
     from openlaoke.core.system_prompt import build_system_prompt
     from openlaoke.core.tool import ToolRegistry
-    from openlaoke.tools.register import register_all_tools
+    from openlaoke.tools.register import register_core_tools
     from openlaoke.types.core_types import MessageRole, UserMessage
 
     console = Console()
 
     registry = ToolRegistry()
-    register_all_tools(registry)
+    register_core_tools(registry)
 
     proxy_url = get_proxy_url(config)
     api = MultiProviderClient(config.providers, proxy=proxy_url)
@@ -377,6 +377,13 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     if result.stop_reason == STOP_ERROR:
         console.print(f"\n[bold red]Error:[/bold red] {result.error}")
         sys.exit(1)
+
+    if os.environ.get("OPENLAOKE_STATS"):
+        usage = app_state.token_usage
+        print(
+            f"[stats] steps={result.iterations} "
+            f"input_tokens={usage.input_tokens} output_tokens={usage.output_tokens}"
+        )
 
     print(f"\n--- Session cost: ${app_state.cost_info.total_cost:.4f} ---")
 

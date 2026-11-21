@@ -33,6 +33,22 @@ _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds
 _MAX_DELAY = 30.0
 
+# Some OpenAI-compatible gateways sit behind Cloudflare bot management, which
+# challenges plain library User-Agents (python-httpx/...) with a 403 HTML page
+# even when the API key is valid. A browser-like UA plus HTTP/1.1 and an
+# explicit JSON Accept header is what those gateways let through. Override with
+# OPENLAOKE_HTTP_USER_AGENT if a provider expects its own client string.
+_DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+def _default_http_headers() -> dict[str, str]:
+    return {
+        "User-Agent": os.environ.get("OPENLAOKE_HTTP_USER_AGENT", _DEFAULT_USER_AGENT),
+        "Accept": "application/json",
+    }
+
 
 @dataclass
 class ModelPricing:
@@ -126,6 +142,7 @@ class MultiProviderClient:
                 limits=limits,
                 proxy=proxy,
                 trust_env=False,
+                headers=_default_http_headers(),
             )
         return self._client
 
@@ -640,7 +657,11 @@ class MultiProviderClient:
             # content may be empty if the token budget was consumed by
             # the thinking phase.  Fall back to reasoning as visible text.
             if not content.strip():
-                reasoning = message.get("reasoning", "")
+                reasoning = (
+                    message.get("reasoning_content", "")
+                    or message.get("reasoning", "")
+                    or message.get("thinking", "")
+                )
                 if reasoning and reasoning.strip():
                     content = reasoning.strip()
 

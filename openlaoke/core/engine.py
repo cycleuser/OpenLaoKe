@@ -18,6 +18,7 @@ here, so the shapes cannot diverge again.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -85,6 +86,11 @@ class EnginePolicy:
     transform_result: Callable[[ToolUseBlock, ToolResultBlock], ToolResultBlock] | None = None
     should_stop: Callable[[], bool] | None = None
     save_state: Callable[[int, list[dict[str, Any]], list[str], str], None] | None = None
+    # Reliability / efficiency knobs. They match what the interactive REPL
+    # already does, so the non-interactive and sub-agent paths stop drifting.
+    repair_tool_calls: bool = True
+    max_repeat_calls: int = 3
+    parallel_readonly: bool = True
 
 
 @dataclass
@@ -114,7 +120,13 @@ async def execute_tool(
     policy = policy or EnginePolicy()
     tool = registry.get(tool_use.name)
     if tool is None:
-        return _error(tool_use.id, f"Unknown tool: {tool_use.name}")
+        names = sorted(t.name for t in registry.get_all())
+        preview = ", ".join(names[:12])
+        more = "" if len(names) <= 12 else f" (+{len(names) - 12} more)"
+        return _error(
+            tool_use.id,
+            f"Unknown tool: {tool_use.name}. Available tools: {preview}{more}",
+        )
 
     if policy.allow_tools is not None and tool_use.name not in policy.allow_tools:
         return _error(tool_use.id, f"Tool '{tool_use.name}' is not enabled for this agent")
@@ -155,6 +167,17 @@ async def run_loop(
     """
     result = EngineResult(messages=messages)
     iteration = 0
+
+    validator = None
+    if policy.repair_tool_calls:
+        try:
+            from openlaoke.core.small_model_optimizations import ToolCallValidator
+
+            validator = ToolCallValidator()
+            validator.set_tools(registry)
+        except Exception:  # noqa: BLE001 - repair is optional, never fatal
+            validator = None
+    repeat_counts: dict[str, int] = {}
 
     try:
         while iteration < policy.max_iterations:
@@ -199,12 +222,72 @@ async def run_loop(
                 policy.save_state(iteration, messages, result.text_parts, "running")
 
             if not tool_uses:
+                if not content and getattr(response, "stop_reason", None) == "length":
+                    result.stop_reason = STOP_ERROR
+                    result.error = (
+                        "The model hit the output token limit before producing an answer. "
+                        "Raise max_tokens or reduce the request size."
+                    )
+                    break
                 result.stop_reason = STOP_DONE
                 break
 
-            for tool_use in tool_uses:
-                tool_result = await execute_tool(app_state, registry, tool_use, policy)
-                messages.append(tool_result_message(tool_use.id, _as_text(tool_result.content)))
+            # Repair names/arguments the way the REPL does, so a small typo
+            # costs nothing instead of a wasted turn.
+            if validator is not None:
+                repaired: list[ToolUseBlock] = []
+                for tu in tool_uses:
+                    name, args, _hint = validator.validate(tu.name, tu.input)
+                    repaired.append(ToolUseBlock(id=tu.id, name=name, input=args))
+                tool_uses = repaired
+
+            # Break out of identical-call loops instead of burning the step budget.
+            blocked: set[int] = set()
+            if policy.max_repeat_calls > 0:
+                for idx, tu in enumerate(tool_uses):
+                    key = f"{tu.name}:{json.dumps(tu.input, sort_keys=True, default=str)}"
+                    repeat_counts[key] = repeat_counts.get(key, 0) + 1
+                    if repeat_counts[key] > policy.max_repeat_calls:
+                        blocked.add(idx)
+
+            runnable_idx = [idx for idx in range(len(tool_uses)) if idx not in blocked]
+            results: list[ToolResultBlock | None] = [None] * len(tool_uses)
+            for idx in blocked:
+                tu = tool_uses[idx]
+                results[idx] = _error(
+                    tu.id,
+                    f"Refused: '{tu.name}' was already called {policy.max_repeat_calls} "
+                    "times with identical arguments. Change the arguments or the approach.",
+                )
+
+            if (
+                policy.parallel_readonly
+                and len(runnable_idx) > 1
+                and all(registry.is_readonly(tool_uses[idx].name) for idx in runnable_idx)
+            ):
+                gathered = await asyncio.gather(
+                    *[
+                        execute_tool(app_state, registry, tool_uses[idx], policy)
+                        for idx in runnable_idx
+                    ],
+                    return_exceptions=True,
+                )
+                for idx, out in zip(runnable_idx, gathered, strict=True):
+                    tu = tool_uses[idx]
+                    results[idx] = (
+                        _error(tu.id, f"Error: {out}")
+                        if isinstance(out, BaseException)
+                        else out
+                    )
+            else:
+                for idx in runnable_idx:
+                    results[idx] = await execute_tool(
+                        app_state, registry, tool_uses[idx], policy
+                    )
+
+            for tu, res in zip(tool_uses, results, strict=True):
+                assert res is not None
+                messages.append(tool_result_message(tu.id, _as_text(res.content)))
 
             if policy.save_state is not None:
                 policy.save_state(iteration, messages, result.text_parts, "running")

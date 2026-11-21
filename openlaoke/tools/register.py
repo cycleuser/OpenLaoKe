@@ -113,6 +113,47 @@ def register_essential_tools(registry: ToolRegistry) -> None:
     register_all_tools(registry)
 
 
+def register_core_tools(registry: ToolRegistry) -> None:
+    """Register only the coding tools a headless run needs.
+
+    The interactive REPL can afford the full 20+ tool surface because the user
+    is there to steer. A single-shot run pays for every schema on every model
+    call, so sending Panel/Swarm/Schedule/Memory and friends costs thousands of
+    prompt tokens per step for capabilities the task rarely needs. The core
+    profile keeps the tool block small and the model focused.
+    """
+    from openlaoke.tools.apply_patch_tool import ApplyPatchTool
+    from openlaoke.tools.edit_tool import EditTool
+    from openlaoke.tools.glob_tool import GlobTool
+    from openlaoke.tools.grep_tool import GrepTool
+    from openlaoke.tools.invoke_skill_tool import InvokeSkillTool
+    from openlaoke.tools.ls_tool import ListDirectoryTool
+    from openlaoke.tools.read_tool import ReadTool
+    from openlaoke.tools.write_tool import WriteTool
+
+    tools: list = [
+        ReadTool(),
+        WriteTool(),
+        EditTool(),
+        GrepTool(),
+        GlobTool(),
+        ListDirectoryTool(),
+        ApplyPatchTool(),
+        InvokeSkillTool(),
+    ]
+    if _has_bash():
+        from openlaoke.tools.bash_tool import BashTool
+
+        tools.append(BashTool())
+    if _has_powershell():
+        from openlaoke.tools.powershell_tool import PowerShellTool
+
+        tools.append(PowerShellTool())
+
+    for tool in tools:
+        registry.register(tool)
+
+
 def register_deferred_tools(registry: ToolRegistry) -> None:
     return None
 
