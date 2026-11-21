@@ -121,6 +121,7 @@ class ProviderConfig:
     base_url: str = ""
     default_model: str = ""
     models: list[str] = field(default_factory=list)
+    model_labels: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     is_local: bool = False
 
@@ -327,14 +328,10 @@ class MultiProviderConfig:
                 "deepseek": ProviderConfig(
                     provider_type=ProviderType.DEEPSEEK,
                     base_url="https://api.deepseek.com/v1",
-                    default_model="deepseek-v4-flash",
+                    default_model="deepseek-flash",
                     models=[
-                        "deepseek-v4-flash",
-                        "deepseek-v4-pro",
-                        "deepseek-v4-flash-vision-exp",
                         "deepseek-flash",
-                        "deepseek-chat",
-                        "deepseek-reasoner",
+                        "deepseek-v4-pro",
                     ],
                 ),
                 "ollama_cloud": ProviderConfig(
@@ -343,13 +340,29 @@ class MultiProviderConfig:
                     default_model="gpt-oss:20b",
                     models=[
                         "gpt-oss:20b",
-                        "gpt-oss:120b",
-                        "deepseek-v4-flash",
+                        "nemotron-3-super",
+                        "glm-5.3",
+                        "gemma4:31b",
+                        "mimo-v2.6-flash",
+                        "nemotron-3-ultra",
+                        "glm-5.2",
+                        "glm-5.3-flash",
+                        "inkling-2-small",
+                        "mimo-v2.6-pro",
+                        "kimi-k3.1-pro",
+                        "deepseek-v4.1-flash:1017",
                         "minimax-m3",
                         "kimi-k2.6",
-                        "glm-5.2",
-                        "qwen3.5:397b",
-                        "nemotron-3-ultra",
+                        "kimi-k2.7-code",
+                        "deepseek-v4-pro:0813",
+                        "gpt-oss:120b",
+                        "minimax-m3.1-flash",
+                        "clef:27b",
+                        "deepseek-v4.1-flash",
+                        "mistral-large-4",
+                        "beam",
+                        "muse-spark-open",
+                        "kimi-k3",
                     ],
                 ),
                 "minimax": ProviderConfig(

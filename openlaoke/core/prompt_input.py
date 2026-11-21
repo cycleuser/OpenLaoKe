@@ -196,15 +196,30 @@ def _collect_all_models(config: Any | None = None) -> list[dict[str, Any]]:
     if active_provider in providers and not active_model:
         active_model = providers[active_provider].get_default_model()
 
+    base_to_names: dict[str, list[str]] = {}
+    for pname, provider in providers.items():
+        if not getattr(provider, "enabled", True) or not provider.is_ready():
+            continue
+        base = (provider.base_url or "").rstrip("/").lower()
+        if base:
+            base_to_names.setdefault(base, []).append(pname)
+    duplicate_generic = {
+        "openai_compatible"
+        for names in base_to_names.values()
+        if "openai_compatible" in names and any(name != "openai_compatible" for name in names)
+    }
+
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
     for pname, provider in providers.items():
         if not getattr(provider, "enabled", True) or not provider.is_ready():
             continue
-        models: list[str] = []
-        for model in [*provider.models, provider.get_default_model()]:
-            if model and model not in models:
-                models.append(model)
+        if pname in duplicate_generic and pname != active_provider:
+            continue
+        models = [model for model in provider.models if model]
+        default = provider.get_default_model()
+        if default and (not models or default in models) and default not in models:
+            models.append(default)
         if pname == active_provider and active_model and active_model not in models:
             models.append(active_model)
         for model in models:
@@ -217,6 +232,7 @@ def _collect_all_models(config: Any | None = None) -> list[dict[str, Any]]:
                     "provider": pname,
                     "model": model,
                     "display": display,
+                    "label": provider.model_labels.get(model, ""),
                     "active": pname == active_provider and model == active_model,
                 }
             )
@@ -297,7 +313,9 @@ def _build_model_picker_app(
                 style = "class:active"
             else:
                 style = "class:row"
-            text.append((style, f" {marker} {entry['display']}\n"))
+            label = str(entry.get("label") or "")[:48]
+            suffix = f"  ·  {label}" if label else ""
+            text.append((style, f" {marker} {entry['display']}{suffix}\n"))
         if end < len(rows):
             text.append(("class:hint", f"  ↓ {len(rows) - end} more\n"))
         return text
@@ -389,7 +407,8 @@ async def _run_model_picker_text(entries: list[dict[str, Any]]) -> str | None:
     console.rule("[bold cyan]Model Picker[/] (number or name, Ctrl+C to cancel)")
     for i, entry in enumerate(entries, 1):
         marker = "*" if entry["active"] else " "
-        console.print(f"  [{marker}] [{i:2d}] {entry['display']}")
+        label = f"  ·  {entry['label']}" if entry.get("label") else ""
+        console.print(f"  [{marker}] [{i:2d}] {entry['display']}{label}")
     console.print()
     try:
         choice = (await asyncio.to_thread(input, "  Select > ")).strip()
@@ -408,11 +427,35 @@ async def _run_model_picker_text(entries: list[dict[str, Any]]) -> str | None:
 
 
 async def run_model_picker_async() -> str | None:
+    import asyncio
+
+    from openlaoke.core.model_discovery import discover_model_details
     from openlaoke.types.providers import probe_local_providers
     from openlaoke.utils.config import load_config
 
     config = load_config()
     await probe_local_providers(config.providers.providers)
+    ready = [
+        provider
+        for provider in config.providers.providers.values()
+        if getattr(provider, "enabled", True) and provider.is_ready()
+    ]
+    if ready:
+        results = await asyncio.gather(
+            *(
+                discover_model_details(provider, timeout=2.5, use_catalog=False)
+                for provider in ready
+            ),
+            return_exceptions=True,
+        )
+        for provider, result in zip(ready, results, strict=True):
+            if isinstance(result, BaseException):
+                continue
+            ids, labels = result
+            if not ids:
+                continue
+            provider.models = ids
+            provider.model_labels = {model: labels[model] for model in ids if model in labels}
     entries = _collect_all_models(config)
     if not entries:
         return None

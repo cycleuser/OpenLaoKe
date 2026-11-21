@@ -45,6 +45,7 @@ def _provider_from_saved(name: str, pdata: dict[str, Any]) -> ProviderConfig:
         base_url=str(pdata.get("base_url") or ""),
         default_model=str(pdata.get("default_model") or ""),
         models=list(pdata.get("models") or []),
+        model_labels=dict(pdata.get("model_labels") or {}),
         enabled=bool(pdata.get("enabled", True)),
         is_local=bool(pdata.get("is_local", False)),
     )
@@ -142,6 +143,8 @@ def load_config() -> AppConfig:
                         p.enabled = pdata.get("enabled", True)
                         if "models" in pdata and not is_builtin:
                             p.models = list(pdata.get("models") or [])
+                        if "model_labels" in pdata:
+                            p.model_labels = dict(pdata.get("model_labels") or {})
                         if "provider_type" in pdata:
                             with contextlib.suppress(ValueError):
                                 p.provider_type = ProviderType(pdata["provider_type"])
@@ -229,6 +232,7 @@ def save_config(config: AppConfig) -> None:
                     "base_url": p.base_url,
                     "default_model": p.default_model,
                     "models": p.models,
+                    "model_labels": p.model_labels,
                     "is_local": p.is_local,
                     "enabled": p.enabled,
                 }

@@ -1,10 +1,8 @@
 """Live model discovery for providers.
 
-The list a provider exposes at ``GET {base_url}/models`` is often incomplete
-(DeepSeek reports two models while its catalog has four). So discovery unions
-the provider's live endpoint with the models.dev catalog, which is the same
-registry pi and opencode use. Both sources are fetched at runtime; the catalog
-is cached on disk for a day.
+The list a provider exposes at ``GET {base_url}/models`` is authoritative when
+it answers: it is what the endpoint actually accepts. models.dev is a fallback
+for providers without a live endpoint, and its cache is refreshed daily.
 
 Provider endpoints are tried first, local Ollama falls back to ``/api/tags``,
 and the configured model list is only a last resort when everything is
@@ -61,28 +59,38 @@ def _auth_headers(provider: ProviderConfig) -> dict[str, str]:
     return {}
 
 
-async def _get_models_endpoint(base_url: str, provider: ProviderConfig) -> list[str]:
+async def _get_models_endpoint_details(
+    base_url: str, provider: ProviderConfig, timeout: float = _TIMEOUT
+) -> tuple[list[str], dict[str, str]]:
     if not base_url:
-        return []
+        return [], {}
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(f"{base_url}/models", headers=_auth_headers(provider))
     except Exception:
-        return []
+        return [], {}
     if resp.status_code >= 400:
-        return []
+        return [], {}
     try:
         data = resp.json()
     except Exception:
-        return []
+        return [], {}
     items = data.get("data") if isinstance(data, dict) else data
     ids: list[str] = []
+    labels: dict[str, str] = {}
     for item in items or []:
-        if isinstance(item, dict):
-            name = item.get("id") or item.get("name")
-            if name:
-                ids.append(str(name))
-    return ids
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id") or item.get("name")
+        if not model_id:
+            continue
+        model_id = str(model_id)
+        if model_id not in ids:
+            ids.append(model_id)
+        label = item.get("name")
+        if label and str(label) != model_id:
+            labels[model_id] = str(label)
+    return ids, labels
 
 
 async def _get_ollama_tags(base_url: str) -> list[str]:
@@ -148,15 +156,26 @@ async def _catalog_models(provider: ProviderConfig) -> list[str]:
     return list((entry.get("models") or {}).keys())
 
 
-async def discover_models(provider: ProviderConfig) -> list[str]:
-    """Return the live + catalog model list for a provider, or [] on failure."""
+async def discover_model_details(
+    provider: ProviderConfig, *, timeout: float = _TIMEOUT, use_catalog: bool = True
+) -> tuple[list[str], dict[str, str]]:
+    """Return model ids and display names, preferring the live endpoint."""
     base_url = (provider.base_url or "").rstrip("/")
-    live = await _get_models_endpoint(base_url, provider)
+    live, labels = await _get_models_endpoint_details(base_url, provider, timeout)
     if not live and provider.is_local:
         live = await _get_ollama_tags(base_url)
+    if live:
+        return list(dict.fromkeys(live)), labels
+    if not use_catalog:
+        return [], labels
     catalog = await _catalog_models(provider)
-    # de-duplicate, keeping live models first
-    return list(dict.fromkeys([*live, *catalog]))
+    return list(dict.fromkeys(catalog)), {}
+
+
+async def discover_models(provider: ProviderConfig) -> list[str]:
+    """Return the live (or catalog fallback) model list, or [] on failure."""
+    ids, _ = await discover_model_details(provider)
+    return ids
 
 
 def _model_id_candidates(model_id: str) -> list[str]:

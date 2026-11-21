@@ -91,20 +91,30 @@ class ModelCommand(SlashCommand):
     aliases = ["m", "models"]
 
     async def _refresh(self, config, provider_name: str) -> list[str]:
-        from openlaoke.core.model_discovery import discover_models
+        from openlaoke.core.model_discovery import discover_model_details
 
         provider = config.providers.providers[provider_name]
-        live = await discover_models(provider)
+        live, labels = await discover_model_details(provider)
         if live:
             provider.models = live
+            provider.model_labels = {
+                model: label for model, label in labels.items() if model in live
+            }
         return live or provider.models
 
     @staticmethod
-    def _listing(provider_name: str, models: list[str], current: str, current_provider: str) -> str:
+    def _listing(
+        provider_name: str,
+        models: list[str],
+        current: str,
+        current_provider: str,
+        labels: dict[str, str] | None = None,
+    ) -> str:
         lines = [f"{provider_name} models ({len(models)}):"]
         for i, name in enumerate(models, 1):
             star = "*" if provider_name == current_provider and name == current else " "
-            lines.append(f" {star} {i:>2}. {name}")
+            label = f"  ·  {labels[name]}" if labels and name in labels else ""
+            lines.append(f" {star} {i:>2}. {name}{label}")
         return "\n".join(lines)
 
     @staticmethod
@@ -357,7 +367,15 @@ class ModelCommand(SlashCommand):
             save_config(config)
             if not models:
                 return CommandResult(message=f"{target}: no models found.")
-            return CommandResult(message=self._listing(target, models, cur_model, cur_provider))
+            return CommandResult(
+                message=self._listing(
+                    target,
+                    models,
+                    cur_model,
+                    cur_provider,
+                    getattr(providers[target], "model_labels", {}),
+                )
+            )
 
         # Split on the first whitespace only, so model ids that contain "/"
         # (e.g. "LiquidAI-dev/lfm2.5-2.6b:latest", "anthropic/claude-3.5-sonnet")
@@ -417,7 +435,13 @@ class ModelCommand(SlashCommand):
             note = f"  (no key — /login {provider_name} <api-key>)"
         result = f"Switched to {provider_name} / {model_name or '-'}{note}"
         if len(models) > 1:
-            result += "\n\n" + self._listing(provider_name, models, model_name, provider_name)
+            result += "\n\n" + self._listing(
+                provider_name,
+                models,
+                model_name,
+                provider_name,
+                getattr(providers[provider_name], "model_labels", {}),
+            )
         return CommandResult(message=result)
 
 

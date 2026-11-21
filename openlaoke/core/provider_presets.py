@@ -69,8 +69,8 @@ PRESETS: tuple[ProviderPreset, ...] = (
         label="DeepSeek",
         provider_type=ProviderType.DEEPSEEK,
         base_url="https://api.deepseek.com/v1",
-        models=("deepseek-chat", "deepseek-reasoner"),
-        default_model="deepseek-chat",
+        models=("deepseek-flash", "deepseek-v4-pro"),
+        default_model="deepseek-flash",
         env_var="DEEPSEEK_API_KEY",
     ),
     ProviderPreset(

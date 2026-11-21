@@ -18,6 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Custom and preset providers persist** (`utils/config.py`): provider type,
   model list, and local flag are saved and reloaded. `/model add
   cycleuser-llm` now keeps the `halogen` models after a restart.
+- **Live model names and labels** (`core/model_discovery.py`,
+  `core/prompt_input.py`): the picker refreshes each ready provider's
+  `/models` endpoint, shows the provider's display name next to the id, and
+  treats the live endpoint as authoritative instead of unioning stale
+  models.dev entries. DeepSeek now shows `deepseek-flash` (served by
+  DeepSeek-V4.1-Flash-1017) and `deepseek-v4-pro`; Ollama Cloud shows
+  `deepseek-v4.1-flash:1017`. A generic `openai_compatible` entry that points
+  at the same base URL as a typed provider is hidden.
 
 ### Fixed
 - **Dead local providers are detected at startup** (`types/providers.py`,
