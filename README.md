@@ -37,7 +37,7 @@ pi's built-in command set is implemented one-to-one:
 
 `/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
 
-Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list or activate a skill), `/theme`, `/help`.
+Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list or activate a skill), `/mode` (switch harness temperament), `/theme`, `/help`.
 
 `/model` switches provider or model, with live model discovery:
 
@@ -46,6 +46,28 @@ Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a promp
 - `/model <provider> <n>` — pick the nth model from that list
 - `/model <provider>/<model>` — switch to an explicit model
 - `/model list <provider>` — re-fetch the list from the provider
+
+The default listing hides cloud providers that have no API key. Local servers are
+always shown. Add a provider with `/model add` (preset picker) or
+`/model add <name> <base-url> [api-key] [model]`; remove it with `/model rm <name>`.
+Presets read their key from an environment variable, so no secret is stored in code.
+
+### Harness modes
+
+The same engine can behave like the three reference agents, because their real
+difference is policy, not model quality:
+
+| Mode | Effort | Steps | Tools | Character |
+|------|--------|-------|-------|-----------|
+| `balanced` (default) | low | 50 | core | Jcode reliability + pi brevity + OpenCode conventions |
+| `pi` | low | 25 | core | act immediately, keep context small, stop early |
+| `jcode` | low | 35 | core | repair bad calls, guard loops, verify once, stop |
+| `opencode` | medium | 60 | all | read conventions, plan multi-file work, verify strictly |
+
+Switch at runtime with `/mode pi`, `/mode jcode`, `/mode opencode`, or start with
+`openlaoke --mode opencode "..."`. Aliases: `fast`, `robust`, `thorough`. A mode
+sets reasoning effort, step budget, and system-prompt directives; `--reasoning-effort`
+still overrides the effort for that run. `/mode` applies from the next turn.
 
 ## Screenshots
 
@@ -262,6 +284,8 @@ Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google 
     }
   },
   "proxy_mode": "none",
+  "mode": "balanced",
+  "reasoning_effort": "low",
   "max_tokens": 8192,
   "theme": "dark"
 }

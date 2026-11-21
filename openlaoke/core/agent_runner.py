@@ -158,8 +158,13 @@ async def run_subagent(
 
     save(0, messages, text_parts, "running")
 
+    from openlaoke.core.harness_modes import engine_kwargs, get_mode
+
+    mode = get_mode(getattr(app_state, "harness_mode", None))
+    policy_kwargs = engine_kwargs(mode)
+    policy_kwargs["max_iterations"] = max(1, mode.max_steps - offset)
     policy = EnginePolicy(
-        max_iterations=max(1, 50 - offset),
+        **policy_kwargs,  # type: ignore[arg-type]
         tools=registry.get_all_for_prompt(),
         save_state=save,
     )

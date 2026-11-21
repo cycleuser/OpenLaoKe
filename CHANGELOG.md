@@ -41,6 +41,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `reasoning_content` as well as `reasoning`/`thinking`.
 
 ### Added
+- **Switchable harness modes** (`core/harness_modes.py`, `/mode`, `--mode`):
+  `balanced` (default), `pi`, `jcode`, and `opencode` bundle the reference
+  agents' temperaments: reasoning effort, step budget, tool profile, and
+  system-prompt directives. `/mode` switches mid-session (applies from the next
+  turn and invalidates the cached prompt); `--mode` selects one for a single
+  run; aliases `fast`, `robust`, and `thorough` are accepted. The same knobs
+  feed `EnginePolicy` in headless, sub-agent, and bot loops, so the mode is not
+  cosmetic.
+- **Provider experience matches Jcode** (`core/provider_presets.py`,
+  `commands/base.py`, `core/config_wizard.py`): twelve curated presets
+  (including `llm.cycleuser.com` and `ai.cycleuser.com`) replace the
+  twenty-five-provider wall. Keys are read from environment variables, never
+  embedded. `/model` lists only providers with a usable credential (local
+  servers show as `local`), `/model add` offers the preset picker or an explicit
+  `name url [key] [model]`, and `/model rm <name>` removes one.
 - **Four-agent benchmark** (`bench/agent_compare.py`, `bench/ua_proxy.py`):
   runs OpenLaoKe, Jcode, OpenCode and pi on the same tasks and model in
   isolated sandboxes, verifies on the filesystem, retries infrastructure

@@ -93,6 +93,7 @@ class AppState:
     caveman_mode: bool = False
     max_tool_history: int = 4096
     max_steps: int = 100
+    harness_mode: str = "balanced"
 
     _snapshot_store: SnapshotStore | None = field(default=None, repr=False)
 

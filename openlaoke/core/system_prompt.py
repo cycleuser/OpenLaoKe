@@ -30,6 +30,10 @@ def build_system_prompt(
 
     parts = [SYSTEM_PROMPT_STATIC]
 
+    from openlaoke.core.harness_modes import mode_directives
+
+    parts.append(f"\n{mode_directives(getattr(app_state, 'harness_mode', 'balanced'))}\n")
+
     if world_context:
         parts.append(f"\n## Current Context\n{world_context}\n")
 

@@ -618,7 +618,12 @@ class BotMode:
         try:
             api = self._make_client(profile)
             registry = self._registry()
+            from openlaoke.core.harness_modes import engine_kwargs, get_mode
+
+            policy_kwargs = engine_kwargs(get_mode(getattr(self.app_state, "harness_mode", None)))
+            policy_kwargs.pop("max_iterations", None)
             policy = EnginePolicy(
+                **policy_kwargs,  # type: ignore[arg-type]
                 max_iterations=self.max_iterations,
                 tools=registry.get_all_for_prompt(),
                 allow_tools=self._allowed_tools(profile),

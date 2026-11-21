@@ -339,9 +339,10 @@ def _run_task_once(agent: str, task: Task, timeout: float) -> dict:
 
 
 def build_cmd(agent: str, prompt: str, work: str) -> list[str]:
-    if agent == "openlaoke":
+    if agent == "openlaoke" or agent.startswith("openlaoke-"):
+        mode = agent.split("-", 1)[1] if "-" in agent else ""
         exe = sys.executable
-        return [
+        cmd = [
             exe,
             "-m",
             "openlaoke",
@@ -357,8 +358,11 @@ def build_cmd(agent: str, prompt: str, work: str) -> list[str]:
             HALOGEN_KEY,
             "-p",
             "bypass",
-            prompt,
         ]
+        if mode:
+            cmd.extend(["--mode", mode])
+        cmd.append(prompt)
+        return cmd
     if agent == "jcode":
         return ["jcode", "run", prompt]
     if agent == "opencode":

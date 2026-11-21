@@ -210,7 +210,7 @@ def _collect_all_models() -> list[dict[str, str]]:
     for pname, provider in config.providers.providers.items():
         if not provider.enabled:
             continue
-        if not provider.is_configured():
+        if not provider.is_ready():
             continue
         for model in provider.models:
             entries.append(

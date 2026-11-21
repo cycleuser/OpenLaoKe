@@ -57,112 +57,64 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
     console.print()
 
     # Step 1: Configure provider
+    from openlaoke.core.provider_presets import wizard_presets
+
     while True:
         console.print("[bold]Step 1: Choose your AI provider[/bold]")
         console.print()
 
+        presets = wizard_presets()
         table = Table(show_header=False, box=None)
         table.add_column("Option", style="cyan")
         table.add_column("Provider", style="bold")
-        table.add_column("Status", style="dim")
+        table.add_column("Details", style="dim")
 
-        # Check local providers dynamically
-        ollama_cfg = config.providers.providers.get("ollama")
-        if ollama_cfg is None:
-            ollama_cfg = ProviderConfig(provider_type=ProviderType.OLLAMA, is_local=True)
-        ollama_status = "local" if ollama_cfg.is_configured() else "not found"
-
-        lm_cfg = config.providers.providers.get("lm_studio")
-        if lm_cfg is None:
-            lm_cfg = ProviderConfig(provider_type=ProviderType.LM_STUDIO, is_local=True)
-        lm_status = "local" if lm_cfg.is_configured() else "not found"
-
-        providers = [
-            ("1", "🟠 Ollama (Local)", "ollama", ollama_status),
-            ("2", "☁️ Ollama Cloud", "ollama_cloud", "cloud"),
-            ("3", "🆓 OpenCode Zen (FREE)", "opencode", "free"),
-            ("4", "DeepSeek", "deepseek", "cloud"),
-            ("5", "MiniMax", "minimax", "cloud"),
-            ("6", "Aliyun Coding Plan", "aliyun_coding_plan", "cloud"),
-            ("7", "Anthropic (Claude)", "anthropic", "cloud"),
-            ("8", "OpenAI", "openai", "cloud"),
-            ("9", "Azure OpenAI", "azure_openai", "cloud"),
-            ("10", "Google AI (Gemini)", "google", "cloud"),
-            ("11", "Google Vertex AI", "google_vertex", "cloud"),
-            ("12", "AWS Bedrock", "aws_bedrock", "cloud"),
-            ("13", "xAI Grok", "xai", "cloud"),
-            ("14", "Mistral AI", "mistral", "cloud"),
-            ("15", "Groq", "groq", "cloud"),
-            ("16", "Cerebras", "cerebras", "cloud"),
-            ("17", "Cohere", "cohere", "cloud"),
-            ("18", "DeepInfra", "deepinfra", "cloud"),
-            ("19", "Together AI", "togetherai", "cloud"),
-            ("20", "Perplexity", "perplexity", "cloud"),
-            ("21", "OpenRouter", "openrouter", "cloud"),
-            ("22", "GitHub Copilot", "github_copilot", "cloud"),
-            ("23", "LM Studio (Local)", "lm_studio", lm_status),
-            ("24", "OpenAI-Compatible / Local Server", "openai_compatible", "custom"),
-            ("25", "Skip (configure later)", "", ""),
-        ]
-
-        for opt, name, key, ptype in providers:
-            if key and key in config.providers.providers:
-                provider = config.providers.providers[key]
-                if key in ("ollama", "lm_studio"):
-                    status = (
-                        "[green]✓ local[/green]" if ptype == "local" else "[dim]not found[/dim]"
-                    )
-                else:
-                    status = _get_provider_status(provider)
-                table.add_row(f"  [{opt}]", name, status)
-            elif key == "":
-                table.add_row(f"  [{opt}]", name, "")
+        for i, preset in enumerate(presets, 1):
+            existing = config.providers.providers.get(preset.key)
+            if existing is not None and existing.is_ready():
+                status = "[green]✓ configured[/green]"
+            elif preset.env_var and os.environ.get(preset.env_var):
+                status = f"[green]✓ {preset.env_var}[/green]"
+            elif preset.is_local:
+                status = "[dim]local[/dim]"
             else:
-                table.add_row(f"  [{opt}]", name, "[dim]not configured[/dim]")
+                status = "[dim]needs key[/dim]"
+            details = preset.hint or preset.base_url
+            table.add_row(f"  [{i:>2}]", preset.label, f"{details}  {status}")
 
+        custom_opt = len(presets) + 1
+        skip_opt = len(presets) + 2
+        table.add_row(f"  [{custom_opt:>2}]", "Custom (any OpenAI-compatible)", "enter URL + key")
+        table.add_row(f"  [{skip_opt:>2}]", "Skip (configure later)", "")
         console.print(table)
         console.print()
 
         choice = Prompt.ask(
             "Select provider",
-            choices=[str(i) for i in range(1, 26)],
+            choices=[str(i) for i in range(1, skip_opt + 1)],
             default="1",
         )
 
-        provider_map = {
-            "1": "ollama",
-            "2": "ollama_cloud",
-            "3": "opencode",
-            "4": "deepseek",
-            "5": "minimax",
-            "6": "aliyun_coding_plan",
-            "7": "anthropic",
-            "8": "openai",
-            "9": "azure_openai",
-            "10": "google",
-            "11": "google_vertex",
-            "12": "aws_bedrock",
-            "13": "xai",
-            "14": "mistral",
-            "15": "groq",
-            "16": "cerebras",
-            "17": "cohere",
-            "18": "deepinfra",
-            "19": "togetherai",
-            "20": "perplexity",
-            "21": "openrouter",
-            "22": "github_copilot",
-            "23": "lm_studio",
-            "24": "openai_compatible",
-        }
-
-        if choice == "25":
+        if choice == str(skip_opt):
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
             return config
 
-        provider_key = provider_map[choice]
+        if choice == str(custom_opt):
+            provider_key = "openai_compatible"
+            if provider_key not in config.providers.providers:
+                config.providers.providers[provider_key] = ProviderConfig(
+                    provider_type=ProviderType.OPENAI_COMPATIBLE,
+                    base_url="",
+                    models=[],
+                )
+        else:
+            preset = presets[int(choice) - 1]
+            provider_key = preset.key
+            if provider_key not in config.providers.providers:
+                config.providers.providers[provider_key] = preset.build()
+
         config.providers = _configure_provider(config.providers, provider_key)
 
         if _check_provider_ready(config.providers, provider_key):
@@ -693,6 +645,9 @@ def show_current_config(config: AppConfig) -> None:
 
     # Proxy info
     console.print(f"\n[bold]Proxy:[/bold] {_get_proxy_display(config)}")
+    console.print(
+        f"[bold]Mode:[/bold] {config.mode}  (effort: {config.reasoning_effort or 'auto'})"
+    )
     console.print()
 
 

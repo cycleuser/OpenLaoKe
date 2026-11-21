@@ -71,6 +71,19 @@ class ProviderConfig:
             return True
         return bool(self.api_key and self.api_key != "none")
 
+    def is_ready(self) -> bool:
+        """Cheap readiness check for menus: no network probe.
+
+        Used by model pickers and listings so a provider without a key simply
+        does not appear. Local servers count as ready; use ``is_configured``
+        when an actual reachability check is wanted.
+        """
+        if not self.enabled:
+            return False
+        if self.is_local:
+            return True
+        return bool(self.api_key and self.api_key != "none")
+
     def get_default_model(self) -> str:
         if self.default_model:
             return self.default_model

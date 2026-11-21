@@ -35,6 +35,10 @@ class AppConfig:
     # "high", or "" to leave it to the provider. Low matches what Jcode and
     # pi use for coding turns and is the default here.
     reasoning_effort: str = "low"
+    # Harness temperament: "balanced", "pi", "jcode", or "opencode".
+    # The mode supplies default effort, step budget, tool profile, and
+    # system-prompt directives; see core/harness_modes.py.
+    mode: str = "balanced"
     local_n_ctx: int = 8192
     context_cap_tokens: int = 0
     permission_mode: str = "auto"
@@ -136,6 +140,7 @@ def load_config() -> AppConfig:
                 temperature=data.get("temperature", 1.0),
                 thinking_budget=data.get("thinking_budget", 0),
                 reasoning_effort=data.get("reasoning_effort", "low"),
+                mode=data.get("mode", "balanced"),
                 local_n_ctx=data.get("local_n_ctx", 8192),
                 context_cap_tokens=data.get("context_cap_tokens", 0),
                 permission_mode=data.get("permission_mode", "auto"),
@@ -204,6 +209,7 @@ def save_config(config: AppConfig) -> None:
         "temperature": config.temperature,
         "thinking_budget": config.thinking_budget,
         "reasoning_effort": config.reasoning_effort,
+        "mode": config.mode,
         "local_n_ctx": config.local_n_ctx,
         "context_cap_tokens": config.context_cap_tokens,
         "permission_mode": config.permission_mode,

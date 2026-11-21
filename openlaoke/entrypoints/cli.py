@@ -21,12 +21,42 @@ from openlaoke.core.repl import REPL
 from openlaoke.core.state import create_app_state
 from openlaoke.utils.config import load_config, save_config
 
+_VALUE_FLAGS = frozenset(
+    {
+        "-m",
+        "--model",
+        "-p",
+        "--permission",
+        "-c",
+        "--cwd",
+        "--provider",
+        "--api-key",
+        "--base-url",
+        "--proxy",
+        "--max-tokens",
+        "--thinking-budget",
+        "--reasoning-effort",
+        "--mode",
+        "--max-steps",
+        "--max-tool-history",
+        "--cors",
+        "--bot",
+        "--room",
+    }
+)
 
-def main() -> None:
+
+def split_argv(argv: list[str]) -> tuple[list[str], list[str], str | None]:
+    """Split argv into flags, prompt text, and an optional subcommand.
+
+    Flags that take a value must be listed in ``_VALUE_FLAGS``; otherwise the
+    value is mistaken for prompt text and argparse reports "expected one
+    argument". Keep this list in sync when adding a value-taking flag.
+    """
     known_subcommands: set[str] = set()
     prompt_parts: list[str] = []
     filtered_argv: list[str] = []
-    args_iter = iter(sys.argv[1:])
+    args_iter = iter(argv)
     subcommand: str | None = None
 
     for tok in args_iter:
@@ -35,23 +65,7 @@ def main() -> None:
             filtered_argv.append(tok)
         elif tok.startswith("-"):
             filtered_argv.append(tok)
-            if tok in (
-                "-m",
-                "--model",
-                "-p",
-                "--permission",
-                "-c",
-                "--cwd",
-                "--provider",
-                "--api-key",
-                "--base-url",
-                "--proxy",
-                "--max-tokens",
-                "--thinking-budget",
-                "--cors",
-                "--bot",
-                "--room",
-            ):
+            if tok in _VALUE_FLAGS:
                 val = next(args_iter, "")
                 if val:
                     filtered_argv.append(val)
@@ -59,6 +73,11 @@ def main() -> None:
             prompt_parts.append(tok)
         else:
             filtered_argv.append(tok)
+    return filtered_argv, prompt_parts, subcommand
+
+
+def main() -> None:
+    filtered_argv, prompt_parts, subcommand = split_argv(sys.argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="openlaoke",
@@ -140,6 +159,14 @@ def main() -> None:
         help=("Reasoning effort for reasoning-capable models (default from config, usually low)"),
     )
     parser.add_argument(
+        "--mode",
+        default=None,
+        help=(
+            "Harness temperament: balanced (default), pi, jcode, or opencode. "
+            "Sets reasoning effort, step budget, tool profile, and prompt directives."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose output",
@@ -180,8 +207,8 @@ def main() -> None:
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=100,
-        help="Max agent steps per turn (default: 100)",
+        default=None,
+        help="Max agent steps per turn (default: the active mode's budget)",
     )
     parser.add_argument(
         "--all-tools",
@@ -261,7 +288,30 @@ def main() -> None:
     )
     app_state.session_config.model = config.providers.get_active_model()
     app_state.session_config.thinking_budget = config.thinking_budget
-    app_state.session_config.reasoning_effort = config.reasoning_effort
+
+    from openlaoke.core.harness_modes import get_mode, is_valid_mode
+
+    if args.mode is not None and not is_valid_mode(args.mode):
+        console.print(
+            f"[red]Unknown mode: {args.mode}[/red] (choose balanced, pi, jcode, or opencode)"
+        )
+        return
+
+    if args.mode is not None:
+        mode = get_mode(args.mode)
+        config.mode = mode.key
+        effort = mode.reasoning_effort
+    else:
+        mode = get_mode(config.mode)
+        effort = config.reasoning_effort
+        if not effort or effort == mode.reasoning_effort:
+            effort = mode.reasoning_effort
+
+    if args.reasoning_effort is not None:
+        effort = args.reasoning_effort
+    config.reasoning_effort = effort
+    app_state.session_config.reasoning_effort = effort
+    app_state.harness_mode = mode.key
 
     if config.auto_approve_all:
         from openlaoke.types.core_types import PermissionMode
@@ -273,9 +323,6 @@ def main() -> None:
         config.max_tokens = args.max_tokens
     if args.thinking_budget:
         config.thinking_budget = args.thinking_budget
-    if args.reasoning_effort is not None:
-        config.reasoning_effort = args.reasoning_effort
-        app_state.session_config.reasoning_effort = args.reasoning_effort
     if args.permission:
         from openlaoke.types.core_types import PermissionMode
 
@@ -297,9 +344,8 @@ def main() -> None:
         app_state.caveman_mode = False
     if args.max_tool_history:
         app_state.max_tool_history = args.max_tool_history
-    if args.max_steps:
-        app_state.max_steps = args.max_steps
-    app_state.use_all_tools = args.all_tools
+    app_state.max_steps = args.max_steps if args.max_steps is not None else mode.max_steps
+    app_state.use_all_tools = args.all_tools or mode.all_tools
 
     app_state.multi_provider_config = config.providers
     app_state.app_config = config
@@ -378,8 +424,11 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     system_prompt = build_system_prompt(app_state, registry.get_all_for_prompt())
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
 
+    from openlaoke.core.harness_modes import engine_kwargs, get_mode
+
+    mode = get_mode(getattr(app_state, "harness_mode", None))
     policy = EnginePolicy(
-        max_iterations=50,
+        **engine_kwargs(mode),  # type: ignore[arg-type]
         tools=registry.get_all_for_prompt(),
         on_text=lambda text: print(text),
     )

@@ -87,7 +87,7 @@ class ClearCommand(SlashCommand):
 
 class ModelCommand(SlashCommand):
     name = "model"
-    description = "Show or switch provider/model"
+    description = "Show, switch, add, or remove provider/model"
     aliases = ["m"]
 
     async def _refresh(self, config, provider_name: str) -> list[str]:
@@ -107,6 +107,154 @@ class ModelCommand(SlashCommand):
             lines.append(f" {star} {i:>2}. {name}")
         return "\n".join(lines)
 
+    @staticmethod
+    def _mask(key: str) -> str:
+        if not key:
+            return "(no key)"
+        if len(key) <= 12:
+            return "***"
+        return f"{key[:6]}...{key[-4:]}"
+
+    @staticmethod
+    def _provider_ready(provider) -> bool:
+        ready = getattr(provider, "is_ready", None)
+        if callable(ready):
+            return bool(ready())
+        try:
+            return bool(provider.is_configured())
+        except Exception:
+            return False
+
+    def _ready_listing(self, providers, cur_provider: str, cur_model: str) -> list[str]:
+        ready = [(k, p) for k, p in providers.items() if self._provider_ready(p)]
+        lines = [f"Current: {cur_provider or '-'} / {cur_model or '-'}"]
+        if not ready:
+            lines.append("No providers configured yet.")
+        else:
+            lines.append("Configured providers:")
+            for key, provider in ready:
+                marker = "*" if key == cur_provider else " "
+                default = provider.get_default_model() or "-"
+                key_state = "local" if provider.is_local else self._mask(provider.api_key)
+                lines.append(f" {marker} {key:<18} {default:<28} {key_state}")
+        if (
+            cur_provider
+            and cur_provider in providers
+            and not self._provider_ready(providers[cur_provider])
+        ):
+            lines.append(
+                f"[warning] {cur_provider} has no API key. "
+                f"Use /model add or /login {cur_provider} <key>."
+            )
+        lines += [
+            "",
+            "Switch:   /model <provider>/<model>",
+            "Add:      /model add",
+            "Discover: /model list <provider>",
+            "Remove:   /model rm <provider>",
+        ]
+        return lines
+
+    async def _add(self, ctx: CommandContext, config, providers, args: str) -> CommandResult:
+        from openlaoke.core.provider_presets import (
+            PRESETS_BY_KEY,
+            custom_preset,
+            wizard_presets,
+        )
+        from openlaoke.utils.config import save_config
+
+        tokens = args.split()
+        preset_key = tokens[0] if tokens and tokens[0] in PRESETS_BY_KEY else None
+
+        if not tokens:
+            from rich.prompt import Prompt
+
+            presets = wizard_presets()
+            lines = ["Add a provider:"]
+            for i, preset in enumerate(presets, 1):
+                env_mark = " [env]" if preset.env_var and os.environ.get(preset.env_var) else ""
+                lines.append(f"  [{i:>2}] {preset.label} ({preset.key}){env_mark}")
+            lines.append(f"  [{len(presets) + 1:>2}] Custom OpenAI-compatible (URL + key)")
+            print("\n".join(lines))
+            choice = Prompt.ask(
+                "Select provider",
+                choices=[str(i) for i in range(1, len(presets) + 2)],
+                default=str(len(presets) + 1),
+            )
+            if choice == str(len(presets) + 1):
+                return await self._add_custom(providers, config)
+            preset_key = presets[int(choice) - 1].key
+
+        if preset_key is not None:
+            preset = PRESETS_BY_KEY[preset_key]
+            provider = preset.build()
+            if not provider.api_key and not provider.is_local:
+                from rich.prompt import Prompt
+
+                provider.api_key = Prompt.ask(
+                    f"API key for {preset.label} ({preset.env_var or 'required'})",
+                    password=True,
+                    default="",
+                )
+            providers[preset.key] = provider
+            if not config.providers.active_provider:
+                config.providers.active_provider = preset.key
+                config.providers.active_model = provider.get_default_model()
+            save_config(config)
+            models = ", ".join(provider.models) or f"(run /model list {preset.key})"
+            return CommandResult(message=f"Added {preset.key} ({preset.label}).\nModels: {models}")
+
+        # Custom: /model add <name> <base-url> [api-key] [model-id]
+        if len(tokens) < 2:
+            return CommandResult(
+                success=False,
+                message="Usage: /model add <name> <base-url> [api-key] [model-id]",
+            )
+        name, base_url = tokens[0], tokens[1]
+        api_key = tokens[2] if len(tokens) > 2 else ""
+        model_id = tokens[3] if len(tokens) > 3 else ""
+        provider = custom_preset(name, base_url, model_id).build(api_key)
+        providers[name] = provider
+        if not config.providers.active_provider:
+            config.providers.active_provider = name
+            config.providers.active_model = provider.get_default_model()
+        save_config(config)
+        return CommandResult(message=f"Added {name} -> {base_url}.")
+
+    async def _add_custom(self, providers, config) -> CommandResult:
+        from rich.prompt import Prompt
+
+        from openlaoke.core.provider_presets import custom_preset
+        from openlaoke.utils.config import save_config
+
+        name = Prompt.ask("Provider name", default="custom").strip()
+        base_url = Prompt.ask("Base URL (OpenAI-compatible, e.g. https://host/v1)").strip()
+        api_key = Prompt.ask("API key", password=True, default="").strip()
+        model_id = Prompt.ask("Default model id (optional)", default="").strip()
+        if not name or not base_url:
+            return CommandResult(success=False, message="Name and base URL are required.")
+        provider = custom_preset(name, base_url, model_id).build(api_key)
+        providers[name] = provider
+        if not config.providers.active_provider:
+            config.providers.active_provider = name
+            config.providers.active_model = provider.get_default_model()
+        save_config(config)
+        return CommandResult(message=f"Added {name} -> {base_url}.")
+
+    async def _remove(self, config, providers, name: str) -> CommandResult:
+        from openlaoke.utils.config import save_config
+
+        if not name:
+            return CommandResult(success=False, message="Usage: /model rm <provider>")
+        if name not in providers:
+            return CommandResult(success=False, message=f"Unknown provider: {name}")
+        del providers[name]
+        if config.providers.active_provider == name:
+            config.providers.active_provider = ""
+            config.providers.active_model = ""
+        save_config(config)
+        return CommandResult(message=f"Removed provider {name}.")
+
     async def execute(self, ctx: CommandContext) -> CommandResult:
         from openlaoke.utils.config import load_config, save_config
 
@@ -118,21 +266,19 @@ class ModelCommand(SlashCommand):
         args = ctx.args.strip()
 
         if not args:
-            lines = [f"Current: {cur_provider or '-'} / {cur_model or '-'}", "", "Providers:"]
-            for key, provider in providers.items():
-                status = "ready" if provider.is_configured() else "no key"
-                marker = "*" if key == cur_provider else " "
-                default = provider.get_default_model() or "-"
-                lines.append(f" {marker} {key:<20} {status:<7} {default}  [{len(provider.models)}]")
-            lines += [
-                "",
-                "Usage: /model <provider> | /model <provider>/<model> | /model <provider> <n> | /model list <provider>",
-            ]
-            return CommandResult(message="\n".join(lines))
+            return CommandResult(
+                message="\n".join(self._ready_listing(providers, cur_provider, cur_model))
+            )
 
         tokens = args.split()
 
-        if tokens and tokens[0] in ("list", "ls", "models"):
+        if tokens[0] in ("add", "+"):
+            return await self._add(ctx, config, providers, " ".join(tokens[1:]))
+
+        if tokens[0] in ("rm", "remove", "delete", "-"):
+            return await self._remove(config, providers, tokens[1] if len(tokens) > 1 else "")
+
+        if tokens[0] in ("list", "ls", "models"):
             target = tokens[1] if len(tokens) > 1 else cur_provider
             if target not in providers:
                 return CommandResult(
@@ -173,7 +319,7 @@ class ModelCommand(SlashCommand):
             provider_name = cur_provider
         if not provider_name:
             return CommandResult(
-                success=False, message="No provider selected. Use /model <provider>."
+                success=False, message="No provider selected. Use /model add or /model <provider>."
             )
 
         models = await self._refresh(config, provider_name)
@@ -198,12 +344,74 @@ class ModelCommand(SlashCommand):
         save_config(config)
 
         note = ""
-        if not providers[provider_name].is_configured():
+        if not self._provider_ready(providers[provider_name]):
             note = f"  (no key — /login {provider_name} <api-key>)"
         result = f"Switched to {provider_name} / {model_name or '-'}{note}"
         if len(models) > 1:
             result += "\n\n" + self._listing(provider_name, models, model_name, provider_name)
         return CommandResult(message=result)
+
+
+class ModeCommand(SlashCommand):
+    name = "mode"
+    description = "Switch harness mode (balanced, pi, jcode, opencode)"
+    aliases = ["harness"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.core.harness_modes import (
+            get_mode,
+            is_valid_mode,
+            list_modes,
+            normalize_mode,
+        )
+        from openlaoke.utils.config import load_config, save_config
+
+        config = load_config()
+        args = ctx.args.strip().lower()
+        current = normalize_mode(getattr(ctx.app_state, "harness_mode", None) or config.mode)
+
+        if not args or args in ("list", "ls", "show"):
+            lines = [f"Harness mode: {current}", ""]
+            for mode in list_modes():
+                marker = "*" if mode.key == current else " "
+                effort = mode.reasoning_effort or "auto"
+                lines.append(f" {marker} {mode.key:<9} {mode.summary}")
+                lines.append(f"   effort={effort}  steps={mode.max_steps}  tools={mode.tools}")
+            lines.append("")
+            lines.append("Switch: /mode <name>    aliases: fast, robust, thorough")
+            return CommandResult(message="\n".join(lines))
+
+        if not is_valid_mode(args):
+            valid = ", ".join(mode.key for mode in list_modes())
+            return CommandResult(
+                success=False,
+                message=f"Unknown mode: {args}\nValid modes: {valid}",
+            )
+
+        mode = get_mode(args)
+        config.mode = mode.key
+        config.reasoning_effort = mode.reasoning_effort
+        save_config(config)
+
+        ctx.app_state.harness_mode = mode.key
+        ctx.app_state.max_steps = mode.max_steps
+        session_config = getattr(ctx.app_state, "session_config", None)
+        if session_config is not None:
+            session_config.reasoning_effort = mode.reasoning_effort
+
+        guard = getattr(ctx.app_state, "_cache_guard", None)
+        if guard is not None and hasattr(guard, "invalidate"):
+            guard.invalidate()
+
+        effort = mode.reasoning_effort or "auto"
+        return CommandResult(
+            message=(
+                f"Harness mode: {mode.key}\n"
+                f"{mode.summary}\n"
+                f"effort={effort}  steps={mode.max_steps}  tools={mode.tools}  "
+                f"verify={mode.verify}"
+            )
+        )
 
 
 class ThinkingCommand(SlashCommand):

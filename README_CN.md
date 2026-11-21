@@ -37,7 +37,7 @@ pi 的内置命令一一对应地实现了：
 
 `/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
 
-另有几个符合同样哲学的新增命令：`/prompt`（展开 prompt 模板）、`/skill`（列出或激活技能）、`/theme`、`/help`。
+另有几个符合同样哲学的新增命令：`/prompt`（展开 prompt 模板）、`/skill`（列出或激活技能）、`/mode`（切换协作风格）、`/theme`、`/help`。
 
 `/model` 用来切换 provider 或模型，支持实时拉取模型列表：
 
@@ -46,6 +46,26 @@ pi 的内置命令一一对应地实现了：
 - `/model <provider> <n>` —— 选列表里的第 n 个模型
 - `/model <provider>/<model>` —— 直接指定模型
 - `/model list <provider>` —— 从 provider 重新拉取一次列表
+
+默认列表会隐藏没有 API key 的云端 provider；本地服务始终显示。用 `/model add`
+（预置选择器）或 `/model add <name> <base-url> [api-key] [model]` 添加，
+`/model rm <name>` 删除。预置项只从环境变量读取 key，代码里不存密钥。
+
+### 协作模式（Harness modes）
+
+同一个引擎可以模仿三个参考智能体的性格，因为它们真正的差别是策略，不是模型质量：
+
+| 模式 | 推理强度 | 步数 | 工具 | 性格 |
+|------|----------|------|------|------|
+| `balanced`（默认） | low | 50 | 核心 | Jcode 的可靠性 + pi 的简洁 + OpenCode 的规范意识 |
+| `pi` | low | 25 | 核心 | 立即行动、上下文最小、尽早停止 |
+| `jcode` | low | 35 | 核心 | 修复坏调用、防循环、验证一次就停 |
+| `opencode` | medium | 60 | 全部 | 先读规范、多文件先列计划、严格验证 |
+
+运行时用 `/mode pi`、`/mode jcode`、`/mode opencode` 切换，或启动时
+`openlaoke --mode opencode "..."`。别名：`fast`、`robust`、`thorough`。
+模式会设置推理强度、步数预算和系统提示词指令；单次运行仍可用
+`--reasoning-effort` 覆盖强度。`/mode` 从下一轮开始生效。
 
 ## 截图
 

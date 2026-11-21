@@ -283,6 +283,12 @@ class CacheGuard:
 
         parts: list[str] = []
 
+        # Harness mode directives (pi / jcode / opencode / balanced)
+        from openlaoke.core.harness_modes import mode_directives
+
+        mode_name = getattr(app_state, "harness_mode", "balanced")
+        parts.append(f"\n{mode_directives(mode_name)}")
+
         # Active skills (read once, frozen)
         if hasattr(app_state, "active_skills") and app_state.active_skills:
             from openlaoke.core.skill_system import get_skill_system_prompt
