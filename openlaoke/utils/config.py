@@ -12,13 +12,42 @@ from pathlib import Path
 from typing import Any
 
 from openlaoke.types.permissions import HyperAutoConfig
-from openlaoke.types.providers import MultiProviderConfig, PlanConfig
+from openlaoke.types.providers import MultiProviderConfig, PlanConfig, ProviderConfig, ProviderType
 from openlaoke.utils.theme import Theme, get_theme, get_theme_names
 
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path.home() / ".openlaoke"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+
+def _provider_from_saved(name: str, pdata: dict[str, Any]) -> ProviderConfig:
+    """Rebuild a provider that is not in the built-in defaults.
+
+    Presets supply their own type/base URL/model list, so a provider added by
+    ``/model add cycleuser-llm`` survives the next load. Unknown custom
+    providers fall back to an OpenAI-compatible config.
+    """
+    from openlaoke.core.provider_presets import PRESETS_BY_KEY
+
+    preset = PRESETS_BY_KEY.get(name)
+    if preset is not None:
+        return preset.build(str(pdata.get("api_key") or ""))
+
+    raw_type = pdata.get("provider_type") or ProviderType.OPENAI_COMPATIBLE.value
+    try:
+        provider_type = ProviderType(raw_type)
+    except ValueError:
+        provider_type = ProviderType.OPENAI_COMPATIBLE
+    return ProviderConfig(
+        provider_type=provider_type,
+        api_key=str(pdata.get("api_key") or ""),
+        base_url=str(pdata.get("base_url") or ""),
+        default_model=str(pdata.get("default_model") or ""),
+        models=list(pdata.get("models") or []),
+        enabled=bool(pdata.get("enabled", True)),
+        is_local=bool(pdata.get("is_local", False)),
+    )
 
 
 @dataclass
@@ -102,15 +131,25 @@ def load_config() -> AppConfig:
                 providers.local_temperature = providers_data.get("local_temperature", 0.3)
                 if "providers" in providers_data:
                     for name, pdata in providers_data.get("providers", {}).items():
-                        if name in providers.providers:
-                            p = providers.providers[name]
-                            p.api_key = pdata.get("api_key", p.api_key)
-                            p.base_url = pdata.get("base_url", p.base_url)
-                            p.default_model = pdata.get("default_model", p.default_model)
-                            p.enabled = pdata.get("enabled", True)
-                            # Preserve is_local from defaults
-                            if name in ("ollama", "lm_studio"):
-                                p.is_local = True
+                        p = providers.providers.get(name)
+                        is_builtin = p is not None
+                        if p is None:
+                            p = _provider_from_saved(name, pdata)
+                            providers.providers[name] = p
+                        p.api_key = pdata.get("api_key", p.api_key)
+                        p.base_url = pdata.get("base_url", p.base_url)
+                        p.default_model = pdata.get("default_model", p.default_model)
+                        p.enabled = pdata.get("enabled", True)
+                        if "models" in pdata and not is_builtin:
+                            p.models = list(pdata.get("models") or [])
+                        if "provider_type" in pdata:
+                            with contextlib.suppress(ValueError):
+                                p.provider_type = ProviderType(pdata["provider_type"])
+                        if "is_local" in pdata:
+                            p.is_local = bool(pdata["is_local"])
+                        # Preserve is_local from defaults
+                        if name in ("ollama", "lm_studio"):
+                            p.is_local = True
 
             plans = PlanConfig.defaults()
             if "plans" in data:
@@ -185,9 +224,12 @@ def save_config(config: AppConfig) -> None:
             "local_temperature": config.providers.local_temperature,
             "providers": {
                 name: {
+                    "provider_type": p.provider_type.value,
                     "api_key": p.api_key,
                     "base_url": p.base_url,
                     "default_model": p.default_model,
+                    "models": p.models,
+                    "is_local": p.is_local,
                     "enabled": p.enabled,
                 }
                 for name, p in config.providers.providers.items()

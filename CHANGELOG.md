@@ -4,6 +4,30 @@ All notable changes to OpenLaoKe will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.46] - 2026-11-21
+
+### Added
+- **Arrow-key model picker** (`core/prompt_input.py`): `Ctrl+P` opens a
+  full-screen picker with `↑`/`↓`/PageUp/PageDown/Home/End, Enter to confirm,
+  Esc to cancel, and type-to-filter. The active model is preselected and
+  marked `*`; the list scrolls instead of dumping every model into the
+  scrollback.
+- **`/models` alias and probe/prune** (`commands/base.py`): `/models` works
+  like `/model`. `/model probe` rechecks local servers; `/model prune` removes
+  unreachable local providers in one step.
+- **Custom and preset providers persist** (`utils/config.py`): provider type,
+  model list, and local flag are saved and reloaded. `/model add
+  cycleuser-llm` now keeps the `halogen` models after a restart.
+
+### Fixed
+- **Dead local providers are detected at startup** (`types/providers.py`,
+  `core/repl.py`): Ollama and LM Studio are probed concurrently with a 0.75s
+  timeout and no proxy. Unreachable ones are hidden from the picker and shown
+  in a separate "unreachable local providers" section with a removal hint.
+  A 30-second cache avoids repeated probes; `/model probe` refreshes it.
+- **`/model` shows the active model**, not the provider default, and no longer
+  lists uninstalled local servers among the usable providers.
+
 ## [0.1.45] - 2026-11-21
 
 ### Changed

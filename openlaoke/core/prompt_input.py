@@ -183,106 +183,247 @@ class OpenLaoKeCompleter(Completer):
         return idx == len(query)
 
 
-class ModelPickerCompleter(Completer):
-    def __init__(self, entries: list[dict[str, str]]) -> None:
-        self._entries = entries
-
-    def get_completions(self, document: Any, complete_event: Any) -> Any:
-        text = document.text_before_cursor.lower()
-        for i, entry in enumerate(self._entries, 1):
-            display = entry["display"]
-            if text and text not in display.lower():
-                continue
-            yield Completion(
-                display,
-                start_position=-len(document.text_before_cursor),
-                display=f"[{i:2d}] {display}",
-                display_meta=f"{entry['provider']}",
-            )
+_PICKER_ROWS = 16
 
 
-def _collect_all_models() -> list[dict[str, str]]:
+def _collect_all_models(config: Any | None = None) -> list[dict[str, Any]]:
     from openlaoke.utils.config import load_config
 
-    config = load_config()
-    entries: list[dict[str, str]] = []
+    config = config or load_config()
+    providers = config.providers.providers
+    active_provider = config.providers.active_provider
+    active_model = config.providers.active_model
+    if active_provider in providers and not active_model:
+        active_model = providers[active_provider].get_default_model()
 
-    for pname, provider in config.providers.providers.items():
-        if not provider.enabled:
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for pname, provider in providers.items():
+        if not getattr(provider, "enabled", True) or not provider.is_ready():
             continue
-        if not provider.is_ready():
-            continue
-        for model in provider.models:
+        models: list[str] = []
+        for model in [*provider.models, provider.get_default_model()]:
+            if model and model not in models:
+                models.append(model)
+        if pname == active_provider and active_model and active_model not in models:
+            models.append(active_model)
+        for model in models:
+            display = f"{pname}/{model}"
+            if display in seen:
+                continue
+            seen.add(display)
             entries.append(
                 {
                     "provider": pname,
                     "model": model,
-                    "display": f"{pname}/{model}",
+                    "display": display,
+                    "active": pname == active_provider and model == active_model,
                 }
             )
 
-    if config.providers.active_model:
-        active = f"{config.providers.active_provider}/{config.providers.active_model}"
-        entries.sort(key=lambda e: (0 if e["display"] == active else 1, e["display"]))
+    entries.sort(
+        key=lambda entry: (
+            0 if entry["active"] else 1,
+            str(entry["provider"]).lower(),
+            str(entry["model"]).lower(),
+        )
+    )
     return entries
 
 
+def _build_model_picker_app(
+    entries: list[dict[str, Any]],
+    *,
+    input: Any = None,
+    output: Any = None,
+) -> Any:
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import HSplit, Layout, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.widgets import Frame, TextArea
+
+    selected = [0]
+    active_display = next(
+        (entry["display"] for entry in entries if entry["active"]),
+        entries[0]["display"] if entries else "",
+    )
+
+    filter_field = TextArea(
+        height=1,
+        prompt="Filter: ",
+        multiline=False,
+        style="class:filter",
+        name="filter",
+    )
+
+    def visible() -> list[dict[str, Any]]:
+        query = filter_field.text.strip().lower()
+        if not query:
+            return entries
+        return [entry for entry in entries if query in entry["display"].lower()]
+
+    def on_filter_changed(_event: Any = None) -> None:
+        selected[0] = 0
+
+    filter_field.buffer.on_text_changed += on_filter_changed
+
+    def render_header() -> list[tuple[str, str]]:
+        return [
+            ("class:title", " Model Picker\n"),
+            (
+                "class:hint",
+                f" ↑/↓ select · Enter confirm · Esc cancel · type to filter · {len(visible())} shown\n",
+            ),
+        ]
+
+    def render_rows() -> list[tuple[str, str]]:
+        rows = visible()
+        if not rows:
+            return [("class:hint", "  (no matching models)\n")]
+        selected[0] = max(0, min(selected[0], len(rows) - 1))
+        start = max(0, selected[0] - _PICKER_ROWS // 2)
+        start = min(start, max(0, len(rows) - _PICKER_ROWS))
+        end = min(len(rows), start + _PICKER_ROWS)
+        text: list[tuple[str, str]] = []
+        if start > 0:
+            text.append(("class:hint", f"  ↑ {start} more\n"))
+        for index in range(start, end):
+            entry = rows[index]
+            marker = "*" if entry["active"] else " "
+            if index == selected[0]:
+                style = "class:selected"
+            elif entry["display"] == active_display:
+                style = "class:active"
+            else:
+                style = "class:row"
+            text.append((style, f" {marker} {entry['display']}\n"))
+        if end < len(rows):
+            text.append(("class:hint", f"  ↓ {len(rows) - end} more\n"))
+        return text
+
+    def move(delta: int) -> None:
+        rows = visible()
+        if rows:
+            selected[0] = (selected[0] + delta) % len(rows)
+
+    kb = KeyBindings()
+
+    @kb.add("up", eager=True)
+    @kb.add("c-p", eager=True)
+    def _up(event: Any) -> None:
+        move(-1)
+
+    @kb.add("down", eager=True)
+    @kb.add("c-n", eager=True)
+    def _down(event: Any) -> None:
+        move(1)
+
+    @kb.add("pageup", eager=True)
+    def _page_up(event: Any) -> None:
+        move(-_PICKER_ROWS)
+
+    @kb.add("pagedown", eager=True)
+    def _page_down(event: Any) -> None:
+        move(_PICKER_ROWS)
+
+    @kb.add("home", eager=True)
+    def _home(event: Any) -> None:
+        selected[0] = 0
+
+    @kb.add("end", eager=True)
+    def _end(event: Any) -> None:
+        selected[0] = max(0, len(visible()) - 1)
+
+    @kb.add("enter", eager=True)
+    def _accept(event: Any) -> None:
+        rows = visible()
+        if not rows:
+            event.app.exit(result=None)
+            return
+        selected[0] = max(0, min(selected[0], len(rows) - 1))
+        event.app.exit(result=rows[selected[0]]["display"])
+
+    @kb.add("escape", eager=True)
+    @kb.add("c-c", eager=True)
+    def _cancel(event: Any) -> None:
+        event.app.exit(result=None)
+
+    body = HSplit(
+        [
+            Window(FormattedTextControl(render_header), height=2),
+            filter_field,
+            Frame(
+                Window(FormattedTextControl(render_rows), height=_PICKER_ROWS + 4),
+                title="Models",
+            ),
+        ]
+    )
+    return Application(
+        layout=Layout(body, focused_element=filter_field),
+        key_bindings=kb,
+        style=Style.from_dict(
+            {
+                "title": "bold ansicyan",
+                "hint": "ansibrightblack",
+                "filter": "ansicyan",
+                "row": "",
+                "active": "ansigreen",
+                "selected": "bold reverse ansigreen",
+            }
+        ),
+        full_screen=True,
+        mouse_support=False,
+        input=input,
+        output=output,
+    )
+
+
+async def _run_model_picker_text(entries: list[dict[str, Any]]) -> str | None:
+    import asyncio
+
+    from rich.console import Console
+
+    console = Console()
+    console.print()
+    console.rule("[bold cyan]Model Picker[/] (number or name, Ctrl+C to cancel)")
+    for i, entry in enumerate(entries, 1):
+        marker = "*" if entry["active"] else " "
+        console.print(f"  [{marker}] [{i:2d}] {entry['display']}")
+    console.print()
+    try:
+        choice = (await asyncio.to_thread(input, "  Select > ")).strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if not choice:
+        return entries[0]["display"]
+    if choice.isdigit():
+        index = int(choice) - 1
+        return entries[index]["display"] if 0 <= index < len(entries) else None
+    lowered = choice.lower()
+    for entry in entries:
+        if lowered in entry["display"].lower():
+            return entry["display"]
+    return None
+
+
 async def run_model_picker_async() -> str | None:
-    entries = _collect_all_models()
+    from openlaoke.types.providers import probe_local_providers
+    from openlaoke.utils.config import load_config
+
+    config = load_config()
+    await probe_local_providers(config.providers.providers)
+    entries = _collect_all_models(config)
     if not entries:
         return None
-
-    picker_style = Style.from_dict(
-        {
-            "prompt": "bold ansicyan",
-            "completion": "ansigreen",
-            "completion.selected": "bold ansigreen",
-            "completion-meta": "ansibrightblack",
-        }
-    )
-
-    picker_completer = ModelPickerCompleter(entries)
-    picker_session: PromptSession[str] = PromptSession(
-        completer=picker_completer,
-        style=picker_style,
-        complete_while_typing=True,
-    )
-
     try:
-        from rich.console import Console
-
-        console = Console()
-        console.print()
-        console.rule(
-            "[bold cyan]Model Picker[/] (type to filter, Enter to select, Ctrl+C to cancel)"
-        )
-        for i, entry in enumerate(entries, 1):
-            marker = "*" if entry["display"] == entries[0]["display"] else " "
-            console.print(f"  [{marker}] [{i:2d}] {entry['display']}")
-        console.print()
-
-        choice = await picker_session.prompt_async("  Select > ")
-        choice = choice.strip()
-
-        if not choice:
-            return entries[0]["display"]
-
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(entries):
-                return entries[idx]["display"]
-            return None
-
-        for entry in entries:
-            if choice.lower() in entry["display"].lower():
-                return entry["display"]
-
-        return None
-
+        app = _build_model_picker_app(entries)
+        result = await app.run_async()
+        return str(result) if result else None
     except (EOFError, KeyboardInterrupt):
         return None
     except Exception:
-        return None
+        return await _run_model_picker_text(entries)
 
 
 async def run_lang_picker_async(current_lang: str = "en") -> str | None:

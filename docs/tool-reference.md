@@ -58,7 +58,7 @@ Optional tools (Batch, Browser) only appear when their config flag is on.
 | `/mcp` | - | Show MCP servers and the tools they contributed |
 | `/memory` | `/mem` | Show, search or clear this project's stored notes |
 | `/mode` | `/harness` | Switch harness mode (balanced, pi, jcode, opencode) |
-| `/model` | `/m` | Show, switch, add, or remove provider/model |
+| `/model` | `/m`, `/models` | Show, switch, add, remove, or prune provider/model |
 | `/name` | - | Set or show the session display name |
 | `/new` | - | Start a new session |
 | `/prompt` | - | Expand a pi-style prompt template |

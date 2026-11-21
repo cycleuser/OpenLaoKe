@@ -213,6 +213,7 @@ class REPL:
         if self.app_config:
             self._proxy = get_proxy_url(self.app_config)
 
+        await self._probe_local_providers(config)
         self.api = MultiProviderClient(config, proxy=self._proxy)
 
         await self._start_mcp()
@@ -256,6 +257,21 @@ class REPL:
         self.console.print(
             f"  [{self._c('muted')}]MCP: {len(added)} tool(s) from "
             f"{len(self._mcp_runtime.clients)} server(s)[/]"
+        )
+
+    async def _probe_local_providers(self, config: Any) -> None:
+        """Hide unreachable local providers and tell the user how to remove them."""
+        from openlaoke.types.providers import probe_local_providers
+
+        results = await probe_local_providers(config.providers)
+        offline = [name for name, reachable in results.items() if not reachable]
+        if not offline:
+            return
+        names = ", ".join(offline)
+        self.console.print(f"\n[{self._c('warning')}]Local provider(s) offline:[/] {names}")
+        self.console.print(
+            f"  [{self._c('muted')}]Remove with /model prune, "
+            f"or start the server and run /model probe.[/]"
         )
 
     def _start_scheduler(self) -> None:

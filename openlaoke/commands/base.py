@@ -87,8 +87,8 @@ class ClearCommand(SlashCommand):
 
 class ModelCommand(SlashCommand):
     name = "model"
-    description = "Show, switch, add, or remove provider/model"
-    aliases = ["m"]
+    description = "Show, switch, add, remove, or prune provider/model"
+    aliases = ["m", "models"]
 
     async def _refresh(self, config, provider_name: str) -> list[str]:
         from openlaoke.core.model_discovery import discover_models
@@ -134,9 +134,25 @@ class ModelCommand(SlashCommand):
             lines.append("Configured providers:")
             for key, provider in ready:
                 marker = "*" if key == cur_provider else " "
-                default = provider.get_default_model() or "-"
+                shown = (
+                    cur_model
+                    if key == cur_provider and cur_model
+                    else (provider.get_default_model() or "-")
+                )
+                count = len(provider.models)
+                label = f"{shown} ({count})" if count else shown
                 key_state = "local" if provider.is_local else self._mask(provider.api_key)
-                lines.append(f" {marker} {key:<18} {default:<28} {key_state}")
+                lines.append(f" {marker} {key:<18} {label:<30} {key_state}")
+        offline_local = [
+            (key, provider)
+            for key, provider in providers.items()
+            if provider.enabled and provider.is_local and not self._provider_ready(provider)
+        ]
+        if offline_local:
+            lines.append("")
+            lines.append("Unreachable local providers:")
+            for key, provider in offline_local:
+                lines.append(f"   {key:<18} {provider.base_url or '-'}  (offline)")
         if (
             cur_provider
             and cur_provider in providers
@@ -151,7 +167,9 @@ class ModelCommand(SlashCommand):
             "Switch:   /model <provider>/<model>",
             "Add:      /model add",
             "Discover: /model list <provider>",
+            "Probe:    /model probe",
             "Remove:   /model rm <provider>",
+            "Prune:    /model prune",
         ]
         return lines
 
@@ -255,6 +273,48 @@ class ModelCommand(SlashCommand):
         save_config(config)
         return CommandResult(message=f"Removed provider {name}.")
 
+    async def _probe(self, providers) -> CommandResult:
+        from openlaoke.types.providers import probe_local_providers
+
+        results = await probe_local_providers(providers)
+        if not results:
+            return CommandResult(message="No local providers configured.")
+        lines = ["Local providers:"]
+        for name, reachable in sorted(results.items()):
+            provider = providers[name]
+            state = "online" if reachable else "offline"
+            lines.append(f"   {name:<18} {state:<8} {provider.base_url or '-'}")
+        lines += ["", "Remove offline: /model prune"]
+        return CommandResult(message="\n".join(lines))
+
+    async def _prune(self, ctx: CommandContext, config, providers) -> CommandResult:
+        from openlaoke.types.providers import probe_local_providers
+        from openlaoke.utils.config import save_config
+
+        results = await probe_local_providers(providers)
+        offline = [name for name, reachable in results.items() if not reachable]
+        if not offline:
+            return CommandResult(message="No unreachable local providers.")
+        for name in offline:
+            providers.pop(name, None)
+        state = ctx.app_state.multi_provider_config or config.providers
+        if getattr(state, "active_provider", "") in offline:
+            remaining = [
+                name for name, provider in providers.items() if self._provider_ready(provider)
+            ]
+            if remaining:
+                state.active_provider = remaining[0]
+                state.active_model = providers[remaining[0]].get_default_model()
+            else:
+                state.active_provider = ""
+                state.active_model = ""
+            config.providers.active_provider = state.active_provider
+            config.providers.active_model = state.active_model
+        save_config(config)
+        return CommandResult(
+            message=f"Removed {len(offline)} unreachable local provider(s): {', '.join(offline)}"
+        )
+
     async def execute(self, ctx: CommandContext) -> CommandResult:
         from openlaoke.utils.config import load_config, save_config
 
@@ -266,6 +326,9 @@ class ModelCommand(SlashCommand):
         args = ctx.args.strip()
 
         if not args:
+            from openlaoke.types.providers import probe_local_providers
+
+            await probe_local_providers(providers)
             return CommandResult(
                 message="\n".join(self._ready_listing(providers, cur_provider, cur_model))
             )
@@ -277,6 +340,12 @@ class ModelCommand(SlashCommand):
 
         if tokens[0] in ("rm", "remove", "delete", "-"):
             return await self._remove(config, providers, tokens[1] if len(tokens) > 1 else "")
+
+        if tokens[0] in ("probe", "check"):
+            return await self._probe(providers)
+
+        if tokens[0] in ("prune", "clean"):
+            return await self._prune(ctx, config, providers)
 
         if tokens[0] in ("list", "ls", "models"):
             target = tokens[1] if len(tokens) > 1 else cur_provider

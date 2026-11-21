@@ -2,20 +2,84 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+LOCAL_PROBE_TTL_SECONDS = 30.0
+_local_probe_cache: dict[str, tuple[float, bool]] = {}
 
-def _check_local_server(url: str) -> bool:
-    """Check if a local server is reachable."""
+
+def _local_probe_url(provider: ProviderConfig) -> str:
+    if provider.base_url:
+        return provider.base_url
+    if provider.provider_type == ProviderType.OLLAMA:
+        return "http://localhost:11434"
+    if provider.provider_type == ProviderType.LM_STUDIO:
+        return "http://localhost:1234"
+    return ""
+
+
+def _check_local_server(url: str, timeout: float = 0.75) -> bool:
+    """Check if a local server is reachable.
+
+    Local probes never use proxy environment variables: a corporate proxy must
+    not turn a dead localhost port into a false positive.
+    """
+    if not url:
+        return False
+    base = url.rstrip("/")
+    probe = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
     try:
         import httpx
 
-        with httpx.Client(timeout=2.0) as client:
-            response = client.get(url)
+        with httpx.Client(timeout=timeout, trust_env=False) as client:
+            response = client.get(probe)
             return response.status_code < 500
     except Exception:
         return False
+
+
+def _cached_local_reachability(provider: ProviderConfig) -> bool | None:
+    cached = _local_probe_cache.get(_local_probe_url(provider))
+    if cached is None:
+        return None
+    checked_at, reachable = cached
+    if time.monotonic() - checked_at > LOCAL_PROBE_TTL_SECONDS:
+        return None
+    return reachable
+
+
+def clear_local_probe_cache() -> None:
+    _local_probe_cache.clear()
+
+
+async def probe_local_providers(
+    providers: dict[str, ProviderConfig], *, timeout: float = 0.75
+) -> dict[str, bool]:
+    """Probe every enabled local provider concurrently and cache the result."""
+    local = {
+        name: provider
+        for name, provider in providers.items()
+        if provider.is_local and provider.enabled
+    }
+    if not local:
+        return {}
+    results = await asyncio.gather(
+        *(
+            asyncio.to_thread(_check_local_server, _local_probe_url(provider), timeout)
+            for provider in local.values()
+        ),
+        return_exceptions=True,
+    )
+    checked_at = time.monotonic()
+    outcome: dict[str, bool] = {}
+    for (name, provider), result in zip(local.items(), results, strict=True):
+        reachable = result if isinstance(result, bool) else False
+        _local_probe_cache[_local_probe_url(provider)] = (checked_at, reachable)
+        outcome[name] = reachable
+    return outcome
 
 
 class ProviderType(StrEnum):
@@ -62,11 +126,12 @@ class ProviderConfig:
 
     def is_configured(self) -> bool:
         if self.is_local:
-            if self.provider_type == ProviderType.OLLAMA:
-                return _check_local_server(self.base_url or "http://localhost:11434")
-            if self.provider_type == ProviderType.LM_STUDIO:
-                return _check_local_server(self.base_url or "http://localhost:1234")
-            return True
+            cached = _cached_local_reachability(self)
+            if cached is not None:
+                return cached
+            reachable = _check_local_server(_local_probe_url(self))
+            _local_probe_cache[_local_probe_url(self)] = (time.monotonic(), reachable)
+            return reachable
         if self.provider_type == ProviderType.OPENCODE:
             return True
         return bool(self.api_key and self.api_key != "none")
@@ -81,6 +146,9 @@ class ProviderConfig:
         if not self.enabled:
             return False
         if self.is_local:
+            cached = _cached_local_reachability(self)
+            if cached is not None:
+                return cached
             return True
         return bool(self.api_key and self.api_key != "none")
 
