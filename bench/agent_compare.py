@@ -371,6 +371,20 @@ def build_cmd(agent: str, prompt: str, work: str) -> list[str]:
             "--auto",
             prompt,
         ]
+    if agent == "pi":
+        provider = os.environ.get("OPENLAOKE_BENCH_PI_PROVIDER", "halogen-proxy")
+        return [
+            "pi",
+            "--print",
+            "--no-session",
+            "--provider",
+            provider,
+            "--model",
+            HALOGEN_MODEL,
+            "--thinking",
+            os.environ.get("OPENLAOKE_BENCH_PI_THINKING", "low"),
+            prompt,
+        ]
     raise ValueError(agent)
 
 

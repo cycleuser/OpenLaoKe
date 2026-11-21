@@ -134,6 +134,12 @@ def main() -> None:
         help="Thinking budget tokens",
     )
     parser.add_argument(
+        "--reasoning-effort",
+        choices=["", "none", "minimal", "low", "medium", "high"],
+        default=None,
+        help=("Reasoning effort for reasoning-capable models (default from config, usually low)"),
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose output",
@@ -254,6 +260,8 @@ def main() -> None:
         persist_path=persist_path,
     )
     app_state.session_config.model = config.providers.get_active_model()
+    app_state.session_config.thinking_budget = config.thinking_budget
+    app_state.session_config.reasoning_effort = config.reasoning_effort
 
     if config.auto_approve_all:
         from openlaoke.types.core_types import PermissionMode
@@ -265,6 +273,9 @@ def main() -> None:
         config.max_tokens = args.max_tokens
     if args.thinking_budget:
         config.thinking_budget = args.thinking_budget
+    if args.reasoning_effort is not None:
+        config.reasoning_effort = args.reasoning_effort
+        app_state.session_config.reasoning_effort = args.reasoning_effort
     if args.permission:
         from openlaoke.types.core_types import PermissionMode
 
@@ -381,7 +392,11 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
             system_prompt=system_prompt,
             messages=messages,
             policy=policy,
-            send_kwargs={"max_tokens": config.max_tokens, "temperature": config.temperature},
+            send_kwargs={
+                "max_tokens": config.max_tokens,
+                "temperature": config.temperature,
+                "reasoning_effort": getattr(config, "reasoning_effort", ""),
+            },
         )
     finally:
         await api.close()

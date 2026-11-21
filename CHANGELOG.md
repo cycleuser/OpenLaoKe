@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **Reasoning effort is configurable and defaults to low** (`utils/config.py`,
+  `core/multi_provider_api.py`, `entrypoints/cli.py`): `reasoning_effort`
+  (and `--reasoning-effort`) sets how hard a reasoning model thinks. `low`
+  matches what Jcode and pi use for coding turns and cuts latency; set `""`
+  to leave it to the provider. Local providers still skip thinking.
+- **Prompt folds in the other agents' strengths** (`core/cache_guard.py`):
+  read AGENTS.md/README and follow project conventions, batch independent
+  reads in one turn, verify once, and stop as soon as the task is done.
 - **Focused tool profile for headless runs** (`tools/register.py`,
   `entrypoints/cli.py`): `openlaoke "<prompt>"` now sends only the nine core
   coding tools (Read, Write, Edit, Grep, Glob, ListDirectory, ApplyPatch,
@@ -33,10 +41,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `reasoning_content` as well as `reasoning`/`thinking`.
 
 ### Added
-- **Cross-agent benchmark** (`bench/agent_compare.py`): runs OpenLaoKe, Jcode
-  and OpenCode on the same tasks and model in isolated sandboxes, verifies on
-  the filesystem, retries infrastructure failures, and emits a comparison
-  JSON. The API key is read from `OPENLAOKE_BENCH_API_KEY`.
+- **Four-agent benchmark** (`bench/agent_compare.py`, `bench/ua_proxy.py`):
+  runs OpenLaoKe, Jcode, OpenCode and pi on the same tasks and model in
+  isolated sandboxes, verifies on the filesystem, retries infrastructure
+  failures, and emits a comparison JSON. `ua_proxy.py` injects the browser
+  headers Cloudflare-fronted gateways require. The API key is read from
+  `OPENLAOKE_BENCH_API_KEY`.
 - **Bot mode** (`core/bot_mode.py`, `/bot`, optional `MessageAgent` tool): a roster of
   named agents, each with a title, role, optional model/persona/skills and one canonical
   chat under `~/.openlaoke/bots/`. `/bot use <name>` routes plain input to that bot;

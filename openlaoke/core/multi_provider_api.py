@@ -411,6 +411,7 @@ class MultiProviderClient:
         max_tokens: int,
         temperature: float,
         thinking_budget: int = 0,
+        reasoning_effort: str = "",
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": model,
@@ -439,6 +440,8 @@ class MultiProviderClient:
             # burns the whole token budget before emitting any tool call, so ask
             # them to skip thinking unless it was explicitly enabled.
             body["reasoning_effort"] = "none"
+        elif reasoning_effort:
+            body["reasoning_effort"] = reasoning_effort
         return body
 
     def _convert_tools_to_openai_format(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -726,6 +729,7 @@ class MultiProviderClient:
         max_tokens: int = 8192,
         temperature: float = 1.0,
         thinking_budget: int = 0,
+        reasoning_effort: str = "",
     ) -> tuple[AssistantMessage, TokenUsage, CostInfo]:
         provider = self.config.get_active_provider()
         if not provider:
@@ -750,7 +754,13 @@ class MultiProviderClient:
                 f"{base_url}/openai/deployments/{model}/chat/completions?api-version={api_version}"
             )
             body = self._build_openai_body(
-                model, converted_messages, tools, max_tokens, temperature, thinking_budget
+                model,
+                converted_messages,
+                tools,
+                max_tokens,
+                temperature,
+                thinking_budget,
+                reasoning_effort,
             )
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
@@ -782,7 +792,12 @@ class MultiProviderClient:
         else:
             endpoint = f"{base_url}/chat/completions"
             body = self._build_openai_body(
-                model, converted_messages, tools, max_tokens, temperature
+                model,
+                converted_messages,
+                tools,
+                max_tokens,
+                temperature,
+                reasoning_effort=reasoning_effort,
             )
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
@@ -842,6 +857,7 @@ class MultiProviderClient:
                                 max_tokens,
                                 temperature,
                                 thinking_budget,
+                                reasoning_effort,
                             )
                             fb_body["messages"] = [
                                 {"role": "system", "content": system_prompt},
@@ -872,6 +888,7 @@ class MultiProviderClient:
         max_tokens: int = 8192,
         temperature: float = 1.0,
         thinking_budget: int = 0,
+        reasoning_effort: str = "",
     ) -> AsyncIterator[StreamChunk]:
         provider = self.config.get_active_provider()
         if not provider:
@@ -894,7 +911,13 @@ class MultiProviderClient:
         else:
             endpoint = f"{base_url}/chat/completions"
             body = self._build_openai_body(
-                model, converted_messages, tools, max_tokens, temperature, thinking_budget
+                model,
+                converted_messages,
+                tools,
+                max_tokens,
+                temperature,
+                thinking_budget,
+                reasoning_effort,
             )
             body["messages"] = [
                 {"role": "system", "content": system_prompt},

@@ -31,6 +31,10 @@ class AppConfig:
     max_tokens: int = 8192
     temperature: float = 1.0
     thinking_budget: int = 0
+    # How hard a reasoning-capable model should think: "low", "medium",
+    # "high", or "" to leave it to the provider. Low matches what Jcode and
+    # pi use for coding turns and is the default here.
+    reasoning_effort: str = "low"
     local_n_ctx: int = 8192
     context_cap_tokens: int = 0
     permission_mode: str = "auto"
@@ -131,6 +135,7 @@ def load_config() -> AppConfig:
                 max_tokens=data.get("max_tokens", 8192),
                 temperature=data.get("temperature", 1.0),
                 thinking_budget=data.get("thinking_budget", 0),
+                reasoning_effort=data.get("reasoning_effort", "low"),
                 local_n_ctx=data.get("local_n_ctx", 8192),
                 context_cap_tokens=data.get("context_cap_tokens", 0),
                 permission_mode=data.get("permission_mode", "auto"),
@@ -198,6 +203,7 @@ def save_config(config: AppConfig) -> None:
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,
         "thinking_budget": config.thinking_budget,
+        "reasoning_effort": config.reasoning_effort,
         "local_n_ctx": config.local_n_ctx,
         "context_cap_tokens": config.context_cap_tokens,
         "permission_mode": config.permission_mode,

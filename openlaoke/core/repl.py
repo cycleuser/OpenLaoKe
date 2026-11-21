@@ -1022,6 +1022,7 @@ class REPL:
                                 tools=tools,
                                 model=self.app_state.session_config.model,
                                 thinking_budget=self.app_state.session_config.thinking_budget,
+                                reasoning_effort=self.app_state.session_config.reasoning_effort,
                             ):
                                 if chunk.event_type == StreamEventType.TEXT:
                                     content_text += chunk.text
@@ -1275,6 +1276,7 @@ class REPL:
                             tools=tools,
                             model=self.app_state.session_config.model,
                             thinking_budget=self.app_state.session_config.thinking_budget,
+                            reasoning_effort=self.app_state.session_config.reasoning_effort,
                         )
                     finally:
                         spinner.stop()

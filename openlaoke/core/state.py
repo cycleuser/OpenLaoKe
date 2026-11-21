@@ -36,6 +36,7 @@ class SessionConfig:
     temperature: float = 1.0
     top_p: float = 1.0
     thinking_budget: int = 0
+    reasoning_effort: str = ""
     allowed_tools: list[str] = field(default_factory=list)
     system_prompt_suffix: str = ""
 
@@ -256,6 +257,7 @@ class AppState:
                     "temperature": self.session_config.temperature,
                     "top_p": self.session_config.top_p,
                     "thinking_budget": self.session_config.thinking_budget,
+                    "reasoning_effort": self.session_config.reasoning_effort,
                 },
                 "messages": [m.to_dict() for m in self.messages],
                 "tasks": {k: v.to_dict() for k, v in self.tasks.items()},
