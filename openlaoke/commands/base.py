@@ -137,6 +137,21 @@ class ModelCommand(SlashCommand):
 
     def _ready_listing(self, providers, cur_provider: str, cur_model: str) -> list[str]:
         ready = [(k, p) for k, p in providers.items() if self._provider_ready(p)]
+        base_to_names: dict[str, list[str]] = {}
+        for key, provider in ready:
+            base = (getattr(provider, "base_url", "") or "").rstrip("/").lower()
+            if base:
+                base_to_names.setdefault(base, []).append(key)
+        duplicate_generic = {
+            "openai_compatible"
+            for names in base_to_names.values()
+            if "openai_compatible" in names and any(name != "openai_compatible" for name in names)
+        }
+        ready = [
+            (key, provider)
+            for key, provider in ready
+            if key not in duplicate_generic or key == cur_provider
+        ]
         lines = [f"Current: {cur_provider or '-'} / {cur_model or '-'}"]
         if not ready:
             lines.append("No providers configured yet.")

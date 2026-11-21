@@ -139,7 +139,8 @@ def load_config() -> AppConfig:
                             providers.providers[name] = p
                         p.api_key = pdata.get("api_key", p.api_key)
                         p.base_url = pdata.get("base_url", p.base_url)
-                        p.default_model = pdata.get("default_model", p.default_model)
+                        if not is_builtin:
+                            p.default_model = pdata.get("default_model", p.default_model)
                         p.enabled = pdata.get("enabled", True)
                         if "models" in pdata and not is_builtin:
                             p.models = list(pdata.get("models") or [])
