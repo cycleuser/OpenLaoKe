@@ -1,0 +1,86 @@
+{
+  "model": "qwen-mlx",
+  "thinking": "on",
+  "timeout": 200.0,
+  "max_steps": 25,
+  "started": "2026-11-22T10:32:57",
+  "results": [
+    {
+      "harness": "openlaoke",
+      "model": "qwen-mlx",
+      "thinking": "on",
+      "task": "fib",
+      "passed": true,
+      "timed_out": false,
+      "exit_code": 0,
+      "seconds": 126.7,
+      "artifact_seconds": 25.8,
+      "file_created": true,
+      "output": "55",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_openlaoke_7a6ho_ng",
+      "log_tail": "he Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\nI see the Bash command was already called. Let me try a different approach - let me check if there's a Python executable in the current directory.\n\n--- Session cost: $0.0000 ---\n",
+      "error": ""
+    },
+    {
+      "harness": "pi",
+      "model": "qwen-mlx",
+      "thinking": "on",
+      "task": "fib",
+      "passed": true,
+      "timed_out": false,
+      "exit_code": 0,
+      "seconds": 62.9,
+      "artifact_seconds": 57.8,
+      "file_created": true,
+      "output": "55",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_pi_34twei9o",
+      "log_tail": "\n\nanswer.py created successfully. The output is 55 (which is the 10th Fibonacci number).\n",
+      "error": ""
+    },
+    {
+      "harness": "jcode",
+      "model": "qwen-mlx",
+      "thinking": "on",
+      "task": "fib",
+      "passed": true,
+      "timed_out": false,
+      "exit_code": 0,
+      "seconds": 66.9,
+      "artifact_seconds": 49.8,
+      "file_created": true,
+      "output": "55",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_jcode_63436dhs",
+      "log_tail": " file\n💭  to\n💭  verify\n💭  it\n💭  works\n💭  correctly\n💭 .\n💭 \n\n\n\n\n[bash] $ cd /Users/fred/.jcode/scratch/matrix_qwen-mlx_jcode_63436dhs...\n\n[Tokens] upload: 11043 download: 85 cache_read: 10448 cache_write: 0\n\n  → 55\n\n💭 The\n💭  code\n💭  ran\n💭  successfully\n💭  and\n💭  printed\n💭  5\n💭 5\n💭 ,\n💭  which\n💭  is\n💭  the\n💭  correct\n💭  value\n💭  for\n💭  fib\n💭 (\n💭 1\n💭 0\n💭 ).\n💭 \n\n\n💭 fib\n💭 (\n💭 0\n💭 )\n💭  =\n💭  0\n💭 \n\n💭 fib\n💭 (\n💭 1\n💭 )\n💭  =\n💭  1\n💭 \n\n💭 fib\n💭 (\n💭 2\n💭 )\n💭  =\n💭  1\n💭 \n\n💭 fib\n💭 (\n💭 3\n💭 )\n💭  =\n💭  2\n💭 \n\n💭 fib\n💭 (\n💭 4\n💭 )\n💭  =\n💭  3\n💭 \n\n💭 fib\n💭 (\n💭 5\n💭 )\n💭  =\n💭  5\n💭 \n\n💭 fib\n💭 (\n💭 6\n💭 )\n💭  =\n💭  8\n💭 \n\n💭 fib\n💭 (\n💭 7\n💭 )\n💭  =\n💭  1\n💭 3\n💭 \n\n💭 fib\n💭 (\n💭 8\n💭 )\n💭  =\n💭  2\n💭 1\n💭 \n\n💭 fib\n💭 (\n💭 9\n💭 )\n💭  =\n💭  3\n💭 4\n💭 \n\n💭 fib\n💭 (\n💭 1\n💭 0\n💭 )\n💭  =\n💭  5\n💭 5\n💭 \n\n\n💭 The\n💭  iterative\n💭  Fibonacci\n💭  function\n💭  works\n💭  correctly\n💭 .\n💭 \n\n\n\n✅ **Success!** The code ran successfully and printed **55**, which is the correct value for `fib(10)`.\n\n**Verification:**\n- fib(0) = 0\n- fib(1) = 1\n- fib(2) = 1\n- fib(3) = 2\n- fib(4) = 3\n- fib(5) = 5\n- fib(6) = 8\n- fib(7) = 13\n- fib(8) = 21\n- fib(9) = 34\n- fib(10) = 55\n\nThe iterative Fibonacci function works correctly!\n[Tokens] upload: 11206 download: 269 cache_read: 11042 cache_write: 0\n\n",
+      "error": ""
+    },
+    {
+      "harness": "opencode",
+      "model": "qwen-mlx",
+      "thinking": "on",
+      "task": "fib",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 200.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_opencode_b1krr87d",
+      "log_tail": "\u001b[0m\n> build · /Users/fred/models/qwen3.5-2b-mlx4\n",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "qwen-mlx",
+    "thinking": "on",
+    "pass": 3,
+    "total": 4,
+    "by_task": {
+      "fib": {
+        "pass": 3,
+        "total": 4,
+        "fastest_pass": 62.9
+      }
+    }
+  }
+}

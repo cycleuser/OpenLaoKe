@@ -93,6 +93,11 @@ Omni 额外测试一张纯红 PNG，回答必须包含 `red`。
 不稳定。结论：**它们适合当直接代码模型，暂时不适合长时间无人值守的 agent。**
 后续应给本地小模型降低最大步数，或增加“任务已完成”的早停判据。
 
+后续补充：`docs/harness-matrix.md` 把 LFM3-1.7B 和 Qwen3.5-2B 分别接到
+OpenLaoKe、pi、Jcode、OpenCode，分 thinking 开/关跑了 `fib` 与 `merge`
+两个任务。结论比这里更细：OpenLaoKe 常常 20 多秒就写出正确文件却不退出；
+Jcode 最稳；pi 出现过“自称完成但没有文件”；OpenCode 在 1.7B/2B 上 0/8。
+
 ## 关键坑
 
 1. **llama.cpp 跑 LFM3-1.7B 必须加 `--reasoning off`。** 否则模型会把 token

@@ -424,11 +424,12 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     system_prompt = build_system_prompt(app_state, registry.get_all_for_prompt())
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
 
-    from openlaoke.core.harness_modes import engine_kwargs, get_mode
+    from openlaoke.core.harness_modes import get_mode
 
     mode = get_mode(getattr(app_state, "harness_mode", None))
+    kwargs = engine_kwargs_for(app_state, mode)
     policy = EnginePolicy(
-        **engine_kwargs(mode),  # type: ignore[arg-type]
+        **kwargs,  # type: ignore[arg-type]
         tools=registry.get_all_for_prompt(),
         on_text=lambda text: print(text),
     )
@@ -462,6 +463,15 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
         )
 
     print(f"\n--- Session cost: ${app_state.cost_info.total_cost:.4f} ---")
+
+
+def engine_kwargs_for(app_state: Any, mode: Any) -> dict[str, Any]:
+    """Engine knobs for a non-interactive run, honouring ``--max-steps``."""
+    from openlaoke.core.harness_modes import engine_kwargs
+
+    kwargs = engine_kwargs(mode)
+    kwargs["max_iterations"] = getattr(app_state, "max_steps", None) or mode.max_steps
+    return kwargs
 
 
 if __name__ == "__main__":

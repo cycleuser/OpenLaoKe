@@ -31,8 +31,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (llama.cpp) and MLX 8bit (MLX-VLM), on speed, six text checks, tool calls,
   image input and one OpenLaoKe agent task. `bench/qwen_compare.py` runs the
   same text and agent checks against Qwen3.5-2B (GGUF Q4 and MLX 4bit).
+- **Four-harness matrix** (`bench/harness_matrix.py`): runs one prompt through
+  OpenLaoKe, pi, Jcode, and OpenCode in fresh directories, verifies the
+  resulting file by executing it, and records pass/timeout/exit/time. Used for
+  the thinking-on/off comparison on LFM3 and Qwen local models.
 
 ### Fixed
+- **`--max-steps` is honoured in non-interactive mode** (`entrypoints/cli.py`):
+  the CLI parsed the flag but `_run_non_interactive` always used the harness
+  mode's budget. A 1.7B model could therefore loop for the full 50-step
+  balanced budget after the task was already done.
 - **Dead local providers are detected at startup** (`types/providers.py`,
   `core/repl.py`): Ollama and LM Studio are probed concurrently with a 0.75s
   timeout and no proxy. Unreachable ones are hidden from the picker and shown
