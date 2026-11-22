@@ -92,6 +92,15 @@ MODELS: dict[str, dict[str, str]] = {
         "jcode_model": "/Users/fred/models/qwen3.5-2b-mlx4",
         "opencode": "qwen-mlx//Users/fred/models/qwen3.5-2b-mlx4",
     },
+    "qwen-mlx-vlm": {
+        "ol_provider": "qwen3_5_2b_mlx_vlm",
+        "ol_model": "/Users/fred/models/qwen3.5-2b-mlx4",
+        "pi": "qwen-mlx-vlm",
+        "pi_model": "/Users/fred/models/qwen3.5-2b-mlx4",
+        "jcode": "qwen-mlx-vlm",
+        "jcode_model": "/Users/fred/models/qwen3.5-2b-mlx4",
+        "opencode": "qwen-mlx-vlm//Users/fred/models/qwen3.5-2b-mlx4",
+    },
     "qwen-gguf": {
         "ol_provider": "qwen3_5_2b_gguf",
         "ol_model": "qwen3.5-2b",
