@@ -1,0 +1,38 @@
+[
+ {
+  "name": "lfm3-omni-gguf-q8",
+  "base_url": "http://127.0.0.1:8083/v1",
+  "model": "lfm3-omni-2b",
+  "repeats": [
+   {
+    "elapsed": 4.63,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 61.0,
+    "decode_tps": 22.3,
+    "finish": "stop"
+   },
+   {
+    "elapsed": 4.69,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 176.4,
+    "decode_tps": 20.2,
+    "finish": "stop"
+   },
+   {
+    "elapsed": 4.64,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 171.1,
+    "decode_tps": 20.4,
+    "finish": "stop"
+   }
+  ],
+  "median_elapsed": 4.64,
+  "median_prompt_tps": 171.1,
+  "median_decode_tps": 20.4,
+  "prompt_tokens": 32,
+  "completion_tokens": 92
+ }
+]

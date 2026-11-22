@@ -1,0 +1,90 @@
+[
+ {
+  "name": "lfm3-omni-mlx",
+  "model": "/Users/fred/models/LFM3-Omni-2B-MLX-8bit",
+  "auto": 3,
+  "total": 10,
+  "rows": [
+   {
+    "id": "math_arith",
+    "q": "A shop sells 3 packs of 12 pens each for 45 dollars total. How many dollars is one pen? Answer with just the number.",
+    "expect": "1.25",
+    "answer": "3",
+    "auto_ok": false,
+    "seconds": 3.2
+   },
+   {
+    "id": "math_word",
+    "q": "If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets? One number.",
+    "expect": "5",
+    "answer": "100",
+    "auto_ok": false,
+    "seconds": 0.6
+   },
+   {
+    "id": "logic",
+    "q": "All bloops are razzies. All razzies are lazzies. Are all bloops definitely lazzies? Answer yes or no.",
+    "expect": "yes",
+    "answer": "Yes",
+    "auto_ok": true,
+    "seconds": 0.5
+   },
+   {
+    "id": "code_reverse",
+    "q": "Write one line of Python that prints the string 'hello' reversed.",
+    "expect": "olleh",
+    "answer": "```python\nprint('hello'[::-1])\n```",
+    "auto_ok": false,
+    "seconds": 0.8
+   },
+   {
+    "id": "code_bug",
+    "q": "This Python has one bug: def f(x): return x + 1; print(f('3')). What is the bug? One short sentence.",
+    "expect": "str",
+    "answer": "The bug is that `f` is defined without parentheses, so `f('3')` calls the function with no arguments, returning `None` instead of `4`.",
+    "auto_ok": false,
+    "seconds": 2.0
+   },
+   {
+    "id": "follow_negation",
+    "q": "Repeat this sentence but do NOT include the word 'cat': The cat sat on the mat.",
+    "expect": "no cat",
+    "answer": "The cat sat on the mat.",
+    "auto_ok": false,
+    "seconds": 0.7
+   },
+   {
+    "id": "zh_translate",
+    "q": "把这句英文翻译成中文：The server is temporarily unavailable.",
+    "expect": "服务器",
+    "answer": "The server is temporarily unavailable.",
+    "auto_ok": false,
+    "seconds": 0.7
+   },
+   {
+    "id": "zh_math_word",
+    "q": "一个水池有进水管和出水管，单开进水管6小时注满，单开出水管8小时放空。两管齐开，几小时注满？只给数字或分数。",
+    "expect": "24",
+    "answer": "1.5",
+    "auto_ok": false,
+    "seconds": 0.7
+   },
+   {
+    "id": "extract",
+    "q": "From this log line extract the IP address only, nothing else: '2026-01-01 ERROR 192.168.1.42 connection refused'.",
+    "expect": "192.168.1.42",
+    "answer": "192.168.1.42",
+    "auto_ok": true,
+    "seconds": 0.9
+   },
+   {
+    "id": "count",
+    "q": "How many words are in this sentence: 'to be or not to be that is the question'. Answer with just the number.",
+    "expect": "9",
+    "answer": "9",
+    "auto_ok": true,
+    "seconds": 0.6
+   }
+  ]
+ }
+]

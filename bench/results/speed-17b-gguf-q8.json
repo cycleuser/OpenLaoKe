@@ -1,0 +1,38 @@
+[
+ {
+  "name": "lfm3-1.7b-gguf-q8",
+  "base_url": "http://127.0.0.1:8080/v1",
+  "model": "lfm3-1.7b",
+  "repeats": [
+   {
+    "elapsed": 7.23,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 28.7,
+    "decode_tps": 20.7,
+    "finish": "length"
+   },
+   {
+    "elapsed": 6.49,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 166.9,
+    "decode_tps": 20.2,
+    "finish": "length"
+   },
+   {
+    "elapsed": 6.24,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 175.6,
+    "decode_tps": 21.0,
+    "finish": "length"
+   }
+  ],
+  "median_elapsed": 6.49,
+  "median_prompt_tps": 166.9,
+  "median_decode_tps": 20.7,
+  "prompt_tokens": 32,
+  "completion_tokens": 128
+ }
+]

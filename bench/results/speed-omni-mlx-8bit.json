@@ -1,0 +1,38 @@
+[
+ {
+  "name": "lfm3-omni-mlx-8bit",
+  "base_url": "http://127.0.0.1:8082/v1",
+  "model": "/Users/fred/models/LFM3-Omni-2B-MLX-8bit",
+  "repeats": [
+   {
+    "elapsed": 3.89,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 177.9,
+    "decode_tps": 26.4,
+    "finish": "stop"
+   },
+   {
+    "elapsed": 3.94,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 433.3,
+    "decode_tps": 25.1,
+    "finish": "stop"
+   },
+   {
+    "elapsed": 4.22,
+    "prompt_tokens": 32,
+    "completion_tokens": 92,
+    "prompt_tps": 407.3,
+    "decode_tps": 23.6,
+    "finish": "stop"
+   }
+  ],
+  "median_elapsed": 3.94,
+  "median_prompt_tps": 407.3,
+  "median_decode_tps": 25.1,
+  "prompt_tokens": 32,
+  "completion_tokens": 92
+ }
+]

@@ -1,0 +1,38 @@
+[
+ {
+  "name": "lfm3-1.7b-mlx-8bit",
+  "base_url": "http://127.0.0.1:8081/v1",
+  "model": "/Users/fred/models/LFM3-1.7B-MLX-8bit",
+  "repeats": [
+   {
+    "elapsed": 5.44,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 141.7,
+    "decode_tps": 26.1,
+    "finish": "length"
+   },
+   {
+    "elapsed": 5.27,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 379.1,
+    "decode_tps": 25.7,
+    "finish": "length"
+   },
+   {
+    "elapsed": 5.41,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 427.7,
+    "decode_tps": 24.9,
+    "finish": "length"
+   }
+  ],
+  "median_elapsed": 5.41,
+  "median_prompt_tps": 379.1,
+  "median_decode_tps": 25.7,
+  "prompt_tokens": 32,
+  "completion_tokens": 128
+ }
+]

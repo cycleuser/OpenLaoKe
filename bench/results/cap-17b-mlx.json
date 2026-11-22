@@ -1,0 +1,90 @@
+[
+ {
+  "name": "lfm3-17b-mlx",
+  "model": "/Users/fred/models/LFM3-1.7B-MLX-8bit",
+  "auto": 5,
+  "total": 10,
+  "rows": [
+   {
+    "id": "math_arith",
+    "q": "A shop sells 3 packs of 12 pens each for 45 dollars total. How many dollars is one pen? Answer with just the number.",
+    "expect": "1.25",
+    "answer": "We need to find the cost of one pen. The shop sells 3 packs of 12 pens each for a total of $45.\n\nFirst, find the total number of pens:\n3 packs × 12 pens per pack = 36 pens.\n\nTotal cost for 36 pens is $45.\n\nSo, the cost per pen is total cost divided by total number of pens:\n$45 / 36 = ?\n\nCalculate: 45 ÷ 36 = 1.25.",
+    "auto_ok": true,
+    "seconds": 5.6
+   },
+   {
+    "id": "math_word",
+    "q": "If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets? One number.",
+    "expect": "5",
+    "answer": "The answer is **5 minutes**.\n\n**Reasoning:**  \n- 5 machines take 5 minutes to make 5 widgets.  \n- This means each machine makes 1 widget in 5 minutes (since 5 machines working together make 5 widgets in 5 minutes, so the rate is 5 widgets per 5 minutes for 5 machines, or 1 widget per minute per machine).  \n- For 100 machines to make 100 widgets",
+    "auto_ok": true,
+    "seconds": 4.5
+   },
+   {
+    "id": "logic",
+    "q": "All bloops are razzies. All razzies are lazzies. Are all bloops definitely lazzies? Answer yes or no.",
+    "expect": "yes",
+    "answer": "No. \n\nWe are given:\n- All bloops are razzies. (Bloops → Razzies)\n- All razzies are lazzies. (Razzies → Lazzies)\n\nFrom these, we can deduce that all bloops are lazzies (since bloops are razzies, and razzies are lazzies). However, the question asks whether **all bloops are definitely lazzies**. \n\nBut wait —",
+    "auto_ok": false,
+    "seconds": 4.7
+   },
+   {
+    "id": "code_reverse",
+    "q": "Write one line of Python that prints the string 'hello' reversed.",
+    "expect": "olleh",
+    "answer": "```python\nprint('hello'[::-1])\n```",
+    "auto_ok": false,
+    "seconds": 0.8
+   },
+   {
+    "id": "code_bug",
+    "q": "This Python has one bug: def f(x): return x + 1; print(f('3')). What is the bug? One short sentence.",
+    "expect": "str",
+    "answer": "The bug is that `f` is defined with a single parameter `x`, but `print(f('3'))` passes `'3'` as an argument, which is fine, but the real issue is that `f` is missing a `return` statement for the default case? Wait, no—looking again: `def f(x): return x + 1;` has a semicolon after the return, which is valid but unusual. Actually, the code as written",
+    "auto_ok": false,
+    "seconds": 4.7
+   },
+   {
+    "id": "follow_negation",
+    "q": "Repeat this sentence but do NOT include the word 'cat': The cat sat on the mat.",
+    "expect": "no cat",
+    "answer": "The cat sat on the mat. \n\nWait, the user said \"do NOT include the word 'cat'\". So I need to repeat the sentence but without using the word 'cat'. The original sentence is \"The cat sat on the mat.\" I need to convey the same meaning without using the word 'cat'. \n\nPossible alternatives: \"The feline sat on the mat.\" or \"A cat\" is the word to avoid. So I can replace \"cat\" with",
+    "auto_ok": false,
+    "seconds": 4.4
+   },
+   {
+    "id": "zh_translate",
+    "q": "把这句英文翻译成中文：The server is temporarily unavailable.",
+    "expect": "服务器",
+    "answer": "服务器暂时不可用。",
+    "auto_ok": true,
+    "seconds": 0.6
+   },
+   {
+    "id": "zh_math_word",
+    "q": "一个水池有进水管和出水管，单开进水管6小时注满，单开出水管8小时放空。两管齐开，几小时注满？只给数字或分数。",
+    "expect": "24",
+    "answer": "6.75\n\n解释：设进水管的注水速度为 \\(a\\)（池容积/小时），出水管的排水速度为 \\(b\\)（池容积/小时）。  \n单开进水管6小时注满：\\(6a = 1\\) → \\(a = \\frac{1}{6}\\)。  \n单开出水管8小时放空：\\(8b = 1\\) → \\(b = \\",
+    "auto_ok": false,
+    "seconds": 4.8
+   },
+   {
+    "id": "extract",
+    "q": "From this log line extract the IP address only, nothing else: '2026-01-01 ERROR 192.168.1.42 connection refused'.",
+    "expect": "192.168.1.42",
+    "answer": "192.168.1.42",
+    "auto_ok": true,
+    "seconds": 0.9
+   },
+   {
+    "id": "count",
+    "q": "How many words are in this sentence: 'to be or not to be that is the question'. Answer with just the number.",
+    "expect": "9",
+    "answer": "The sentence is: \"to be or not to be that is the question\".\n\nLet's count the words:\n\n1. to\n2. be\n3. or\n4. not\n5. to\n6. be\n7. that\n8. is\n9. the\n10. question\n\nTotal: 10 words.\n\nAnswer: 10",
+    "auto_ok": true,
+    "seconds": 3.6
+   }
+  ]
+ }
+]
