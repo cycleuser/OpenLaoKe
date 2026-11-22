@@ -1,0 +1,86 @@
+{
+  "model": "qwen-mlx",
+  "thinking": "off",
+  "timeout": 120.0,
+  "max_steps": 25,
+  "started": "2026-11-22T13:47:36",
+  "results": [
+    {
+      "harness": "openlaoke",
+      "model": "qwen-mlx",
+      "thinking": "off",
+      "task": "merge",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 120.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_openlaoke_cxsjcjhu",
+      "log_tail": "",
+      "error": ""
+    },
+    {
+      "harness": "pi",
+      "model": "qwen-mlx",
+      "thinking": "off",
+      "task": "merge",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 120.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_pi_gbspoxlt",
+      "log_tail": "",
+      "error": ""
+    },
+    {
+      "harness": "jcode",
+      "model": "qwen-mlx",
+      "thinking": "off",
+      "task": "merge",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 120.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_jcode_4gl8oivg",
+      "log_tail": "I'll create a merge sort implementation with a `__main__` block that sorts the list `[5, 3, 1, 4, 2]` and prints the result.\n\n",
+      "error": ""
+    },
+    {
+      "harness": "opencode",
+      "model": "qwen-mlx",
+      "thinking": "off",
+      "task": "merge",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 120.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_opencode_i93ixy2n",
+      "log_tail": "",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "qwen-mlx",
+    "thinking": "off",
+    "pass": 0,
+    "total": 4,
+    "by_task": {
+      "merge": {
+        "pass": 0,
+        "total": 4,
+        "fastest_pass": null
+      }
+    }
+  }
+}
