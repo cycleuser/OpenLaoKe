@@ -1,0 +1,51 @@
+{
+  "model": "halogen",
+  "summary": {
+    "openlaoke-2b": {
+      "passed": 0,
+      "total": 1,
+      "score": 0.5,
+      "avg_ms": 992
+    },
+    "openlaoke-glm": {
+      "passed": 1,
+      "total": 1,
+      "score": 1.0,
+      "avg_ms": 10226
+    }
+  },
+  "results": [
+    {
+      "task": "doc-py-csv",
+      "category": "docs",
+      "agent": "openlaoke-2b",
+      "passed": false,
+      "score": 0.5,
+      "duration_ms": 992,
+      "exit_code": 1,
+      "error": "file_exists: analyze.py; file_exists: summary.json; py_check=FAILED: Traceback (most recent call last):\n  File \"<string>\", line 2, in <module>\nFileNotFoundError: [Errno 2] No such file or directory: 'summary.json'\n",
+      "files": [
+        "sales.csv"
+      ],
+      "stdout_tail": "\nError: Client error '404 Not Found' for url \n'http://127.0.0.1:11434/v1/chat/completions'\nFor more information check: \nhttps://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\nAPI Error: 404 Not Found | Endpoint: http://127.0.0.1:11434/v1/chat/completions | Model: qwen3.5-2b | Messages: 2\nError details: {'error': '404 Client Error. (Request ID: Root=1-6b01c5b8-103532836149588f75a22839;655ce5b2-664a-4c11-b84a-d7d982ad02fc)\\n\\nRepository Not Found for url: https://huggingface.co/api/models/qwen3.5-2b/revision/main.\\nPlease make sure you specified the correct `repo_id` and `repo_type`.\\nIf you are trying to access a private or gated repo, make sure you are authenticated and your token has the required permissions.\\nFor more details, see https://huggingface.co/docs/huggingface_hub/authentication'}\n",
+      "attempts": 2
+    },
+    {
+      "task": "doc-py-csv",
+      "category": "docs",
+      "agent": "openlaoke-glm",
+      "passed": true,
+      "score": 1.0,
+      "duration_ms": 10226,
+      "exit_code": 0,
+      "error": "",
+      "files": [
+        "analyze.py",
+        "sales.csv",
+        "summary.json"
+      ],
+      "stdout_tail": "Done. `analyze.py` reads `sales.csv`, sums `amount` (750), and writes `summary.json` with `{\"total\": 750, \"items\": 3}`. Verified by running the script \u2014 all three files are in place.\n[stats] steps=5 input_tokens=18457 output_tokens=278\n\n--- Session cost: $0.0595 ---\n",
+      "attempts": 1
+    }
+  ]
+}

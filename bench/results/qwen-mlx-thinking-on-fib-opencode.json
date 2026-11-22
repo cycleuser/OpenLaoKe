@@ -1,0 +1,38 @@
+{
+  "model": "qwen-mlx",
+  "thinking": "on",
+  "timeout": 200.0,
+  "max_steps": 25,
+  "started": "2026-11-22T10:41:50",
+  "results": [
+    {
+      "harness": "opencode",
+      "model": "qwen-mlx",
+      "thinking": "on",
+      "task": "fib",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 200.0,
+      "artifact_seconds": null,
+      "file_created": false,
+      "output": "",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_opencode_b1krr87d",
+      "log_tail": "\u001b[0m\n> build · /Users/fred/models/qwen3.5-2b-mlx4\n",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "qwen-mlx",
+    "thinking": "on",
+    "pass": 0,
+    "total": 1,
+    "by_task": {
+      "fib": {
+        "pass": 0,
+        "total": 1,
+        "fastest_pass": null
+      }
+    }
+  }
+}

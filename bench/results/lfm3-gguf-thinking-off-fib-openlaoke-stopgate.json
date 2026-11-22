@@ -1,0 +1,38 @@
+{
+  "model": "lfm3-gguf",
+  "thinking": "off",
+  "timeout": 150.0,
+  "max_steps": 25,
+  "started": "2026-11-22T11:23:45",
+  "results": [
+    {
+      "harness": "openlaoke",
+      "model": "lfm3-gguf",
+      "thinking": "off",
+      "task": "fib",
+      "passed": false,
+      "timed_out": true,
+      "exit_code": null,
+      "seconds": 150.0,
+      "artifact_seconds": 17.9,
+      "file_created": true,
+      "output": "55",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_fug20t9z",
+      "log_tail": "",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "lfm3-gguf",
+    "thinking": "off",
+    "pass": 0,
+    "total": 1,
+    "by_task": {
+      "fib": {
+        "pass": 0,
+        "total": 1,
+        "fastest_pass": null
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "model": "qwen-mlx",
+  "thinking": "off",
+  "timeout": 200.0,
+  "max_steps": 25,
+  "started": "2026-11-22T10:45:51",
+  "results": [
+    {
+      "harness": "opencode",
+      "model": "qwen-mlx",
+      "thinking": "off",
+      "task": "fib",
+      "passed": false,
+      "timed_out": false,
+      "exit_code": 1,
+      "seconds": 131.9,
+      "artifact_seconds": 118.9,
+      "file_created": true,
+      "output": "34",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_qwen-mlx_opencode_1n3_yw6q",
+      "log_tail": "\u001b[0m\n> build · /Users/fred/models/qwen3.5-2b-mlx4\nI'll create the `answer.py` file with the iterative Fibonacci function and `__main__` block, then run it to verify.\n\u001b[0m← \u001b[0mWrite answer.py\nCreated file successfully: answer.py\n\u001b[91m\u001b[1mError: \u001b[0mNothing to compact yet\n",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "qwen-mlx",
+    "thinking": "off",
+    "pass": 0,
+    "total": 1,
+    "by_task": {
+      "fib": {
+        "pass": 0,
+        "total": 1,
+        "fastest_pass": null
+      }
+    }
+  }
+}
