@@ -651,7 +651,8 @@ class MultiProviderClient:
         content = ""
         tool_uses = []
 
-        choices = data.get("choices", [])
+        choices = data.get("choices") or []
+        message: dict[str, Any] = {}
         if choices:
             choice = choices[0]
             message = choice.get("message", {})
@@ -669,7 +670,7 @@ class MultiProviderClient:
                 if reasoning and reasoning.strip():
                     content = reasoning.strip()
 
-            for tool_call in message.get("tool_calls", []):
+            for tool_call in message.get("tool_calls") or []:
                 func = tool_call.get("function", {})
                 try:
                     args = json.loads(func.get("arguments", "{}"))
@@ -1360,7 +1361,7 @@ class MultiProviderClient:
         tool_uses = []
         text = data.get("text", "")
         content = text
-        tool_calls = data.get("tool_calls", [])
+        tool_calls = data.get("tool_calls") or []
         for tc in tool_calls:
             tool_uses.append(
                 ToolUseBlock(

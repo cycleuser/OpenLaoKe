@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   DeepSeek-V4.1-Flash-1017) and `deepseek-v4-pro`; Ollama Cloud shows
   `deepseek-v4.1-flash:1017`. A generic `openai_compatible` entry that points
   at the same base URL as a typed provider is hidden.
+- **LFM3 local-model comparison** (`bench/lfm3_compare.py`,
+  `docs/lfm3-local-models.md`): LFM3-1.7B and LFM3-Omni-2B, each as GGUF
+  (llama.cpp) and MLX 8bit (MLX-VLM), on speed, six text checks, tool calls,
+  image input and one OpenLaoKe agent task.
 
 ### Fixed
 - **Dead local providers are detected at startup** (`types/providers.py`,
@@ -35,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   A 30-second cache avoids repeated probes; `/model probe` refreshes it.
 - **`/model` shows the active model**, not the provider default, and no longer
   lists uninstalled local servers among the usable providers.
+- **OpenAI-compatible servers that return `tool_calls: null`** are accepted
+  (`core/multi_provider_api.py`): MLX-VLM emits `null` for ordinary text
+  replies; parsing now treats it as an empty list instead of raising
+  `'NoneType' object is not iterable`.
 
 ## [0.1.45] - 2026-11-21
 

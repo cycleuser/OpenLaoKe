@@ -1,0 +1,337 @@
+{
+  "created": 1795307591.866845,
+  "models": {
+    "1.7b-gguf": {
+      "label": "LFM3-1.7B GGUF Q8_0",
+      "runtime": "llama.cpp",
+      "multimodal": false,
+      "base": "http://127.0.0.1:8080/v1",
+      "model": "lfm3-1.7b",
+      "speed": {
+        "runs": [
+          {
+            "wall": 12.869168996810913,
+            "generated": 220.0,
+            "generation_tps": 17.431070859929644,
+            "prompt_tps": 111.28775834658188
+          },
+          {
+            "wall": 11.380125999450684,
+            "generated": 220.0,
+            "generation_tps": 19.565661959501938,
+            "prompt_tps": 165.43183617521595
+          },
+          {
+            "wall": 10.069787979125977,
+            "generated": 220.0,
+            "generation_tps": 22.117695631017856,
+            "prompt_tps": 180.1314959920742
+          }
+        ],
+        "median_wall": 11.38,
+        "median_generation_tps": 19.57,
+        "median_prompt_tps": 165.43,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 4.24,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 0.96,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 1.54,
+          "detail": "{\n  \"status\": \"ok\",\n  \"count\": 3,\n  \"items\": [\"a\", \"b\", \"c\"]\n}"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 1.58,
+          "detail": "[{\"type\": \"function\", \"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"path\\\":\\\"hello.txt\\\",\\\"content\\\":\\\"hi\\\"}\"}, \"id\": \"xHBNFw11bP1ZdmuOzOrbFMX9QNh5r08x\"}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": true,
+          "latency": 7.1,
+          "detail": "We need to find the total cost of 4 pens and 3 notebooks, then subtract from 50 yuan to get the change.\n\nCost per pen = 2 yuan.\nNumber of pens = 4.\nTotal cost for pens = 4 * 2 = 8 yuan.\n\nCost per notebook = 5 yuan.\nNumber of notebooks = 3.\nTotal cost for notebooks = 3 * 5 = 15 yuan.\n\nTotal cost = 8 "
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.23,
+          "detail": "PONG"
+        }
+      ],
+      "agent": {
+        "pass": false,
+        "timeout": true,
+        "exit_code": null,
+        "seconds": 150.02,
+        "file_created": true,
+        "output": "42",
+        "log_tail": ""
+      }
+    },
+    "1.7b-mlx": {
+      "label": "LFM3-1.7B MLX 8bit",
+      "runtime": "MLX-VLM",
+      "multimodal": false,
+      "base": "http://127.0.0.1:8081/v1",
+      "model": "/Users/fred/models/LFM3-1.7B-MLX-8bit",
+      "speed": {
+        "runs": [
+          {
+            "wall": 8.73873496055603,
+            "generated": 220.0,
+            "generation_tps": 26.008579409200266,
+            "prompt_tps": 417.41357947951536
+          },
+          {
+            "wall": 8.918153047561646,
+            "generated": 220.0,
+            "generation_tps": 25.4755800269011,
+            "prompt_tps": 357.03787810740374
+          },
+          {
+            "wall": 9.29748797416687,
+            "generated": 220.0,
+            "generation_tps": 24.36932987966631,
+            "prompt_tps": 394.69923896222963
+          }
+        ],
+        "median_wall": 8.92,
+        "median_generation_tps": 25.48,
+        "median_prompt_tps": 394.7,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 3.83,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 1.03,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 1.51,
+          "detail": "{\n  \"status\": \"ok\",\n  \"count\": 3,\n  \"items\": [\"a\", \"b\", \"c\"]\n}"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 1.55,
+          "detail": "[{\"type\": \"function\", \"index\": 0, \"id\": \"3e4fe10b-2dac-46f4-b3c6-fdd49ebdca01\", \"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"content\\\": \\\"hi\\\", \\\"path\\\": \\\"hello.txt\\\"}\"}}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": true,
+          "latency": 7.33,
+          "detail": "We need to find the total cost of 4 pens and 3 notebooks. Pens cost 2 yuan each, notebooks cost 5 yuan each.\n\nCost of pens: 4 pens * 2 yuan/pen = 8 yuan.\nCost of notebooks: 3 notebooks * 5 yuan/notebook = 15 yuan.\nTotal cost = 8 + 15 = 23 yuan.\n\nWe pay with a 50 yuan note. Change = 50 - 23 = 27 yuan"
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.48,
+          "detail": "PONG"
+        }
+      ],
+      "agent": {
+        "pass": false,
+        "timeout": true,
+        "exit_code": null,
+        "seconds": 150.01,
+        "file_created": true,
+        "output": "42",
+        "log_tail": ""
+      }
+    },
+    "omni-gguf": {
+      "label": "LFM3-Omni-2B GGUF Q8_0",
+      "runtime": "llama.cpp",
+      "multimodal": true,
+      "base": "http://127.0.0.1:8083/v1",
+      "model": "lfm3-omni-2b",
+      "speed": {
+        "runs": [
+          {
+            "wall": 16.600276947021484,
+            "generated": 220.0,
+            "generation_tps": 13.950558710321172,
+            "prompt_tps": 32.84126176127687
+          },
+          {
+            "wall": 10.43084716796875,
+            "generated": 220.0,
+            "generation_tps": 21.346608389451035,
+            "prompt_tps": 182.40448193869906
+          },
+          {
+            "wall": 10.279842853546143,
+            "generated": 220.0,
+            "generation_tps": 21.673329483595815,
+            "prompt_tps": 177.3903347609032
+          }
+        ],
+        "median_wall": 10.43,
+        "median_generation_tps": 21.35,
+        "median_prompt_tps": 177.39,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 2.95,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 0.77,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 1.33,
+          "detail": "{\"status\": \"ok\", \"count\": 3, \"items\": [\"a\", \"b\", \"c\"]}"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 1.65,
+          "detail": "[{\"type\": \"function\", \"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"path\\\":\\\"hello.txt\\\",\\\"content\\\":\\\"hi\\\"}\"}, \"id\": \"HXG6PmnV3mxMKLFeBjrk8MgWFFTnRxtb\"}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": false,
+          "latency": 0.32,
+          "detail": "5"
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.32,
+          "detail": "PONG"
+        },
+        {
+          "name": "image-color",
+          "pass": true,
+          "latency": 0.58,
+          "detail": "Red"
+        }
+      ],
+      "agent": {
+        "pass": false,
+        "timeout": true,
+        "exit_code": null,
+        "seconds": 150.02,
+        "file_created": true,
+        "output": "42",
+        "log_tail": ""
+      }
+    },
+    "omni-mlx": {
+      "label": "LFM3-Omni-2B MLX 8bit",
+      "runtime": "MLX-VLM",
+      "multimodal": true,
+      "base": "http://127.0.0.1:8082/v1",
+      "model": "/Users/fred/models/LFM3-Omni-2B-MLX-8bit",
+      "speed": {
+        "runs": [
+          {
+            "wall": 9.23144006729126,
+            "generated": 220.0,
+            "generation_tps": 24.98350321025625,
+            "prompt_tps": 427.2347470177009
+          },
+          {
+            "wall": 8.881395816802979,
+            "generated": 220.0,
+            "generation_tps": 25.63201609678702,
+            "prompt_tps": 410.28833287399334
+          },
+          {
+            "wall": 9.052340984344482,
+            "generated": 220.0,
+            "generation_tps": 25.141724391205564,
+            "prompt_tps": 491.6327172221229
+          }
+        ],
+        "median_wall": 9.05,
+        "median_generation_tps": 25.14,
+        "median_prompt_tps": 427.23,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 2.99,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 0.86,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 1.61,
+          "detail": "{\"status\": \"ok\", \"count\": 3, \"items\": [\"a\", \"b\", \"c\"]}"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 1.6,
+          "detail": "[{\"type\": \"function\", \"index\": 0, \"id\": \"0523fe7b-e102-4155-927f-1a45aa79f51d\", \"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"content\\\": \\\"hi\\\", \\\"path\\\": \\\"hello.txt\\\"}\"}}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": false,
+          "latency": 0.49,
+          "detail": "5"
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.32,
+          "detail": "PONG"
+        },
+        {
+          "name": "image-color",
+          "pass": true,
+          "latency": 0.77,
+          "detail": "Red"
+        }
+      ],
+      "agent": {
+        "pass": false,
+        "timeout": true,
+        "exit_code": null,
+        "seconds": 150.02,
+        "file_created": true,
+        "output": "42",
+        "log_tail": ""
+      }
+    }
+  }
+}
