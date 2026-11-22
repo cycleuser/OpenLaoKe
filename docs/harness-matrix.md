@@ -63,6 +63,37 @@ Jcode 的 merge 快 6.9 秒。
 off 1/4，on 3/4。Qwen 与 LFM3 相反：**thinking 打开后质量明显变好**，
 Jcode 从“文件算错且循环”变成 66.9 秒通过。
 
+## 补充：原生 4bit 与 GGUF Q4
+
+后来补了两档官方原生量化，没有做二次量化：
+
+- `LiquidAI/LFM3-1.7B-MLX-4bit`：affine，bits=4，group_size=64，0.97 GB。
+- `LiquidAI/LFM3-1.7B-GGUF` 的 `LFM3-1.7B-Q4_K_M.gguf`：1.00 GB。
+
+thinking off、两个任务、四个 harness 的结果：
+
+| 模型变体 | OpenLaoKe | pi | Jcode | OpenCode | 总计 |
+|---|---:|---:|---:|---:|---:|
+| LFM3 GGUF Q8_0 | **2/2 · 31.8s** | 1/2 · 71.3s | **2/2 · 44.8s** | 0/2 | 5/8 |
+| LFM3 GGUF Q4_K_M | **2/2 · 28.5s** | 1/2 · 58.5s | **2/2 · 36.0s** | 0/2 | 5/8 |
+| LFM3 MLX 8bit | **2/2 · 44.1s** | 0/2 | 1/2 · 76.7s | 0/2 | 3/8 |
+| LFM3 MLX 4bit | **2/2 · 35.4s** | 0/2 | 0/2 | 0/2 | 2/8 |
+| Qwen GGUF Q4_K_M | 1/2 · 27.2s | **2/2 · 56.9s** | **2/2 · 40.0s** | 0/2 | 5/8 |
+| Qwen MLX 4bit（mlx-lm） | 1/2 · 28.4s | 0/2 | 0/2 | 0/2 | 1/8 |
+
+时间是通过任务的平均退出时间。复现命令：
+
+```bash
+python bench/harness_matrix.py --model lfm3-gguf-q4 --thinking off --task all \
+  --timeout 120 --json bench/results/matrix-lfm3-gguf-q4-off-all.json
+python bench/harness_matrix.py --model lfm3-mlx-4bit --thinking off --task all \
+  --timeout 120 --json bench/results/matrix-lfm3-mlx-4bit-native-off-all.json
+```
+
+同一台机器上，原生 4bit 与自量化版本的通过数同为 2/8，但原生权重的来源和量化参数
+可以直接核对，作为基线更干净。GGUF Q8_0 与 Q4_K_M 的通过数相同，Q4_K_M 的
+OpenLaoKe 平均退出时间更快。
+
 ## OpenLaoKe 这一轮修了什么
 
 初测时 OpenLaoKe 的典型表现是“十几秒写出正确文件，然后转到超时”。原因有两个：
