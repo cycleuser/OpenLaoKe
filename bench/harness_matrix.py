@@ -41,6 +41,97 @@ class Task:
     prompt: str
     filename: str
     expected: str
+    verifier: str = "output"  # "output" or a key in CUSTOM_VERIFIERS
+
+
+import re
+
+_IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
+def _read_docx(path):
+    import docx
+
+    doc = docx.Document(str(path))
+    return "\n".join(p.text for p in doc.paragraphs)
+
+
+def _read_xlsx(path):
+    import openpyxl
+
+    wb = openpyxl.load_workbook(str(path))
+    parts = []
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(values_only=True):
+            parts.append(" ".join("" if c is None else str(c) for c in row))
+    return "\n".join(parts)
+
+
+def _v_file_only(cwd, task):
+    target = cwd / task.filename
+    if not target.exists() or target.stat().st_size == 0:
+        return False, target.exists(), ""
+    text = target.read_text(errors="replace")
+    return task.expected.lower() in text.lower(), True, text[-200:]
+
+
+def _v_docx(cwd, task):
+    target = cwd / task.filename
+    if not target.exists():
+        return False, False, ""
+    try:
+        text = _read_docx(target)
+    except Exception as exc:
+        return False, True, f"docx read error: {exc}"
+    return task.expected.lower() in text.lower(), True, text[-200:]
+
+
+def _v_xlsx(cwd, task):
+    target = cwd / task.filename
+    if not target.exists():
+        return False, False, ""
+    try:
+        text = _read_xlsx(target)
+    except Exception as exc:
+        return False, True, f"xlsx read error: {exc}"
+    return task.expected.lower() in text.lower(), True, text[-200:]
+
+
+def _v_ipv4(cwd, task):
+    target = cwd / task.filename
+    if not target.exists():
+        return False, False, ""
+    try:
+        proc = subprocess.run(
+            [DEV_PYTHON, str(target)], cwd=cwd, capture_output=True, text=True, timeout=40
+        )
+    except subprocess.TimeoutExpired:
+        return False, True, "<run timed out>"
+    out = (proc.stdout + proc.stderr).strip()
+    return bool(_IPV4.search(out)), True, out[-200:]
+
+
+def _v_temp(cwd, task):
+    target = cwd / task.filename
+    if not target.exists():
+        return False, False, ""
+    try:
+        proc = subprocess.run(
+            [DEV_PYTHON, str(target)], cwd=cwd, capture_output=True, text=True, timeout=40
+        )
+    except subprocess.TimeoutExpired:
+        return False, True, "<run timed out>"
+    out = (proc.stdout + proc.stderr).strip()
+    return bool(re.search(r"\d+\s*°", out)) or bool(re.search(r"\d+\s*C", out, re.I)), True, out[-200:]
+
+
+CUSTOM_VERIFIERS = {
+    "docx": _v_docx,
+    "xlsx": _v_xlsx,
+    "ipv4": _v_ipv4,
+    "temp": _v_temp,
+    "file": _v_file_only,
+}
 
 
 TASKS: dict[str, Task] = {
@@ -61,6 +152,59 @@ TASKS: dict[str, Task] = {
         ),
         filename="merge_sort.py",
         expected="[1, 2, 3, 4, 5]",
+    ),
+    "docx": Task(
+        key="docx",
+        prompt=(
+            "Use python-docx to create report.docx containing a heading 'Monthly Report' and a "
+            "paragraph that says exactly: Revenue grew by 20 percent. Run a short script to "
+            "verify the file opens."
+        ),
+        filename="report.docx",
+        expected="Revenue grew by 20 percent",
+        verifier="docx",
+    ),
+    "xlsx": Task(
+        key="xlsx",
+        prompt=(
+            "Use openpyxl to create budget.xlsx with a header row Name and Cost, and one data "
+            "row: Server and 120. Run a short script to verify the file opens and contains 120."
+        ),
+        filename="budget.xlsx",
+        expected="120",
+        verifier="xlsx",
+    ),
+    "ip": Task(
+        key="ip",
+        prompt=(
+            "Create ip.py that uses urllib (no proxy) to fetch https://icanhazip.com and prints "
+            "the public IP address it returns. Run it to verify."
+        ),
+        filename="ip.py",
+        expected="",
+        verifier="ipv4",
+    ),
+    "weather": Task(
+        key="weather",
+        prompt=(
+            "Create weather.py that fetches the current temperature for Beijing from "
+            "https://wttr.in/Beijing?format=3 (using urllib, no proxy) and prints the result. "
+            "It must include a number with a degree sign or C. Run it to verify."
+        ),
+        filename="weather.py",
+        expected="",
+        verifier="temp",
+    ),
+    "download": Task(
+        key="download",
+        prompt=(
+            "Create a file named page.html by downloading https://example.com (using curl or "
+            "urllib, no proxy). The file must contain the words Example Domain. Verify the file "
+            "exists and is non-empty."
+        ),
+        filename="page.html",
+        expected="Example Domain",
+        verifier="file",
     ),
 }
 
@@ -262,6 +406,8 @@ def build_command(
 
 
 def verify(cwd: pathlib.Path, task: Task) -> tuple[bool, bool, str]:
+    if task.verifier != "output":
+        return CUSTOM_VERIFIERS[task.verifier](cwd, task)
     target = cwd / task.filename
     if not target.exists():
         return False, False, ""
@@ -295,6 +441,12 @@ def run_one(
     env.setdefault("PYTHONUNBUFFERED", "1")
     env["PWD"] = str(run_dir)
     env.pop("OLDPWD", None)
+    # local probes need direct network (proxy would break ip/weather/download tasks)
+    for pk in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
+               "https_proxy", "all_proxy"):
+        env.pop(pk, None)
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
 
     started = time.time()
     timed_out = False
