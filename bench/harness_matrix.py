@@ -83,6 +83,15 @@ MODELS: dict[str, dict[str, str]] = {
         "jcode_model": "/Users/fred/models/LFM3-1.7B-MLX-8bit",
         "opencode": "lfm3-mlx//Users/fred/models/LFM3-1.7B-MLX-8bit",
     },
+    "lfm3-mlx-4bit": {
+        "ol_provider": "lfm3_mlx_4bit",
+        "ol_model": "/Users/fred/models/LFM3-1.7B-MLX-4bit-v2",
+        "pi": "lfm3-mlx-4bit",
+        "pi_model": "/Users/fred/models/LFM3-1.7B-MLX-4bit-v2",
+        "jcode": "lfm3-mlx-4bit",
+        "jcode_model": "/Users/fred/models/LFM3-1.7B-MLX-4bit-v2",
+        "opencode": "lfm3-mlx-4bit//Users/fred/models/LFM3-1.7B-MLX-4bit-v2",
+    },
     "qwen-mlx": {
         "ol_provider": "qwen3_5_2b_mlx",
         "ol_model": "/Users/fred/models/qwen3.5-2b-mlx4",
