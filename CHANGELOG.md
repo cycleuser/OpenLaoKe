@@ -29,7 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **LFM3 local-model comparison** (`bench/lfm3_compare.py`,
   `docs/lfm3-local-models.md`): LFM3-1.7B and LFM3-Omni-2B, each as GGUF
   (llama.cpp) and MLX 8bit (MLX-VLM), on speed, six text checks, tool calls,
-  image input and one OpenLaoKe agent task.
+  image input and one OpenLaoKe agent task. `bench/qwen_compare.py` runs the
+  same text and agent checks against Qwen3.5-2B (GGUF Q4 and MLX 4bit).
 
 ### Fixed
 - **Dead local providers are detected at startup** (`types/providers.py`,

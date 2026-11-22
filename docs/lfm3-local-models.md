@@ -16,6 +16,42 @@ OpenAI 兼容接口测试，速度取 3 次、每次生成 220 token 的中位�
 LFM3-Omni-2B-MLX-8bit。** MLX 比 llama.cpp 生成快约 18-30%，长提示词预填充快约
 2.3 倍。
 
+和当初的 Qwen3.5-2B 比：**LFM3-1.7B MLX 8bit 与 Qwen3.5-2B MLX 4bit 同为
+6/6，LFM3 慢约 15% 但权重更小、量化更高；GGUF 侧 LFM3-1.7B Q8 比 Qwen Q4
+更快也更准。** Qwen3.5-2B MLX 4bit 仍是这次绝对速度最快的，但必须关掉
+thinking。
+
+## 与 Qwen3.5-2B 对比
+
+同一套 6 项文本测试、同一台机器。速度是生成 220 token 的端到端墙钟速度
+（包含预填充），不是只算 decode。
+
+| 模型 | 量化 | 端到端速度 | 文本质量 | Agent 任务 |
+|---|---|---:|---:|---|
+| LFM3-1.7B GGUF | Q8_0 | 19.3 tok/s | 6/6 | 文件正确，循环未退出 |
+| **LFM3-1.7B MLX** | 8bit | 24.7 tok/s | **6/6** | 文件正确，循环未退出 |
+| LFM3-Omni-2B GGUF | Q8_0 | 21.1 tok/s | 6/7 | 文件正确，循环未退出 |
+| LFM3-Omni-2B MLX | 8bit | 24.3 tok/s | 6/7 | 文件正确，循环未退出 |
+| Qwen3.5-2B GGUF | Q4_K_M | 16.2 tok/s | 5/6 | 文件正确，循环未退出 |
+| Qwen3.5-2B MLX | 4bit | **28.5 tok/s** | 6/6 | 文件正确，循环未退出 |
+
+解读：
+
+- **Qwen3.5-2B MLX 4bit 是这次最快的**，28.5 tok/s，文本 6/6。它比
+  LFM3-1.7B MLX 8bit 快约 15%，但用的是 4bit，模型也大一点（2B vs 1.7B）。
+- **LFM3-1.7B 的 8bit 版本质量和 Qwen 4bit 打平（都是 6/6）**，速度只慢 15%，
+  权重更小。综合更稳。
+- **LFM3-1.7B GGUF Q8 全面胜过 Qwen3.5-2B GGUF Q4**：19.3 vs 16.2 tok/s，
+  6/6 vs 5/6。Qwen GGUF 的找零题答成 17，LFM3 答对 27。
+- **Qwen3.5-2B MLX 必须关闭 thinking**：`mlx_lm.server` 默认会让它把 token
+  全花在 `reasoning` 上，`content` 为空；第一次测只有 2/6。启动时加
+  `--chat-template-args '{"enable_thinking":false}'` 后恢复到 6/6。这和 LFM3
+  GGUF 必须加 `--reasoning off` 是同一类问题。
+- **Agent 任务六个模型都没自行结束**：都正确创建了 `hello.py` 并输出 42，但
+  120-150 秒内循环不退出。此前 Qwen3.5-2B MLX 在 5 个文档任务上是 0/5、平均
+  125.5 秒；LFM3 还没跑那套文档任务。结论不变：这些小模型适合直接生成/解释，
+  不适合长时间无人值守的 agent。
+
 ## 测试内容
 
 文本测试共 6 项，全部有可执行或可解析的判据：

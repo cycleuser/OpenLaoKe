@@ -1,0 +1,145 @@
+{
+  "created": 1795309436.756317,
+  "models": {
+    "qwen3.5-2b-mlx": {
+      "label": "Qwen3.5-2B MLX 4bit",
+      "runtime": "mlx_lm",
+      "base": "http://127.0.0.1:8084/v1",
+      "model": "/Users/fred/models/qwen3.5-2b-mlx4",
+      "speed": {
+        "runs": [
+          {
+            "wall": 7.437131881713867,
+            "generated": 220.0,
+            "generation_tps": 29.58129605593354,
+            "prompt_tps": 0.0
+          },
+          {
+            "wall": 7.814292907714844,
+            "generated": 220.0,
+            "generation_tps": 28.15353898275298,
+            "prompt_tps": 0.0
+          },
+          {
+            "wall": 7.71940803527832,
+            "generated": 220.0,
+            "generation_tps": 28.499594657334107,
+            "prompt_tps": 0.0
+          }
+        ],
+        "median_wall": 7.72,
+        "median_generation_tps": 28.5,
+        "median_prompt_tps": 0.0,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 3.72,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 1.28,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 2.1,
+          "detail": "```json\n{\n  \"status\": \"ok\",\n  \"count\": 3,\n  \"items\": [\"a\", \"b\", \"c\"]\n}\n```"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 3.52,
+          "detail": "[{\"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"content\\\": \\\"hi\\\", \\\"path\\\": \\\"hello.txt\\\"}\"}, \"type\": \"function\", \"id\": \"510c9fd4-07fe-4f39-afde-43489c2c2456\"}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": true,
+          "latency": 4.0,
+          "detail": "1. Calculate the cost of pens: 4 pens × 2 yuan/pen = 8 yuan.\n2. Calculate the cost of notebooks: 3 notebooks × 5 yuan/notebook = 15 yuan.\n3. Calculate the total cost: 8 yuan + 15 yuan = 23 yuan.\n4. Calculate the change: 50 yuan - 23 yuan = 27 yuan.\n\n27"
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.59,
+          "detail": "PONG"
+        }
+      ]
+    },
+    "qwen3.5-2b-gguf": {
+      "label": "Qwen3.5-2B GGUF Q4_K_M",
+      "runtime": "llama.cpp",
+      "base": "http://127.0.0.1:8085/v1",
+      "model": "qwen3.5-2b",
+      "speed": {
+        "runs": [
+          {
+            "wall": 13.707530975341797,
+            "generated": 220.0,
+            "generation_tps": 16.363059682952642,
+            "prompt_tps": 100.12849823940724
+          },
+          {
+            "wall": 12.115470886230469,
+            "generated": 220.0,
+            "generation_tps": 18.346476475419028,
+            "prompt_tps": 29.301453352086263
+          },
+          {
+            "wall": 13.563881158828735,
+            "generated": 220.0,
+            "generation_tps": 16.26237462748766,
+            "prompt_tps": 52.61565578837983
+          }
+        ],
+        "median_wall": 13.56,
+        "median_generation_tps": 16.36,
+        "median_prompt_tps": 52.62,
+        "median_generated": 220.0
+      },
+      "quality": [
+        {
+          "name": "fib-code",
+          "pass": true,
+          "latency": 4.7,
+          "detail": "55"
+        },
+        {
+          "name": "code-fix",
+          "pass": true,
+          "latency": 1.46,
+          "detail": "5"
+        },
+        {
+          "name": "json",
+          "pass": true,
+          "latency": 2.05,
+          "detail": "{\n  \"status\": \"ok\",\n  \"count\": 3,\n  \"items\": [\"a\", \"b\", \"c\"]\n}"
+        },
+        {
+          "name": "tool-call",
+          "pass": true,
+          "latency": 2.37,
+          "detail": "[{\"type\": \"function\", \"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"path\\\":\\\"hello.txt\\\",\\\"content\\\":\\\"hi\\\"}\"}, \"id\": \"Fb0F4jNR4XRK8aHNNwDlhgltJb9fQfsJ\"}]"
+        },
+        {
+          "name": "reasoning",
+          "pass": false,
+          "latency": 0.24,
+          "detail": "17"
+        },
+        {
+          "name": "instruction",
+          "pass": true,
+          "latency": 0.22,
+          "detail": "PONG"
+        }
+      ]
+    }
+  }
+}
