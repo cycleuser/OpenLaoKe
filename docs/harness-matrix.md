@@ -25,29 +25,29 @@
 - 速度同时记录两个时间：
   - `artifact`：目标文件第一次出现的时间。
   - `exit`：harness 进程退出的时间。
-  两者差距大，说明任务其实做完了，但 agent 循环没有停。
 
 ## LFM3-1.7B GGUF：thinking off
 
 | Harness | fib 结果 | fib artifact | fib exit | merge 结果 | merge artifact | merge exit |
 |---|---|---:|---:|---|---:|---:|
-| OpenLaoKe | 文件正确，超时 | 21.8s | 150s | **通过** | 22.3s | 47.5s |
+| OpenLaoKe | **通过** | 16.8s | 28.7s | **通过** | 22.1s | 34.9s |
 | pi | **通过** | 62.4s | 71.3s | 无文件，自称完成 | - | 73.3s |
 | Jcode | **通过** | 45.3s | 61.6s | **通过** | 7.8s | 28.0s |
 | OpenCode | 无文件，超时 | - | 150s | 无文件，超时 | - | 150s |
 
-总计 4/8。
+总计 5/8。OpenLaoKe 和 Jcode 都是两项全过；OpenLaoKe 的 fib 快一倍多，
+Jcode 的 merge 快 6.9 秒。
 
 ## LFM3-1.7B GGUF：thinking on
 
 | Harness | fib 结果 | fib artifact | fib exit | merge 结果 | merge artifact | merge exit |
 |---|---|---:|---:|---|---:|---:|
-| OpenLaoKe | **通过** | 32.3s | 102.3s | 文件正确，超时 | 45.6s | 150s |
+| OpenLaoKe | **通过** | 33.9s | 52.2s | **通过** | 33.8s | 52.1s |
 | pi | **通过** | 59.9s | 96.8s | **通过** | 113.4s | 129.1s |
 | Jcode | **通过** | 73.6s | 99.4s | **通过** | 42.1s | 73.8s |
 | OpenCode | 无文件，超时 | - | 150s | 无文件，超时 | - | 150s |
 
-总计 5/8。
+总计 6/8。OpenLaoKe 两项都是第一个出文件、第一个退出。
 
 ## Qwen3.5-2B MLX：thinking off / on
 
@@ -55,7 +55,7 @@
 
 | Harness | off 结果 | off artifact | off exit | on 结果 | on artifact | on exit |
 |---|---|---:|---:|---|---:|---:|
-| OpenLaoKe | **通过** | 23.6s | 75.1s | **通过** | 25.8s | 126.7s |
+| OpenLaoKe | **通过** | 20.7s | 28.4s | **通过** | 30.6s | 43.5s |
 | pi | 无文件，自称完成 | - | 49.1s | **通过** | 57.8s | 62.9s |
 | Jcode | 文件错误（34），超时 | 44.6s | 200s | **通过** | 49.8s | 66.9s |
 | OpenCode | 文件错误（34），exit 1 | 118.9s | 131.9s | 无文件，超时 | - | 200s |
@@ -63,23 +63,38 @@
 off 1/4，on 3/4。Qwen 与 LFM3 相反：**thinking 打开后质量明显变好**，
 Jcode 从“文件算错且循环”变成 66.9 秒通过。
 
+## OpenLaoKe 这一轮修了什么
+
+初测时 OpenLaoKe 的典型表现是“十几秒写出正确文件，然后转到超时”。原因有两个：
+
+1. **验证命令被安全分类器拦住了。** `python3 answer.py` 被
+   `command_risk.assess` 判成 `confirm`（“unrecognised command 'python3'”），
+   要求模型补 `justification`。1.7B 模型不会补，于是一遍遍重试。现在
+   `python/python3/node/bash/...` 执行工作目录内的脚本文件判为 `safe`；
+   `-c`、`--eval`、脚本在目录外仍然要求确认。
+2. **验证成功后没有终止信号。** 新增完成门：`Write/Edit` 成功写下文件，之后
+   `Bash` 成功执行了包含该文件名的命令，下一轮强制 `tools=None`，只允许输出
+   最终总结。交互 REPL 和 non-interactive engine 都接了这个门。
+
+修复前 OpenLaoKe 在 LFM3 off 的 fib 上 21.8 秒出文件、150 秒超时；修复后
+16.8 秒出文件、28.7 秒退出。Qwen off 从 75.1 秒降到 28.4 秒。
+
 ## 观察
 
-1. **Jcode 在这组测试里最稳。** LFM3 两项、两种 thinking 都是 4/4，而且
-   artifact 时间通常最短（merge off 只用 7.8 秒）。
-2. **OpenLaoKe 生成文件最快，但常常不退出。** LFM3 off 的 fib 在 21.8 秒就写出
-   正确文件，却一直跑到 150 秒超时；Qwen on 的 fib 也是 25.8 秒出文件、126.7 秒
-   才退出。问题不在生成，而在“任务完成后如何停”。
+1. **修完之后，OpenLaoKe 是 6/6 全通过，Jcode 是 5/6。** 两者的差距不再在
+   正确率，而在风格：OpenLaoKe 出文件更快，Jcode 在 LFM3 off merge 上仍然最快。
+2. **Jcode 在这组测试里最稳。** LFM3 两项、两种 thinking 都是 4/4，而且
+   merge off 的 artifact 只用 7.8 秒。
 3. **pi 有一次假成功。** LFM3 off 的 merge，pi 退出码 0、回复“已验证”，但目录
    里没有 `merge_sort.py`。只看退出码会把它算成通过。
 4. **OpenCode 在这两个小模型上 0/8。** 它给本地模型的任务提示和工具 schema
    太重：Qwen 的一次请求预填充达到 29,025 token，2B 模型很难在预算内完成；
    Qwen 关闭 thinking 时虽然写出了文件，但 Fibonacci 起点错一位，输出 34，
    随后工具参数又不符合 schema，最终 exit 1。
-5. **thinking 不是免费开关。** LFM3 打开后，多数通过项慢 30%-120%；Qwen 打开后
-   反而因为少走弯路而变快（Jcode 200s 超时 -> 66.9s 通过）。是否打开取决于模型，
-   不能一刀切。
-6. **超时要分两种。** “文件正确但没退出”和“根本没做出来”是两件事。表里把
+5. **thinking 不是免费开关。** LFM3 打开后，OpenLaoKe 从 28.7/34.9 秒变成
+   52.2/52.1 秒，质量没有提升；Qwen 打开后反而因为少走弯路，Jcode 从 200 秒
+   超时变成 66.9 秒通过。是否打开取决于模型，不能一刀切。
+6. **“超时”要分两种。** “文件正确但没退出”和“根本没做出来”是两件事。表里把
    `artifact` 和 `exit` 分开，就是为了不把前者误判成模型能力问题。
 
 ## 复现

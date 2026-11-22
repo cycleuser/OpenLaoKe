@@ -86,6 +86,9 @@ class REPL:
         self._last_thinking: str = ""
         self._thinking_duration: float = 0.0
         self._turn_start: float = 0.0
+        self._artifact_written: set[str] = set()
+        self._artifact_verified = False
+        self._force_final = False
 
         self._reset_terminal()
         self._active_tasks: set[asyncio.Task] = set()
@@ -772,10 +775,29 @@ class REPL:
         )
         await self._hook_system.execute_hooks_async(hook_type, payload)
 
+    def _note_artifact_result(self, tool_use: ToolUseBlock, result: Any) -> None:
+        """Arm the final-turn gate once a written file has run successfully."""
+        from openlaoke.core.engine import artifact_basename, verifies_artifact
+
+        if getattr(result, "is_error", False):
+            return
+        if tool_use.name in ("Write", "Edit"):
+            path = str(tool_use.input.get("file_path") or "")
+            if path:
+                self._artifact_written.add(artifact_basename(path))
+        elif tool_use.name == "Bash" and verifies_artifact(
+            str(tool_use.input.get("command") or ""), self._artifact_written
+        ):
+            self._artifact_verified = True
+            self._force_final = True
+
     async def _run_api_loop(self) -> None:
         max_iterations = self._resolve_max_iterations()
         iteration = 0
         failed_tool_calls: dict[str, int] = {}
+        self._artifact_written = set()
+        self._artifact_verified = False
+        self._force_final = False
 
         messages: list[Any] = []
         for msg in self.app_state.messages:
@@ -968,7 +990,7 @@ class REPL:
                             f"{prune_result.elapsed_ms:.1f}ms[/]"
                         )
 
-            tools = self.registry.get_all_for_prompt()
+            tools = [] if self._force_final else self.registry.get_all_for_prompt()
 
             # Fingerprint the cacheable prefix every turn: a change here is what
             # makes the next request pay full price, and it is invisible in the UI.
@@ -1145,6 +1167,9 @@ class REPL:
                     if content_text:
                         self._render_response(content_text)
 
+                    if self._force_final:
+                        tool_uses = []
+
                     is_plan_only = (
                         content_text
                         and not tool_uses
@@ -1226,6 +1251,8 @@ class REPL:
                                 )
                             messages.append(tool_result_message(tool_use.id, result_content))
                             self._record_tool_result(tool_use.id, result_content)
+                            if not isinstance(result, BaseException):
+                                self._note_artifact_result(tool_use, result)
                     else:
                         for tool_use in tool_uses:
                             if not self._running:
@@ -1275,6 +1302,7 @@ class REPL:
                             )
                             messages.append(tool_result_message(tool_use.id, result_content))
                             self._record_tool_result(tool_use.id, result_content)
+                            self._note_artifact_result(tool_use, result)
 
                     self.app_state._persist()
 

@@ -37,6 +37,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the thinking-on/off comparison on LFM3 and Qwen local models.
 
 ### Fixed
+- **Verified artifacts end the turn** (`core/engine.py`, `core/repl.py`): once a
+  `Write`/`Edit` succeeds and a later `Bash` command runs that file with exit
+  code 0, the next turn is text-only. Previously a 1.7B model could keep
+  "verifying" for the whole step budget after the task was already done.
+- **Local script execution no longer needs a justification**
+  (`utils/permissions/command_risk.py`): `python3 answer.py`, `node build.js`,
+  and similar commands resolving to a file inside the working directory are
+  `safe`. Inline code (`-c`, `--eval`) and scripts outside the working
+  directory still require confirmation.
 - **`--max-steps` is honoured in non-interactive mode** (`entrypoints/cli.py`):
   the CLI parsed the flag but `_run_non_interactive` always used the harness
   mode's budget. A 1.7B model could therefore loop for the full 50-step

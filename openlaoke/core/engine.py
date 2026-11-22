@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -91,6 +94,7 @@ class EnginePolicy:
     repair_tool_calls: bool = True
     max_repeat_calls: int = 3
     parallel_readonly: bool = True
+    stop_on_verified_artifact: bool = True
 
 
 @dataclass
@@ -178,6 +182,9 @@ async def run_loop(
         except Exception:  # noqa: BLE001 - repair is optional, never fatal
             validator = None
     repeat_counts: dict[str, int] = {}
+    written_names: set[str] = set()
+    verified_artifact = False
+    force_final = False
 
     try:
         while iteration < policy.max_iterations:
@@ -188,7 +195,7 @@ async def run_loop(
             iteration += 1
             result.iterations = iteration
 
-            tools = policy.tools
+            tools = None if force_final else policy.tools
             if tools is not None and iteration >= policy.max_iterations:
                 # The final turn is text-only, so the model has to answer
                 # instead of starting work it cannot finish.
@@ -211,7 +218,10 @@ async def run_loop(
 
             content = getattr(response, "content", "") or ""
             tool_uses = getattr(response, "tool_uses", None) or []
-            if not tool_uses and content:
+            if force_final:
+                tool_uses = []
+                response.tool_uses = []
+            if not force_final and not tool_uses and content:
                 from openlaoke.core.text_tool_calls import parse_text_tool_calls
 
                 cleaned, recovered = parse_text_tool_calls(content)
@@ -231,6 +241,9 @@ async def run_loop(
                 policy.save_state(iteration, messages, result.text_parts, "running")
 
             if not tool_uses:
+                if force_final:
+                    result.stop_reason = STOP_DONE
+                    break
                 if not content and getattr(response, "stop_reason", None) == "length":
                     result.stop_reason = STOP_ERROR
                     result.error = (
@@ -292,7 +305,27 @@ async def run_loop(
 
             for tu, res in zip(tool_uses, results, strict=True):
                 assert res is not None
+                if os.environ.get("OPENLAOKE_TRACE_TOOLS"):
+                    print(
+                        f"[trace] step={iteration} tool={tu.name} error={res.is_error} "
+                        f"input={json.dumps(tu.input, ensure_ascii=False, default=str)[:300]}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 messages.append(tool_result_message(tu.id, _as_text(res.content)))
+                if res.is_error:
+                    continue
+                if tu.name in ("Write", "Edit"):
+                    path = str(tu.input.get("file_path") or "")
+                    if path:
+                        written_names.add(artifact_basename(path))
+                elif tu.name == "Bash" and verifies_artifact(
+                    str(tu.input.get("command") or ""), written_names
+                ):
+                    verified_artifact = True
+
+            if policy.stop_on_verified_artifact and verified_artifact:
+                force_final = True
 
             if policy.save_state is not None:
                 policy.save_state(iteration, messages, result.text_parts, "running")
@@ -310,6 +343,23 @@ def _as_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     return json.dumps(content, ensure_ascii=False)
+
+
+_RUNNERS = re.compile(r"\b(?:python3?|pytest|bash|sh|node|deno|ruby|perl|uv\s+run|bun)\b")
+
+
+def artifact_basename(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1].strip()
+
+
+def verifies_artifact(command: str, written_names: set[str]) -> bool:
+    """True when a successful command clearly executed a file we just wrote."""
+    if not written_names:
+        return False
+    lowered = command.lower()
+    if not _RUNNERS.search(lowered):
+        return False
+    return any(name.lower() in lowered for name in written_names)
 
 
 def _error(tool_use_id: str, message: str) -> ToolResultBlock:

@@ -95,8 +95,9 @@ Omni 额外测试一张纯红 PNG，回答必须包含 `red`。
 
 后续补充：`docs/harness-matrix.md` 把 LFM3-1.7B 和 Qwen3.5-2B 分别接到
 OpenLaoKe、pi、Jcode、OpenCode，分 thinking 开/关跑了 `fib` 与 `merge`
-两个任务。结论比这里更细：OpenLaoKe 常常 20 多秒就写出正确文件却不退出；
-Jcode 最稳；pi 出现过“自称完成但没有文件”；OpenCode 在 1.7B/2B 上 0/8。
+两个任务。修复“本地脚本验证被拦”和“验证后不终止”之后，OpenLaoKe 6/6 全通过，
+并且在 6 个场景里 5 个最快；Jcode 5/6；pi 出现过“自称完成但没有文件”；
+OpenCode 在 1.7B/2B 上 0/8。
 
 ## 关键坑
 

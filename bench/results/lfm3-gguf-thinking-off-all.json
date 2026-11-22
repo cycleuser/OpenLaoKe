@@ -10,16 +10,16 @@
       "model": "lfm3-gguf",
       "thinking": "off",
       "task": "fib",
-      "passed": false,
-      "timed_out": true,
-      "exit_code": null,
-      "seconds": 150.0,
+      "passed": true,
+      "timed_out": false,
+      "exit_code": 0,
+      "seconds": 28.7,
+      "artifact_seconds": 16.8,
       "file_created": true,
       "output": "55",
-      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_gj9w39t7",
-      "log_tail": "",
-      "error": "",
-      "artifact_seconds": 21.8
+      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_lo11m_b3",
+      "log_tail": "Done. `answer.py` has been created with an iterative `fib(n)` function and a `__main__` block that prints `fib(10)`. Running it outputs:\n\n```\n55\n```\n\nThis is correct (the 10th Fibonacci number, starting from F(0)=0, F(1)=1).\n\n--- Session cost: $0.0000 ---\n",
+      "error": ""
     },
     {
       "harness": "pi",
@@ -77,13 +77,13 @@
       "passed": true,
       "timed_out": false,
       "exit_code": 0,
-      "seconds": 47.5,
+      "seconds": 34.9,
+      "artifact_seconds": 22.1,
       "file_created": true,
       "output": "[1, 2, 3, 4, 5]",
-      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_mnq0owrm",
-      "log_tail": "The `merge_sort.py` file has been created and verified. Running it prints the sorted result:\n\n```\n[1, 2, 3, 4, 5]\n```\n\n**What changed:** Added a complete implementation of `merge_sort` (recursive divide-and-conquer) with a helper `merge`, plus a `__main__` block that sorts `[5, 3, 1, 4, 2]` and prints the output. The script was executed successfully via `python merge_sort.py`.\n\n--- Session cost: $0.0000 ---\n",
-      "error": "",
-      "artifact_seconds": 22.3
+      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_n41djp77",
+      "log_tail": "The file `merge_sort.py` has been created and executed successfully. It implements merge sort with:\n- `merge_sort(arr)` – recursively splits the array and merges sorted halves.\n- `merge(left, right)` – merges two sorted lists into one.\n\nRunning it prints:\n\n```\n[1, 2, 3, 4, 5]\n```\n\nThis is the correctly sorted result of `[5, 3, 1, 4, 2]`.\n\n--- Session cost: $0.0000 ---\n",
+      "error": ""
     },
     {
       "harness": "pi",
@@ -137,13 +137,13 @@
   "summary": {
     "model": "lfm3-gguf",
     "thinking": "off",
-    "pass": 4,
+    "pass": 5,
     "total": 8,
     "by_task": {
       "fib": {
-        "pass": 2,
+        "pass": 3,
         "total": 4,
-        "fastest_pass": 61.6
+        "fastest_pass": 28.7
       },
       "merge": {
         "pass": 2,

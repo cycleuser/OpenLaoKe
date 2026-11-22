@@ -146,6 +146,21 @@ CONFIRM_BASES = {
     "open",
 }
 SAFE_TEST_PREFIXES = ("pytest", "python -m pytest", "mypy", "ruff", "black", "isort", "python -m ")
+INTERPRETERS = {
+    "bash",
+    "bun",
+    "deno",
+    "node",
+    "perl",
+    "php",
+    "python",
+    "python3",
+    "python3.12",
+    "ruby",
+    "sh",
+    "zsh",
+}
+INLINE_CODE_FLAGS = {"-c", "-e", "-p", "--eval", "--print", "-"}
 
 _CATASTROPHIC_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
@@ -202,7 +217,31 @@ def _split(segment: str) -> list[str]:
         return segment.split()
 
 
-def _is_safe_segment(tokens: list[str]) -> bool:
+def _is_interpreter(base: str) -> bool:
+    return base in INTERPRETERS or base.startswith("python3.")
+
+
+def _is_local_script(tokens: list[str], workdir: str) -> bool:
+    if not tokens:
+        return False
+    base = os.path.basename(tokens[0])
+    if not _is_interpreter(base):
+        return False
+    args = tokens[1:]
+    if not args or any(arg in INLINE_CODE_FLAGS for arg in args):
+        return False
+    for arg in args:
+        if arg.startswith("-"):
+            continue
+        path = arg if os.path.isabs(arg) else os.path.join(workdir, arg)
+        path = os.path.normpath(path)
+        if path != workdir and not path.startswith(workdir + os.sep):
+            return False
+        return os.path.isfile(path)
+    return False
+
+
+def _is_safe_segment(tokens: list[str], workdir: str) -> bool:
     if not tokens:
         return False
     base = os.path.basename(tokens[0])
@@ -214,9 +253,11 @@ def _is_safe_segment(tokens: list[str]) -> bool:
         flag in " ".join(tokens) for flag in ("-i", "-delete", "-exec", "-execdir", ">")
     ):
         return True
-    if base in {"python", "python3"} and len(tokens) > 1:
+    if _is_interpreter(base) and len(tokens) > 1:
         joined = " ".join(tokens)
-        return joined.startswith(SAFE_TEST_PREFIXES)
+        if joined.startswith(SAFE_TEST_PREFIXES):
+            return True
+        return _is_local_script(tokens, workdir)
     return base in {"pytest"}
 
 
@@ -258,7 +299,7 @@ def assess(command: str, cwd: str | None = None) -> RiskAssessment:
         if "curl" in command and re.search(r"\|\s*(ba)?sh", command):
             return RiskAssessment(CATASTROPHIC, "remote script piped into a shell")
 
-        if _is_safe_segment(tokens):
+        if _is_safe_segment(tokens, workdir):
             continue
 
         if base in LOW_BASES:
