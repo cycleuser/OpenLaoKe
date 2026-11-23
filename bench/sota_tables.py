@@ -101,6 +101,19 @@ def main() -> None:
         got = list(table[model].values())
         print(f"- {MODEL_LABEL[model]}: {sum(1 for r in got if r['passed'])}/{len(got)}")
 
+    print("\n### 失败形态\n")
+    print("| 组合 | 超时 | 没产出 | 产出不对 |")
+    print("|---|---:|---:|---:|")
+    for model in models:
+        for harness in HARNESS_ORDER:
+            got = [r for (t, h), r in table[model].items() if h == harness and not r["passed"]]
+            if not got:
+                continue
+            timeouts = sum(1 for r in got if r["timed_out"])
+            empty = sum(1 for r in got if not r["timed_out"] and not (r.get("detail") or "").strip())
+            wrong = len(got) - timeouts - empty
+            print(f"| {HARNESS_LABEL[harness]} + {MODEL_LABEL[model]} | {timeouts} | {empty} | {wrong} |")
+
     print("\n### 按任务看难度\n")
     print("| 任务 | " + " | ".join(f"{HARNESS_LABEL[h]}" for h in HARNESS_ORDER) + " |")
     print("|---|" + "---|" * len(HARNESS_ORDER))

@@ -294,74 +294,53 @@ def grid(out_path: pathlib.Path, tables: dict[str, dict], title: str, subtitle: 
     print(f"saved {out_path} ({out_path.stat().st_size // 1024} KB)")
 
 
-def scatter(out_path: pathlib.Path, tables: dict[str, dict], title: str, subtitle: str) -> None:
-    fig, ax = plt.subplots(figsize=(8.6, 6.2), dpi=200)
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
+def bars(out_path: pathlib.Path, tables: dict[str, dict], title: str, subtitle: str) -> None:
+    """Pass count per combination, with the average time written next to each bar.
 
-    points = []
+    A scatter of score against time was the first attempt, but eight labelled
+    points in one corner collide; sorted bars read in one pass and still carry
+    the time.
+    """
+    rows = []
     for key, label, hue in MODELS:
-        rows = tables[key]
+        cells = tables[key]
         for harness in HARNESS:
-            got = [r for (t, h), r in rows.items() if h == harness]
+            got = [r for (t, h), r in cells.items() if h == harness]
             if not got:
                 continue
             passed = [r for r in got if r["passed"]]
             avg = statistics.mean(r["seconds"] for r in passed) if passed else None
-            points.append((label, hue, HARNESS_LABEL[harness], len(passed), len(got), avg))
+            rows.append((len(passed), avg, f"{HARNESS_LABEL[harness]} + {label.split('-')[0]}", hue, len(got)))
+    rows.sort(key=lambda item: (-item[0], item[1] if item[1] else 9e9))
 
-    for label, hue, harness, ok, total, avg in points:
-        if avg is None:
-            ax.scatter(
-                [0.4],
-                [0],
-                s=90,
-                facecolors="white",
-                edgecolors=LINE,
-                linewidths=1.4,
-                zorder=3,
-            )
-            ax.annotate(
-                f"{harness} + {label.split('-')[0]}（0/{total}）",
-                (0.4, 0),
-                textcoords="offset points",
-                xytext=(10, -2),
-                fontsize=8.6,
-                color=FAINT,
-                va="center",
-            )
-            continue
-        ax.scatter([avg], [ok], s=150, color=hue, alpha=0.9, zorder=4, edgecolors="white", linewidths=1.2)
-        ax.annotate(
-            f"{harness} + {label.split('-')[0]}",
-            (avg, ok),
-            textcoords="offset points",
-            xytext=(9, 4),
-            fontsize=9.0,
-            color=INK,
+    fig, ax = plt.subplots(figsize=(8.8, 5.4), dpi=200)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ys = list(range(len(rows)))[::-1]
+    for y, (count, avg, _label, hue, total) in zip(ys, rows, strict=False):
+        ax.barh(y, count, height=0.58, color=hue, alpha=0.14, zorder=2)
+        ax.barh(y, count, height=0.58, color="none", edgecolor=hue, linewidth=1.0, alpha=0.5, zorder=3)
+        ax.text(
+            count + 0.22,
+            y,
+            f"{count}/{total}" + (f"   · 通过项均 {avg:.0f}s" if avg else "   · 没有通过项"),
+            va="center",
+            fontsize=9.6,
+            color=INK if count else FAINT,
         )
-
-    ax.set_xlabel("通过项平均耗时（秒）", fontsize=10.5, color=MUTED)
-    ax.set_ylabel("12 项中通过数", fontsize=10.5, color=MUTED)
-    ax.set_ylim(-0.8, 12.8)
-    ax.set_xlim(0, max([p[5] for p in points if p[5]] or [60]) * 1.25)
-    ax.grid(axis="y", color=LINE, lw=0.8, alpha=0.9)
+    ax.set_yticks(ys)
+    ax.set_yticklabels([row[2] for row in rows], fontsize=10, color=INK)
+    ax.set_xlim(0, max(row[0] for row in rows) + 4.6)
+    ax.set_xticks(range(0, 13, 2))
+    ax.set_xlabel("十二项中通过数", fontsize=10, color=MUTED)
+    ax.grid(axis="x", color=LINE, lw=0.8)
     ax.set_axisbelow(True)
-    for side in ("top", "right"):
+    for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    for side in ("left", "bottom"):
-        ax.spines[side].set_color(LINE)
-    ax.tick_params(colors=MUTED, labelsize=9)
-    ax.set_title(title, loc="left", fontsize=15, color=INK, pad=26, fontweight="bold")
-    ax.text(
-        0.0,
-        1.045,
-        subtitle,
-        transform=ax.transAxes,
-        fontsize=9.2,
-        color=MUTED,
-        va="bottom",
-    )
+    ax.spines["bottom"].set_color(LINE)
+    ax.tick_params(colors=MUTED, labelsize=9, length=0)
+    ax.set_title(title, loc="left", fontsize=15, color=INK, pad=30, fontweight="bold")
+    ax.text(0.0, 1.06, subtitle, transform=ax.transAxes, fontsize=9.2, color=MUTED, va="bottom")
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, facecolor="white")
@@ -382,11 +361,11 @@ def main() -> None:
         "十二项任务 · 四个智能体工具 · 两个 1.7B 模型",
         "每个组合独立目录、独立种子文件、120 秒墙钟上限；结果只看文件系统，不看模型自述。",
     )
-    scatter(
-        args.out_dir / "sota-score-speed.png",
+    bars(
+        args.out_dir / "sota-scores.png",
         tables,
-        "通过数 vs 通过项平均耗时",
-        "左上更好：做得对，还做得快。空心点表示一项都没过。",
+        "每个组合通过了多少项",
+        "条形是 12 项里的通过数；右侧是通过项的平均墙钟耗时。",
     )
 
 
