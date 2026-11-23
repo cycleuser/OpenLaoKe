@@ -44,6 +44,12 @@ class BashInput(BaseModel):
     )
 
 
+def perm_mode_now(ctx: ToolContext) -> PermissionMode:
+    """Active permission mode, defaulting to DEFAULT when unset."""
+    config = getattr(ctx.app_state, "permission_config", None)
+    return getattr(config, "mode", PermissionMode.DEFAULT)
+
+
 class BashTool(Tool):
     """Execute bash commands in the terminal."""
 
@@ -107,7 +113,11 @@ class BashTool(Tool):
                 content=f"Refused: {risk.reason}. No justification unlocks this class of command.",
                 is_error=True,
             )
-        if risk.tier == CONFIRM and not justification:
+        # Asking for a justification is a conversation, and a headless run has
+        # nobody to have it with. In bypass mode the answer is always yes, so the
+        # question only produces a loop: the model re-sends the same command and
+        # burns the step budget. Catastrophic commands are still refused above.
+        if risk.tier == CONFIRM and not justification and perm_mode_now(ctx) != PermissionMode.BYPASS:
             return ToolResultBlock(
                 tool_use_id=ctx.tool_use_id,
                 content=(
@@ -132,7 +142,7 @@ class BashTool(Tool):
                 is_error=True,
             )
 
-        perm_mode = ctx.app_state.permission_config.mode
+        perm_mode = perm_mode_now(ctx)
 
         if (
             not suppress_legacy_dangerous

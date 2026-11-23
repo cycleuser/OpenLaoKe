@@ -7,8 +7,9 @@ Four tiers, decided offline from the command text alone (modelled on jcode's
 * ``low``           destructive but the target is known and inside the working
                     directory, and the damage is bounded: runs, and gets logged.
 * ``confirm``       the target cannot be resolved from the text (variables,
-                    globs, network writes, package installs) or the command is
-                    unrecognised: the model must re-issue with a ``justification``.
+                    globs, writes outside the working directory, uploads,
+                    package installs) or the command is unrecognised: the model
+                    must re-issue with a ``justification``.
 * ``catastrophic``  whole filesystem, a device node, credentials, or privilege
                     escalation: refused, and no justification unlocks it.
 
@@ -145,6 +146,43 @@ CONFIRM_BASES = {
     "launchctl",
     "open",
 }
+# Network fetchers are judged by where they write, not by being fetchers: a
+# ``curl -o page.html https://…`` that lands in the working directory is the most
+# ordinary download there is, and refusing it strands every download task.
+FETCH_BASES = {"curl", "wget", "http", "https"}
+FETCH_UPLOAD_FLAGS = {
+    "-d",
+    "--data",
+    "--data-raw",
+    "--data-binary",
+    "--data-urlencode",
+    "--data-ascii",
+    "-F",
+    "--form",
+    "-T",
+    "--upload-file",
+    "--post-file",
+    "--post-data",
+}
+# curl spells "write here" as -o/--output and "use the URL's basename" as
+# -O/--remote-name; wget spells "write here" as -O/--output-document. Reading
+# them as the same flag sends a plain download down the wrong path.
+FETCH_OUTPUT_FLAGS = {
+    "curl": {"-o", "--output"},
+    "http": {"-o", "--output"},
+    "https": {"-o", "--output"},
+    "wget": {"-O", "--output-document"},
+}
+FETCH_CWD_WRITE_FLAGS = {
+    "curl": {"-O", "--remote-name"},
+    "http": {"-O", "--remote-name"},
+    "https": {"-O", "--remote-name"},
+    "wget": set(),
+}
+FETCH_PREFIX_FLAGS = {
+    "wget": {"-P", "--directory-prefix"},
+}
+
 SAFE_TEST_PREFIXES = ("pytest", "python -m pytest", "mypy", "ruff", "black", "isort", "python -m ")
 INTERPRETERS = {
     "bash",
@@ -270,10 +308,78 @@ def _targets_within(target: str, cwd: str) -> bool:
     return normalised == cwd or normalised.startswith(cwd + os.sep)
 
 
+# Sinks that discard output are not a place on disk worth guarding.
+_REDIR_SINKS = {"/dev/null", "/dev/zero", "/dev/stdout", "/dev/stderr", "/dev/tty"}
+_REDIR_DUP = re.compile(r"\d?>\&\d")
+_REDIR_WRITE = re.compile(r"&>>?\s*([^\s;&|()<>]+)|\d?>>?\s*([^\s;&|()<>]+)")
+_REDIR_READ = re.compile(r"\d?<\s*([^\s;&|()<>]+)")
+
+
+def _extract_redirects(command: str) -> tuple[str, list[str], list[str]]:
+    """Split redirects off a command line.
+
+    Returns ``(cleaned, write_targets, read_targets)``. ``2>&1`` is a file
+    descriptor duplication, not a target, and dropping it keeps ``2>&1`` from
+    being read as a command called ``1``.
+    """
+    writes: list[str] = []
+    reads: list[str] = []
+
+    cleaned = _REDIR_DUP.sub(" ", command)
+
+    def _write(match: re.Match[str]) -> str:
+        target = match.group(1) or match.group(2)
+        if target not in _REDIR_SINKS:
+            writes.append(target)
+        return " "
+
+    def _read(match: re.Match[str]) -> str:
+        reads.append(match.group(1))
+        return " "
+
+    cleaned = _REDIR_WRITE.sub(_write, cleaned)
+    cleaned = _REDIR_READ.sub(_read, cleaned)
+    return cleaned, writes, reads
+
+
+def _fetch_write_targets(tokens: list[str], base: str) -> tuple[list[str], bool]:
+    """Output targets of a curl/wget call, plus whether it uploads anything."""
+    out_flags = FETCH_OUTPUT_FLAGS.get(base, set())
+    cwd_flags = FETCH_CWD_WRITE_FLAGS.get(base, set())
+    prefix_flags = FETCH_PREFIX_FLAGS.get(base, set())
+    targets: list[str] = []
+    uploads = False
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in FETCH_UPLOAD_FLAGS or token.startswith(("--data=", "--form=")):
+            uploads = True
+        elif token in cwd_flags:
+            pass  # writes the URL basename into the working directory
+        elif token in out_flags or token in prefix_flags:
+            if index + 1 < len(tokens):
+                value = tokens[index + 1]
+                if value != "-":  # "-" means stdout
+                    targets.append(value)
+                index += 1
+        elif token.startswith(
+            ("--output=", "--output-document=", "--directory-prefix=")
+        ):
+            targets.append(token.split("=", 1)[1])
+        elif token.startswith("-X") and len(token) > 2:
+            uploads = uploads or token[2:].upper() not in {"GET", "HEAD"}
+        elif token in {"-X", "--request"} and index + 1 < len(tokens):
+            uploads = uploads or tokens[index + 1].upper() not in {"GET", "HEAD"}
+            index += 1
+        index += 1
+    return targets, uploads
+
+
 def assess(command: str, cwd: str | None = None) -> RiskAssessment:
     """Classify one command line. Every segment must pass for the safest verdict."""
     workdir = os.path.abspath(cwd or os.getcwd())
-    segments = _segments(command)
+    cleaned, redirect_writes, _redirect_reads = _extract_redirects(command)
+    segments = _segments(cleaned)
     if not segments:
         return RiskAssessment(SAFE, "empty command")
 
@@ -283,6 +389,15 @@ def assess(command: str, cwd: str | None = None) -> RiskAssessment:
 
     worst = SAFE
     reasons: list[str] = []
+
+    # Redirect targets carry the same blast radius as a tool's own output flag.
+    for target in redirect_writes:
+        if _UNEXPANDABLE.search(target):
+            worst = _raise(worst, CONFIRM)
+            reasons.append(f"redirect target '{target}' comes from a variable or glob")
+        elif not _targets_within(target, workdir):
+            worst = _raise(worst, CONFIRM)
+            reasons.append(f"redirect writes outside the working directory: {target}")
 
     for segment in segments:
         if any(marker in segment for marker in ("|(", "$(", "`")):
@@ -319,6 +434,30 @@ def assess(command: str, cwd: str | None = None) -> RiskAssessment:
             else:
                 worst = _raise(worst, LOW)
                 reasons.append(f"{base} modifies files inside the working directory")
+            continue
+
+        if base in FETCH_BASES:
+            targets, uploads = _fetch_write_targets(tokens, base)
+            if uploads:
+                worst = _raise(worst, CONFIRM)
+                reasons.append(f"{base} uploads data to a remote host")
+                continue
+            outside = [item for item in targets if not _targets_within(item, workdir)]
+            blocked = [item for item in targets if _UNEXPANDABLE.search(item)]
+            if blocked:
+                worst = _raise(worst, CONFIRM)
+                reasons.append(f"{base} output path comes from a variable or glob")
+                continue
+            if outside:
+                worst = _raise(worst, CONFIRM)
+                reasons.append(f"{base} writes outside the working directory: {outside[0]}")
+                continue
+            worst = _raise(worst, LOW)
+            reasons.append(
+                f"{base} downloads into the working directory"
+                if targets
+                else f"{base} fetches a URL and prints it"
+            )
             continue
 
         if base in CONFIRM_BASES:

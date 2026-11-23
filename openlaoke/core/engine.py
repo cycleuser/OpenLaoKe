@@ -182,6 +182,7 @@ async def run_loop(
         except Exception:  # noqa: BLE001 - repair is optional, never fatal
             validator = None
     repeat_counts: dict[str, int] = {}
+    repeat_errors: dict[str, str] = {}
     written_names: set[str] = set()
     verified_artifact = False
     force_final = False
@@ -218,6 +219,18 @@ async def run_loop(
 
             content = getattr(response, "content", "") or ""
             tool_uses = getattr(response, "tool_uses", None) or []
+            if os.environ.get("OPENLAOKE_DEBUG_RAW"):
+                # Diagnostic for text tool-call recovery: what did the model
+                # actually send, before any repair? Off unless the env var is set.
+                import sys as _sys
+
+                print(
+                    f"[raw] iter={iteration} content={content!r:.1200} "
+                    f"tool_uses={[(t.name, t.input) for t in tool_uses]!r:.800} "
+                    f"stop={getattr(response, 'stop_reason', None)!r}",
+                    file=_sys.stderr,
+                    flush=True,
+                )
             if force_final:
                 tool_uses = []
                 response.tool_uses = []
@@ -276,10 +289,13 @@ async def run_loop(
             results: list[ToolResultBlock | None] = [None] * len(tool_uses)
             for idx in blocked:
                 tu = tool_uses[idx]
+                key = f"{tu.name}:{json.dumps(tu.input, sort_keys=True, default=str)}"
+                last_error = repeat_errors.get(key, "")
                 results[idx] = _error(
                     tu.id,
-                    f"Refused: '{tu.name}' was already called {policy.max_repeat_calls} "
-                    "times with identical arguments. Change the arguments or the approach.",
+                    f"Refused: '{tu.name}' was called {repeat_counts[key]} times with "
+                    "identical arguments and kept failing. Change the arguments or the "
+                    f"approach. Last result: {last_error[:300]}",
                 )
 
             if (
@@ -308,13 +324,17 @@ async def run_loop(
                 if os.environ.get("OPENLAOKE_TRACE_TOOLS"):
                     print(
                         f"[trace] step={iteration} tool={tu.name} error={res.is_error} "
-                        f"input={json.dumps(tu.input, ensure_ascii=False, default=str)[:300]}",
+                        f"input={json.dumps(tu.input, ensure_ascii=False, default=str)[:300]} "
+                        f"result={str(res.content)[:300]!r}",
                         file=sys.stderr,
                         flush=True,
                     )
+                key = f"{tu.name}:{json.dumps(tu.input, sort_keys=True, default=str)}"
                 messages.append(tool_result_message(tu.id, _as_text(res.content)))
                 if res.is_error:
+                    repeat_errors[key] = _as_text(res.content)
                     continue
+                repeat_errors.pop(key, None)
                 if tu.name in ("Write", "Edit"):
                     path = str(tu.input.get("file_path") or "")
                     if path:

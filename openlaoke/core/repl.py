@@ -71,6 +71,10 @@ _CONVERSATION_ONLY = re.compile(
 _KV_PATTERN = re.compile(r"(\w[\w_]*)\s*=\s*")
 
 
+_BRACE_CALL = re.compile(r"\b(\w+)\s*\{(.+)\}", re.DOTALL)
+_BRACE_KV = re.compile(r"(\w+)\s*:\s*<\|[^|]*\|[^>]*>")
+
+
 class REPL:
     """Main REPL loop for OpenLaoKe."""
 
@@ -1856,113 +1860,45 @@ class REPL:
 
     @staticmethod
     def _parse_inline_tool_calls(content: str) -> list[ToolUseBlock]:
-        tool_uses: list[ToolUseBlock] = []
+        """Recover tool calls that a model emitted as text.
 
-        _tool_aliases: dict[str, str] = {
-            "write": "Write",
-            "read": "Read",
-            "edit": "Edit",
-            "bash": "Bash",
-            "glob": "Glob",
-            "grep": "Grep",
-            "ls": "ListDirectory",
-            "list": "ListDirectory",
-            "dir": "ListDirectory",
-        }
+        The dialects (JSON, ``<function=>``, ``<arg_key>/<arg_value>``) live in
+        :mod:`openlaoke.core.text_tool_calls` so this path and the headless
+        engine cannot drift apart. The brace form below is the one syntax that
+        module does not cover.
+        """
+        from openlaoke.core.text_tool_calls import parse_text_tool_calls
 
-        def _clean(val: str) -> str:
-            val = val.strip().rstrip(",").rstrip(";")
-            if (val.startswith('"') and val.endswith('"')) or (
-                val.startswith("'") and val.endswith("'")
-            ):
-                val = val[1:-1]
-            return val
+        _clean, calls = parse_text_tool_calls(content)
+        if calls:
+            return calls
+        return REPL._parse_brace_tool_calls(content)
 
-        def _parse_simple_line(line: str) -> tuple[str, dict[str, str]] | None:
-            parts = line.strip().split()
-            if not parts:
-                return None
-            raw_name = parts[0]
-            name = _tool_aliases.get(raw_name, raw_name)
-            name = name[0].upper() + name[1:] if name[0].islower() else name
-
+    @staticmethod
+    def _parse_brace_tool_calls(content: str) -> list[ToolUseBlock]:
+        """Parse ``Write{file_path:<|arg|>a.py<|arg|>}`` style calls."""
+        calls: list[ToolUseBlock] = []
+        for match in _BRACE_CALL.finditer(content):
+            name, inner = match.group(1), match.group(2)
+            marks = list(_BRACE_KV.finditer(inner))
+            if not marks:
+                continue
             params: dict[str, str] = {}
-            remaining = " ".join(parts[1:])
-            pos = 0
-            last_key = None
-            for km in _KV_PATTERN.finditer(remaining):
-                if last_key:
-                    params[last_key] = _clean(remaining[pos : km.start()])
-                last_key = km.group(1)
-                pos = km.end()
-            if last_key:
-                params[last_key] = _clean(remaining[pos:])
-            return (name, params) if name and params else None
-
-        has_xml_format = "<tool_call>" in content
-        pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
-        for block in pattern.findall(content):
-            tool_name = None
-            params = {}
-
-            fn_match = re.search(r"<function=(\w+)>", block)
-            if fn_match:
-                tool_name = fn_match.group(1)
-                param_parts = re.split(r"<parameter=(\w+)>", block)
-                if len(param_parts) > 1:
-                    i = 1
-                    while i < len(param_parts) - 1:
-                        key = param_parts[i]
-                        val = param_parts[i + 1]
-                        val = re.sub(r"\s*</?\w+>\s*", "", val)
-                        val = val.strip()
-                        if val:
-                            params[key] = val
-                        i += 2
-            elif not tool_uses:
-                alt_match = re.match(r"(\w+)\{(.+)\}", block.strip(), re.DOTALL)
-                if alt_match:
-                    tool_name = alt_match.group(1)
-                    body = alt_match.group(2)
-                    kv_pattern = re.compile(
-                        r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)(?=<\|\W+\|)", re.DOTALL
-                    )
-                    for km in kv_pattern.finditer(body):
-                        params[km.group(1)] = km.group(2).strip()
-                    last_kv = re.search(r"(\w+)\s*:\s*<\|\W+\|\W*\s*>(.*?)}\s*$", body, re.DOTALL)
-                    if last_kv:
-                        key = last_kv.group(1)
-                        val = last_kv.group(2).rstrip("}").strip()
-                        if key not in params and val:
-                            params[key] = val
-
-            if tool_name and params:
-                tool_uses.append(
+            for i, mark in enumerate(marks):
+                stop = marks[i + 1].start() if i + 1 < len(marks) else len(inner)
+                value = inner[mark.end():stop].rstrip("}").strip()
+                value = re.sub(r"(?:\s*<\|[^|]*\|>)+\s*$", "", value).strip()
+                if value:
+                    params[mark.group(1)] = value
+            if params:
+                calls.append(
                     ToolUseBlock(
                         id=f"call_{uuid.uuid4().hex[:12]}",
-                        name=tool_name,
+                        name=name,
                         input=params,
                     )
                 )
-
-        if not tool_uses and not has_xml_format:
-            for line in content.split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                parsed = _parse_simple_line(line)
-                if parsed:
-                    raw_name = parsed[0]
-                    if raw_name and (raw_name[0].isupper() or raw_name in _tool_aliases):
-                        tool_uses.append(
-                            ToolUseBlock(
-                                id=f"call_{uuid.uuid4().hex[:12]}",
-                                name=raw_name,
-                                input=parsed[1],
-                            )
-                        )
-
-        return tool_uses
+        return calls
 
     @staticmethod
     def _strip_tool_calls(content: str) -> str:
