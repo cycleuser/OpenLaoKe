@@ -1,0 +1,90 @@
+[
+ {
+  "name": "spark-1.7b-q4",
+  "model": "spark-1.7b-q4",
+  "auto": 7,
+  "total": 10,
+  "rows": [
+   {
+    "id": "math_arith",
+    "q": "A shop sells 3 packs of 12 pens each for 45 dollars total. How many dollars is one pen? Answer with just the number.",
+    "expect": "1.25",
+    "answer": "0.375",
+    "auto_ok": false,
+    "seconds": 0.2
+   },
+   {
+    "id": "math_word",
+    "q": "If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets? One number.",
+    "expect": "5",
+    "answer": "We are given:\n\n> 5 machines take 5 minutes to make 5 widgets.\n\nWe are asked:  \n**How many minutes do 100 machines take to make 100 widgets?**\n\n---\n\n### Step 1: Understand the setup\n\nLet’s analyze the relationship between machines and time.\n\n- 5 machines → 5 widgets in 5 minutes.\n- So, **1 machine → 1 widget in 1 minute**.\n\nThis is because:\n- 5 machines make 5 widgets in 5 minutes → each machine makes 1 widget in 1 minute.\n\nSo, **rate per machine = 1 widget per minute**.\n\n---\n\n### Step 2: Apply to 100 machines and 100 widgets\n\n- 100 machines → 100 widgets.\n- Since each machine makes 1 widget per minute,\n- 100 machines will take **100 minutes** to make 100 widgets.\n\n✅ **Answer: 100**",
+    "auto_ok": true,
+    "seconds": 8.2
+   },
+   {
+    "id": "logic",
+    "q": "All bloops are razzies. All razzies are lazzies. Are all bloops definitely lazzies? Answer yes or no.",
+    "expect": "yes",
+    "answer": "Yes",
+    "auto_ok": true,
+    "seconds": 0.1
+   },
+   {
+    "id": "code_reverse",
+    "q": "Write one line of Python that prints the string 'hello' reversed.",
+    "expect": "olleh",
+    "answer": "print('olleh')",
+    "auto_ok": true,
+    "seconds": 0.2
+   },
+   {
+    "id": "code_bug",
+    "q": "This Python has one bug: def f(x): return x + 1; print(f('3')). What is the bug? One short sentence.",
+    "expect": "str",
+    "answer": "The bug is that `f` is called with a string `'3'` instead of a number `3`.",
+    "auto_ok": true,
+    "seconds": 0.9
+   },
+   {
+    "id": "follow_negation",
+    "q": "Repeat this sentence but do NOT include the word 'cat': The cat sat on the mat.",
+    "expect": "no cat",
+    "answer": "The person sat on the mat.",
+    "auto_ok": false,
+    "seconds": 0.3
+   },
+   {
+    "id": "zh_translate",
+    "q": "把这句英文翻译成中文：The server is temporarily unavailable.",
+    "expect": "服务器",
+    "answer": "服务器暂时无法访问。",
+    "auto_ok": true,
+    "seconds": 0.2
+   },
+   {
+    "id": "zh_math_word",
+    "q": "一个水池有进水管和出水管，单开进水管6小时注满，单开出水管8小时放空。两管齐开，几小时注满？只给数字或分数。",
+    "expect": "24",
+    "answer": "设水池总容量为 1。\n\n- 进水管单独注满需 6 小时，所以进水管每小时注满量为 \\( \\frac{1}{6} \\)。\n- 出水管单独放空需 8 小时，所以出水管每小时放空量为 \\( \\frac{1}{8} \\)。\n\n两管齐开时，净注水量为：\n\\[\n\\frac{1}{6} - \\frac{1}{8} = \\frac{4}{24} - \\frac{3}{24} = \\frac{1}{24}\n\\]\n即每小时注满水池的 \\( \\frac{1}{24} \\)。\n\n因此，注满水池所需时间为：\n\\[\n\\frac{1}{\\frac{1}{24}} = 24 \\text{ 小时}\n\\]\n\n答案：24 小时。",
+    "auto_ok": true,
+    "seconds": 6.9
+   },
+   {
+    "id": "extract",
+    "q": "From this log line extract the IP address only, nothing else: '2026-01-01 ERROR 192.168.1.42 connection refused'.",
+    "expect": "192.168.1.42",
+    "answer": "2026-01-01 ERROR 192.168.1.42 connection refused\n\n(Only the IP address: **192.168.1.42**)",
+    "auto_ok": true,
+    "seconds": 1.7
+   },
+   {
+    "id": "count",
+    "q": "How many words are in this sentence: 'to be or not to be that is the question'. Answer with just the number.",
+    "expect": "10",
+    "answer": "8",
+    "auto_ok": false,
+    "seconds": 0.1
+   }
+  ]
+ }
+]

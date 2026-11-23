@@ -73,7 +73,7 @@ QUESTIONS = [
         "id": "count",
         "q": "How many words are in this sentence: 'to be or not to be that is the question'. "
              "Answer with just the number.",
-        "expect": "9",
+        "expect": "10",
     },
 ]
 
@@ -119,7 +119,7 @@ def main() -> None:
         for item in QUESTIONS:
             ans, dt = ask(base_url, model, item["q"], args.max_tokens)
             ok = item["expect"].lower() in ans.lower()
-            rows.append({**item, "answer": ans[:400], "auto_ok": ok, "seconds": round(dt, 1)})
+            rows.append({**item, "answer": ans[:1200], "auto_ok": ok, "seconds": round(dt, 1)})
             print(f"[{name}] {item['id']:18} ok={ok} ({dt:.1f}s) -> {ans[:70]!r}")
         auto = sum(r["auto_ok"] for r in rows)
         print(f"== {name} auto-match {auto}/{len(rows)}")
