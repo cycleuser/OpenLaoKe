@@ -1,0 +1,38 @@
+{
+  "model": "lfm3-gguf",
+  "thinking": "off",
+  "timeout": 120.0,
+  "max_steps": 25,
+  "started": "2026-11-22T21:25:02",
+  "results": [
+    {
+      "harness": "openlaoke",
+      "model": "lfm3-gguf",
+      "thinking": "off",
+      "task": "ip",
+      "passed": true,
+      "timed_out": false,
+      "exit_code": 0,
+      "seconds": 33.5,
+      "artifact_seconds": 19.9,
+      "file_created": true,
+      "output": "36.48.94.251",
+      "log_path": "/Users/fred/.jcode/scratch/matrix_lfm3-gguf_openlaoke_gfy5uo71",
+      "log_tail": "Done. `ip.py` has been created and run successfully. It uses `urllib.request` (no proxy) to fetch https://icanhazip.com and prints the public IP address:\n\n```\n36.48.94.251\n```\n\nThis is the current public IP returned by the site.\n\n--- Session cost: $0.0000 ---\n",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "model": "lfm3-gguf",
+    "thinking": "off",
+    "pass": 1,
+    "total": 1,
+    "by_task": {
+      "ip": {
+        "pass": 1,
+        "total": 1,
+        "fastest_pass": 33.5
+      }
+    }
+  }
+}
