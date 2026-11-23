@@ -66,6 +66,7 @@ class Result:
     detail: str
     log_path: str = ""
     log_tail: str = ""
+    rep: int = 0
 
 
 def prepare(task: Task) -> pathlib.Path:
@@ -209,6 +210,12 @@ def run_cli(
     )
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--max-steps", type=int, default=25)
+    parser.add_argument(
+        "--reps",
+        type=int,
+        default=1,
+        help="Repeat each (harness, model, task) cell N times and report k/N pass rate and median seconds.",
+    )
     parser.add_argument("--json", type=pathlib.Path, default=None)
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--selftest", action="store_true")
@@ -220,20 +227,55 @@ def run_cli(
     SCRATCH.mkdir(parents=True, exist_ok=True)
     chosen = list(tasks.values()) if args.task == "all" else [tasks[args.task]]
     results: list[Result] = []
+    reps = max(1, int(args.reps))
+
+    def summarize_cells(rows: list[Result]) -> dict[str, dict[str, Any]]:
+        """Per (harness, task) cell over all reps: k/N pass, median seconds, stability."""
+        import statistics
+        groups: dict[tuple[str, str], list[Result]] = {}
+        for r in rows:
+            groups.setdefault((r.harness, r.task), []).append(r)
+        out: dict[str, dict[str, Any]] = {}
+        for (h, t), rs in groups.items():
+            n = len(rs)
+            k = sum(1 for r in rs if r.passed)
+            kv = sum(1 for r in rs if getattr(r, "verified", False))
+            med = statistics.median(r.seconds for r in rs)
+            stability = "stable-pass" if k == n else ("stable-fail" if k == 0 else "unstable")
+            out[f"{h}|{t}"] = {
+                "harness": h,
+                "task": t,
+                "reps": n,
+                "pass_k": k,
+                "verified_k": kv,
+                "median_seconds": round(float(med), 1),
+                "times": [round(float(r.seconds), 1) for r in rs],
+                "stability": stability,
+            }
+        return out
 
     def flush() -> None:
         if not args.json:
             return
+        cells = summarize_cells(results)
+        stable_pass = sum(1 for c in cells.values() if c["stability"] == "stable-pass")
+        stable_fail = sum(1 for c in cells.values() if c["stability"] == "stable-fail")
+        unstable = sum(1 for c in cells.values() if c["stability"] == "unstable")
         payload: dict[str, Any] = {
             "model": args.model,
             "timeout": args.timeout,
             "max_steps": args.max_steps,
+            "reps": reps,
             "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "cells": cells,
             "results": [asdict(r) for r in results],
             "summary": {
                 "pass": sum(1 for r in results if r.passed),
                 "verified": sum(1 for r in results if getattr(r, "verified", False)),
                 "total": len(results),
+                "cells_stable_pass": stable_pass,
+                "cells_stable_fail": stable_fail,
+                "cells_unstable": unstable,
                 "by_harness": {
                     h: {
                         "pass": sum(1 for r in results if r.harness == h and r.passed),
@@ -248,38 +290,53 @@ def run_cli(
 
     for task in chosen:
         for harness in args.harness:
-            print(f"== {harness} / {args.model} / {task.key}", flush=True)
-            try:
-                result = run_one(
-                    harness,
-                    args.model,
-                    task,
-                    verifiers[task.verifier],
-                    args.timeout,
-                    args.max_steps,
-                    args.keep,
+            for rep in range(1, reps + 1):
+                tag = f" [rep {rep}/{reps}]" if reps > 1 else ""
+                print(f"== {harness} / {args.model} / {task.key}{tag}", flush=True)
+                try:
+                    result = run_one(
+                        harness,
+                        args.model,
+                        task,
+                        verifiers[task.verifier],
+                        args.timeout,
+                        args.max_steps,
+                        args.keep,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    result = Result(
+                        harness=harness,
+                        model=args.model,
+                        task=task.key,
+                        passed=False,
+                        verified=False,
+                        timed_out=False,
+                        exit_code=None,
+                        seconds=0.0,
+                        detail=f"runner raised: {exc}",
+                    )
+                result.rep = rep
+                results.append(result)
+                flush()
+                mark = "PASS" if result.passed else ("TIME" if result.timed_out else "fail")
+                print(f"   {mark:4} {result.seconds:6.1f}s  {result.detail[:150]}", flush=True)
+            if reps > 1:
+                cell = summarize_cells(results)[f"{harness}|{task.key}"]
+                print(
+                    f"   -> {cell['pass_k']}/{cell['reps']} pass, median {cell['median_seconds']}s, {cell['stability']}",
+                    flush=True,
                 )
-            except Exception as exc:  # noqa: BLE001
-                result = Result(
-                    harness=harness,
-                    model=args.model,
-                    task=task.key,
-                    passed=False,
-                    verified=False,
-                    timed_out=False,
-                    exit_code=None,
-                    seconds=0.0,
-                    detail=f"runner raised: {exc}",
-                )
-            results.append(result)
-            flush()
-            mark = "PASS" if result.passed else ("TIME" if result.timed_out else "fail")
-            print(f"   {mark:4} {result.seconds:6.1f}s  {result.detail[:150]}", flush=True)
 
     passed = sum(1 for r in results if r.passed)
     if args.json:
         print(f"\nwrote {args.json}")
     print(f"\n{args.model}: {passed}/{len(results)}")
+    if reps > 1:
+        cells = summarize_cells(results)
+        sp = sum(1 for c in cells.values() if c["stability"] == "stable-pass")
+        sf = sum(1 for c in cells.values() if c["stability"] == "stable-fail")
+        un = sum(1 for c in cells.values() if c["stability"] == "unstable")
+        print(f"cells: {sp} stable-pass / {un} unstable / {sf} stable-fail (of {len(cells)})")
     return 0
 
 
