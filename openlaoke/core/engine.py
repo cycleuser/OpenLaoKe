@@ -95,6 +95,10 @@ class EnginePolicy:
     max_repeat_calls: int = 3
     parallel_readonly: bool = True
     stop_on_verified_artifact: bool = True
+    # A small model will write a script, never run it, and report success. One
+    # nudge turns that into a real verification instead of a false claim.
+    nudge_unverified_artifacts: bool = True
+    max_unverified_nudges: int = 1
 
 
 @dataclass
@@ -184,8 +188,10 @@ async def run_loop(
     repeat_counts: dict[str, int] = {}
     repeat_errors: dict[str, str] = {}
     written_names: set[str] = set()
+    verified_names: set[str] = set()
     verified_artifact = False
     force_final = False
+    unverified_nudges = 0
 
     try:
         while iteration < policy.max_iterations:
@@ -257,6 +263,25 @@ async def run_loop(
                 if force_final:
                     result.stop_reason = STOP_DONE
                     break
+                unverified = runnable_written(written_names - verified_names)
+                if (
+                    policy.nudge_unverified_artifacts
+                    and unverified
+                    and unverified_nudges < policy.max_unverified_nudges
+                ):
+                    unverified_nudges += 1
+                    names = ", ".join(unverified[:5])
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"You wrote {names} but never ran it, so nothing proves it works. "
+                                "Run it now with Bash and show the real output. If it fails, fix it "
+                                "and run it again. Do not claim success without having run it."
+                            ),
+                        }
+                    )
+                    continue
                 if not content and getattr(response, "stop_reason", None) == "length":
                     result.stop_reason = STOP_ERROR
                     result.error = (
@@ -343,6 +368,10 @@ async def run_loop(
                     str(tu.input.get("command") or ""), written_names
                 ):
                     verified_artifact = True
+                    command = str(tu.input.get("command") or "").lower()
+                    verified_names.update(
+                        name for name in written_names if name.lower() in command
+                    )
 
             if policy.stop_on_verified_artifact and verified_artifact:
                 force_final = True
@@ -365,7 +394,13 @@ def _as_text(content: Any) -> str:
     return json.dumps(content, ensure_ascii=False)
 
 
+_RUNNABLE_SUFFIXES = (".py", ".sh", ".bash", ".js", ".mjs", ".ts", ".rb", ".pl")
 _RUNNERS = re.compile(r"\b(?:python3?|pytest|bash|sh|node|deno|ruby|perl|uv\s+run|bun)\b")
+
+
+def runnable_written(names: set[str]) -> list[str]:
+    """Written files that are meant to be executed, not just opened."""
+    return sorted(name for name in names if name.lower().endswith(_RUNNABLE_SUFFIXES))
 
 
 def artifact_basename(path: str) -> str:
