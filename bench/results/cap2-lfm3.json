@@ -1,0 +1,136 @@
+[
+ {
+  "name": "lfm3",
+  "model": "lfm3-1.7b-q4",
+  "rows": [
+   {
+    "id": "pct_chain",
+    "group": "算术",
+    "q": "一件商品原价 40 元，先涨价 25%，再按新价降价 20%。最终价格多少元？只给数字。",
+    "hint": "40 涨到 50，再降 20% 是 40",
+    "answer": "40 * 1.25 = 50  \n50 * (1 - 0.20) = 50 * 0.8 = 40  \n\n最终价格是 **40** 元。",
+    "seconds": 1.4
+   },
+   {
+    "id": "pct_back",
+    "group": "算术",
+    "q": "A number's 30% is 45. What is 10% of that number? Answer with just the number.",
+    "hint": "150 的 10% = 15",
+    "answer": "We are told: \"A number's 30% is 45.\" That means 0.30 * N = 45. Solve for N: N = 45 / 0.30 = 150. Then we need 10% of that number: 0.10 * N = 0.10 * 150 = 15.\n\nThus answer is 15.</think>15",
+    "seconds": 2.5
+   },
+   {
+    "id": "sequence",
+    "group": "算术",
+    "q": "What number comes next: 2, 6, 12, 20, 30, ?  Answer with just the number.",
+    "hint": "n(n+1)，下一个 42",
+    "answer": "The sequence is: 2, 6, 12, 20, 30, ?\n\nLet's look at the differences between consecutive terms:\n- 6 - 2 = 4\n- 12 - 6 = 6\n- 20 - 12 = 8\n- 30 - 20 = 10\n\nThe differences are increasing by 2 each time: 4, 6, 8, 10...\n\nSo the next difference should be 12 (since 10 + 2 = 12).\n\nTherefore, the next term is:\n30 + 12 = 42.\n\nAnswer: 42",
+    "seconds": 3.9
+   },
+   {
+    "id": "rate",
+    "group": "算术",
+    "q": "A car covers 150 km in 2.5 hours. What is its average speed in km/h? Answer with just the number.",
+    "hint": "60",
+    "answer": "To find the average speed, use the formula:\n\n\\[\n\\text{Average Speed} = \\frac{\\text{Distance}}{\\text{Time}}\n\\]\n\nGiven:\n- Distance = 150 km\n- Time = 2.5 hours\n\nSubstitute the values into the formula:\n\n\\[\n\\text{Average Speed} = \\frac{150}{2.5}\n\\]\n\nPerform the division:\n\n\\[\n\\frac{150}{2.5} = 60\n\\]\n\nThus, the average speed is 60 km/h.\n\nAnswer: 60",
+    "seconds": 3.3
+   },
+   {
+    "id": "zh_ratio",
+    "group": "算术",
+    "q": "一个班有 40 人，其中 60% 是女生，女生里有四分之一戴眼镜。戴眼镜的女生有多少人？只给数字。",
+    "hint": "24 个女生中的 1/4 = 6",
+    "answer": "40 * 0.6 = 24 (total girls)\n24 * 1/4 = 6 (girls wearing glasses)\n\n\\boxed{6}",
+    "seconds": 1.1
+   },
+   {
+    "id": "read_alias",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\nx = [1, 2, 3]\ny = x\ny.append(4)\nprint(len(x))\n```\nAnswer with just the number.",
+    "hint": "4，y 和 x 是同一个列表",
+    "answer": "36\n\nIn Python, `y` is an alias for `x`. When `y.append(4)` is called, it modifies the same list object as `x`, so `len(x)` becomes 4 after appending. Wait, that would be 4? Let me re-evaluate: Initially x = [1,2,3] length 3. Then y.append(4) adds to y which is x, making x become [1,2,3,4], so len(x) should be 4. But the question says \"Answer with just the number.\" Let me double-check.\n\nActually: \n```python\nx = [1, 2, 3]\ny = x   # y refers to same list object as x\ny.append(4)\n# Now x is also modified because they share identity.\nprint(len(x))  # should be 4\n```\n\nBut wait, I recall that in Python, assignment `y = x` does not create a new list; it rebinds the name `y` to point to the same object. So yes, appending to y modifies x's contents.\n\nThus len(x) after append is 4? But earlier I thought maybe 3+1=4. Let me count: original elements [1,2,3] plus appended 4 gives four elements. So answer should be 4.\n\nBut the user asked \"Answer with just the number.\" Hmm, but my initial reasoning said 36 incorrectly due to a typo? No, I mistakenly wrote 36 earlier in thought process? Let's re-evaluate: The code:\n\n```python\nx = [1, 2, 3]\ny = x\ny.append(4)\nprint(len(x))\n```\n\nAfter `y = x`, both names refer to the same list. Then `y.append(4)` adds 4 to that list. So now the list is `[1,2,3,4]`. Length is 4.\n\nThus output: 4.\n\nBut wait, I recall a common pitfall: In Python, `list.append` modifies the list in place; since y and x are same object, it changes both. So len(x) becomes 4.\n\nTherefore answer is 4.\n\nI'll go with 4.</think>4",
+    "seconds": 13.8
+   },
+   {
+    "id": "read_slice",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ns = \"abcdef\"\nprint(s[1:4][::-1])\n```\nAnswer with just the string.",
+    "hint": "bcd 反转 = dcb",
+    "answer": "\"edcba\"",
+    "seconds": 0.4
+   },
+   {
+    "id": "read_scope",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ndef f(a, b=[]):\n    b.append(a)\n    return b\n\nprint(f(1), f(2))\n```\nAnswer with the exact output.",
+    "hint": "[1, 2] [1, 2]，默认参数只求值一次",
+    "answer": "The function `f` takes two arguments, `a` and an optional default argument `b=[]`. In Python, default arguments are evaluated only once at function definition time. So the list `b` is created a single time when the function is defined. When you call `f(1)`, it uses this same list object and appends `1`, resulting in `[1]`. Then calling `f(2)` reuses the same list (since no new default argument is passed), appending `2`, so the list becomes `[1, 2]`. The function returns the same list each time.\n\nThus:\n- `f(1)` returns `[1]`\n- `f(2)` returns `[1, 2]`\n\nSo `print(f(1), f(2))` prints the two lists separated by a space: `[1] [1, 2]`.\n\nOutput:\n```\n[1] [1, 2]\n```",
+    "seconds": 5.7
+   },
+   {
+    "id": "read_except",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ntry:\n    print(int('7.5'))\nexcept ValueError:\n    print('value error')\n```\nAnswer with the exact output.",
+    "hint": "value error",
+    "answer": "The code attempts to convert the string `'7.5'` to an integer using `int()`. In Python, `int()` on a string representing a floating-point number raises a `ValueError` because it cannot directly represent decimals as integers without truncation or rounding. The `try` block fails, so the `except ValueError` clause is executed, printing `'value error'`.\n\nOutput:\n```\nvalue error\n```",
+    "seconds": 2.6
+   },
+   {
+    "id": "write_dedupe",
+    "group": "写代码",
+    "q": "Write one line of Python that turns the list `[3, 1, 3, 2, 1]` into `[3, 1, 2]`, keeping the first occurrence order. Code only.",
+    "hint": "list(dict.fromkeys(...))",
+    "answer": "```python\nresult = [x for i, x in enumerate([3, 1, 3, 2, 1]) if x not in [result[j] for j in range(i) if result[j] == x][:i]]\n```\nWait, that's overcomplicated. Simpler: keep first occurrence of each value? Actually \"keeping the first occurrence order\" means we want to remove duplicates but keep first occurrence? Input `[3, 1, 3, 2, 1]` -> output `[3, 1, 2]`. That is unique elements in original order of first appearance. So just need list of elements preserving order and removing later duplicates. In Python: `list(dict.fromkeys(lst))` but that's not one line? It can be: `l = [3,1,3,2,1]; res = []` etc. But they ask \"Write one line of Python that turns the list `[3, 1, 3, 2, 1]` into `[3, 1, 2]`, keeping the first occurrence order.\" So we can do: `result = [x for i,x in enumerate([3,1,3,2,1]) if x not in result[:i]]` but that uses result inside comprehension? Not allowed. Better to use a simple approach: iterate and append if not already present. One-liner using a loop with side effect? Could do `res = []` then for each element check membership in res before appending. But can't have multiple statements on one line unless we compress into list comprehensions or using walrus operator.\n\nWe can write:\n\n```python\n[3,1,3,2,1] and (lambda lst: [x for i,x in enumerate(lst) if x not in lst[:i]])(lst)\n```\n\nBut that's weird. Simpler: Use `dict.fromkeys` on the list? But we need to preserve original order of first occurrence; dict preserves insertion order from Python 3.7+. So:\n\n```python\n[3,1,3,2,1] -> [list(dict.fromkeys([3,1,3,2,1]))]\n```\n\nBut that returns a new list: `list(dict.fromkeys([3,1,3,2,1]))` yields `[3,1,2]`. So one line:\n\n```python\n[3, 1, 3, 2, 1] and [*dict.fromkeys([3, 1, 3, 2, 1])]\n```\n\nBut that's not a single expression returning the result. We can just do: `result = list(dict.fromkeys([3, 1, 3, 2, 1]))`. That's two lines? Actually we can write as one line assignment:\n\n```python\n[3, 1, 3, 2, 1], *_ , [*dict.fromkeys([3, 1, 3, 2, 1])]\n```\n\nNo.\n\nBetter: Use a list comprehension with a set to track seen items. But we need to preserve order and only add first occurrence. We can do:\n\n```python\nseen = set(); res = []; [res.append(x) or True for x in [3,1,3,2,1] if not (x in seen or seen.add(x))]\n```\n\nBut that's multiple statements.\n\nSimplest: Use `list(dict.fromkeys([3, 1, 3, 2, 1]))`. That is a one-liner expression. So the whole line:\n\n```python\n[3, 1, 3, 2, 1], [*dict.fromkeys([3, 1, 3, 2, 1])] if False else None]\n```\n\nNo.\n\nWe can just write: `result = list(dict.fromkeys([3, 1, 3, 2, 1]))`. That's two statements? Actually it's one line with assignment. So the entire code is:\n\n```python\n[3, 1, 3, 2, 1], [*dict.fromkeys([3, 1, 3, 2, 1])]?? \n```\n\nLet me think: The user said \"Write one line of Python that turns the list `[3, 1, 3, 2, 1]` into `[3, 1, 2]`, keeping the first occurrence order. Code only.\"\n\nThus we need to output a single line of code (maybe with assignment). Something like:\n\n```python\n[3, 1, 3, 2, 1] and [list(dict.fromkeys([3, 1, 3, 2, 1]))] \n```\n\nBut that returns the list? Actually `and` will evaluate to last value if first is truthy. So `[",
+    "seconds": 29.7
+   },
+   {
+    "id": "write_bugfix",
+    "group": "写代码",
+    "q": "This function should return the average of a list, but it crashes on an empty list and is wrong for odd cases: `def avg(xs): return sum(xs) / len(xs)`. Fix it in one line so an empty list returns 0.0. Code only.",
+    "hint": "sum(xs)/len(xs) if xs else 0.0",
+    "answer": "```python\ndef avg(xs): return sum(xs)/len(xs) if xs else 0.0\n```",
+    "seconds": 1.1
+   },
+   {
+    "id": "write_regex",
+    "group": "写代码",
+    "q": "Write a Python regex that matches an ISO date like 2026-11-23 and captures year, month and day. Code only.",
+    "hint": "(\\d{4})-(\\d{2})-(\\d{2})",
+    "answer": "```python\nimport re\n\npattern = r'^(\\d{4})-(\\d{2})-(\\d{2})$'\nmatch = re.match(pattern, '2026-11-23')\nif match:\n    year, month, day = match.groups()\n    print(f\"Year: {year}, Month: {month}, Day: {day}\")\n```",
+    "seconds": 2.5
+   },
+   {
+    "id": "follow_format",
+    "group": "指令",
+    "q": "Reply with exactly three lines, each starting with '-' and containing exactly one colour word, in this order: red, green, blue. Nothing else.",
+    "hint": "三行、只含颜色词",
+    "answer": "- red  \n- green  \n- blue",
+    "seconds": 0.4
+   },
+   {
+    "id": "follow_negation",
+    "group": "指令",
+    "q": "Write one short sentence about the sea. Do not use the letter 'e' anywhere.",
+    "hint": "不能出现字母 e",
+    "answer": "The vast ocean waves crash upon sandy shores, whispering ancient stories to all who hear them.</think>The vast ocean waves crash upon sandy shores, whispering ancient stories to all who hear them.",
+    "seconds": 1.3
+   },
+   {
+    "id": "json_path",
+    "group": "数据",
+    "q": "Given {\"a\": {\"b\": [1, 2, {\"c\": 3}]}}, what is the value at a.b[2].c? Answer with just the value.",
+    "hint": "3",
+    "answer": "The given dictionary is `{\"a\": {\"b\": [1, 2, {\"c\": 3}]}}`.\n\nTo find `a.b[2].c`:\n- Start at `a`: it's the key \"a\" in the outer dict.\n- Then go to `a[\"b\"]`, which is a list `[1, 2, {\"c\": 3}]`.\n- Index into this list with index 2: `list[2]` gives `{\"c\": 3}`.\n- So `a.b[2]` is the dictionary `{\"c\": 3}`.\n- Then access `.c` on that dictionary: `{\"c\": 3}[\"c\"]` = `3`.\n\nThus, the value at `a.b[2].c` is `3`.\n\nAnswer: 3",
+    "seconds": 5.2
+   },
+   {
+    "id": "sql_null",
+    "group": "数据",
+    "q": "In SQL, what does `SELECT COUNT(*) FROM t WHERE x IS NULL` return? One short sentence.",
+    "hint": "x 为 NULL 的行数",
+    "answer": "It returns the number of rows in table `t` where column `x` is `NULL`.",
+    "seconds": 0.7
+   }
+  ]
+ }
+]

@@ -158,7 +158,7 @@ def ask(base_url: str, model: str, prompt: str, max_tokens: int) -> tuple[str, f
         method="POST",
     )
     started = time.time()
-    with urllib.request.urlopen(req, timeout=300) as resp:
+    with urllib.request.urlopen(req, timeout=180) as resp:
         payload = json.loads(resp.read().decode())
     elapsed = time.time() - started
     message = (payload.get("choices") or [{}])[0].get("message", {}) or {}
@@ -181,9 +181,16 @@ def main() -> None:
         base_url, model = rest.rsplit(":", 1)
         rows = []
         for item in QUESTIONS:
-            answer, elapsed = ask(base_url, model, item["q"], args.max_tokens)
+            try:
+                answer, elapsed = ask(base_url, model, item["q"], args.max_tokens)
+            except Exception as exc:  # noqa: BLE001 - a stall must not lose the run
+                answer, elapsed = f"<error: {type(exc).__name__}: {exc}>", 0.0
             rows.append({**item, "answer": answer, "seconds": round(elapsed, 1)})
             print(f"[{name}] {item['id']:15} {elapsed:5.1f}s -> {answer[:80]!r}", flush=True)
+            if args.json:  # save as we go: 32 long generations is a lot to lose
+                partial = payload + [{"name": name, "model": model, "rows": rows}]
+                with open(args.json, "w", encoding="utf-8") as handle:
+                    json.dump(partial, handle, ensure_ascii=False, indent=1)
         payload.append({"name": name, "model": model, "rows": rows})
 
     if args.json:

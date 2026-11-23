@@ -33,7 +33,6 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import Any
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -528,7 +527,10 @@ def v_async(d: pathlib.Path, task: Task) -> tuple[bool, bool, str]:
         return False, True, "<timed out>"
     elapsed = time.time() - started
     out = (proc.stdout + proc.stderr).strip()
-    ok = elapsed < 3.0 and "done 5" in out.lower()
+    # The prompt asks for a `done 5` line, so a line is what has to exist: a
+    # substring match would also accept "done 1" or a stray mention in a traceback.
+    lines = {line.strip().lower() for line in out.splitlines() if line.strip()}
+    ok = elapsed < 3.0 and "done 5" in lines
     return ok, True, f"{elapsed:.1f}s out={_last(out, 120)!r}"
 
 
@@ -917,11 +919,18 @@ def prepare(task: Task) -> pathlib.Path:
     return run_dir
 
 
+LOG_ROOT = pathlib.Path.home() / ".jcode" / "sota_logs"
+
+
 def run_one(
     harness: str, model: str, task: Task, timeout: float, max_steps: int, keep: bool
 ) -> Result:
     run_dir = prepare(task)
-    log_path = run_dir / "run.log"
+    # The log lives outside the run tree: an agent that runs `rm -rf ..` would
+    # otherwise take its own log with it, and a benchmark that cannot read its
+    # log is a benchmark that stops in the middle.
+    LOG_ROOT.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_ROOT / f"{run_dir.parent.name}_{harness}_{task.key}.log"
     cmd = build_command(harness, model, task, "off", max_steps, str(run_dir))  # type: ignore[arg-type]
     env = dict(os.environ)
     env.setdefault("LOCAL_LLM_KEY", "local")
@@ -954,8 +963,14 @@ def run_one(
             proc.wait()
     seconds = time.time() - started
 
-    passed, _created, detail = VERIFIERS[task.verifier](run_dir, task)
-    log_tail = log_path.read_text(errors="replace")[-900:]
+    try:
+        passed, _created, detail = VERIFIERS[task.verifier](run_dir, task)
+    except Exception as exc:  # noqa: BLE001 - one broken verifier must not stop the matrix
+        passed, detail = False, f"verifier raised: {exc}"
+    try:
+        log_tail = log_path.read_text(errors="replace")[-900:]
+    except OSError:
+        log_tail = "<run directory disappeared before the log could be read>"
     result = Result(
         harness=harness,
         model=model,
@@ -1024,36 +1039,54 @@ def main(argv: list[str] | None = None) -> int:
     SCRATCH.mkdir(parents=True, exist_ok=True)
     tasks = list(TASKS.values()) if args.task == "all" else [TASKS[args.task]]
     results: list[Result] = []
+
+    def flush_json() -> None:
+        if not args.json:
+            return
+        payload = {
+            "model": args.model,
+            "timeout": args.timeout,
+            "max_steps": args.max_steps,
+            "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "results": [asdict(r) for r in results],
+            "summary": {
+                "pass": sum(1 for r in results if r.passed),
+                "total": len(results),
+                "by_harness": {
+                    h: {
+                        "pass": sum(1 for r in results if r.harness == h and r.passed),
+                        "total": sum(1 for r in results if r.harness == h),
+                    }
+                    for h in args.harness
+                },
+            },
+        }
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+
     for task in tasks:
         for harness in args.harness:
             print(f"== {harness} / {args.model} / {task.key}", flush=True)
-            result = run_one(harness, args.model, task, args.timeout, args.max_steps, args.keep)
+            try:
+                result = run_one(harness, args.model, task, args.timeout, args.max_steps, args.keep)
+            except Exception as exc:  # noqa: BLE001
+                result = Result(
+                    harness=harness,
+                    model=args.model,
+                    task=task.key,
+                    passed=False,
+                    timed_out=False,
+                    exit_code=None,
+                    seconds=0.0,
+                    detail=f"harness loop raised: {exc}",
+                )
             results.append(result)
+            flush_json()
             mark = "PASS" if result.passed else ("TIME" if result.timed_out else "fail")
             print(f"   {mark:4} {result.seconds:6.1f}s  {result.detail[:150]}", flush=True)
 
     passed = sum(1 for r in results if r.passed)
-    payload: dict[str, Any] = {
-        "model": args.model,
-        "timeout": args.timeout,
-        "max_steps": args.max_steps,
-        "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "results": [asdict(r) for r in results],
-        "summary": {
-            "pass": passed,
-            "total": len(results),
-            "by_harness": {
-                harness: {
-                    "pass": sum(1 for r in results if r.harness == harness and r.passed),
-                    "total": sum(1 for r in results if r.harness == harness),
-                }
-                for harness in args.harness
-            },
-        },
-    }
     if args.json:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
         print(f"\nwrote {args.json}")
     print(f"\n{args.model}: {passed}/{len(results)}")
     return 0

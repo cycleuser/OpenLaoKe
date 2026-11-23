@@ -59,6 +59,7 @@ class Result:
     model: str
     task: str
     passed: bool
+    verified: bool
     timed_out: bool
     exit_code: int | None
     seconds: float
@@ -128,9 +129,9 @@ def run_one(
     seconds = time.time() - started
 
     try:
-        passed, _created, detail = verifier(run_dir, task)
+        verified, _created, detail = verifier(run_dir, task)
     except Exception as exc:  # noqa: BLE001 - one broken verifier must not stop the suite
-        passed, detail = False, f"verifier raised: {exc}"
+        verified, detail = False, f"verifier raised: {exc}"
     try:
         log_tail = log_path.read_text(errors="replace")[-900:]
     except OSError:
@@ -140,7 +141,11 @@ def run_one(
         harness=harness,
         model=model,
         task=task.key,
-        passed=bool(passed and not timed_out),
+        # `verified` is the product; `passed` is the product delivered in time.
+        # A model that writes the right file and then never exits has not solved
+        # the task for a user, but pretending the file is not there is also wrong.
+        passed=bool(verified and not timed_out),
+        verified=bool(verified),
         timed_out=timed_out,
         exit_code=exit_code,
         seconds=round(seconds, 1),
@@ -227,6 +232,7 @@ def run_cli(
             "results": [asdict(r) for r in results],
             "summary": {
                 "pass": sum(1 for r in results if r.passed),
+                "verified": sum(1 for r in results if getattr(r, "verified", False)),
                 "total": len(results),
                 "by_harness": {
                     h: {
@@ -259,6 +265,7 @@ def run_cli(
                     model=args.model,
                     task=task.key,
                     passed=False,
+                    verified=False,
                     timed_out=False,
                     exit_code=None,
                     seconds=0.0,
