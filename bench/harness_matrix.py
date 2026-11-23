@@ -47,6 +47,11 @@ class Task:
 import re
 
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_IPV6 = re.compile(r"\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\b")
+
+
+def _looks_like_ip(text: str) -> bool:
+    return bool(_IPV4.search(text) or _IPV6.search(text))
 
 
 def _read_docx(path):
@@ -108,7 +113,7 @@ def _v_ipv4(cwd, task):
     except subprocess.TimeoutExpired:
         return False, True, "<run timed out>"
     out = (proc.stdout + proc.stderr).strip()
-    return bool(_IPV4.search(out)), True, out[-200:]
+    return _looks_like_ip(out), True, out[-200:]
 
 
 def _v_temp(cwd, task):
@@ -242,7 +247,7 @@ MODELS: dict[str, dict[str, str]] = {
         "ol_model": "spark-1.7b-q4",
         "pi": "spark-1.7b-q4",
         "pi_model": "spark-1.7b-q4",
-        "jcode": "spark-1.7b-q4",
+        "jcode": "spark-17b-q4",
         "jcode_model": "spark-1.7b-q4",
         "opencode": "spark-1.7b-q4/spark-1.7b-q4",
     },

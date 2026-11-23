@@ -1,0 +1,90 @@
+[
+ {
+  "name": "lfm3-1.7b-q4",
+  "model": "lfm3-1.7b-q4",
+  "auto": 5,
+  "total": 10,
+  "rows": [
+   {
+    "id": "math_arith",
+    "q": "A shop sells 3 packs of 12 pens each for 45 dollars total. How many dollars is one pen? Answer with just the number.",
+    "expect": "1.25",
+    "answer": "We need to find the cost per pen.\n\nThe shop sells 3 packs, and each pack contains 12 pens. So total number of pens = 3 packs * 12 pens/pack = 36 pens.\n\nTotal cost for all 36 pens is $45.\n\nTherefore, cost per pen = total cost / total number of pens = $45 / 36.\n\nCalculate that: 45 ÷ 36 = 1.25? Let's check: 36 *",
+    "auto_ok": true,
+    "seconds": 4.0
+   },
+   {
+    "id": "math_word",
+    "q": "If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets? One number.",
+    "expect": "5",
+    "answer": "The question states: \"If 5 machines take 5 minutes to make 5 widgets...\" This is a classic rate problem that often tricks people into thinking about scaling linearly.\n\nLet's break it down:\n\n- 5 machines make 5 widgets in 5 minutes.\n- So, the rate per machine: In 5 minutes, 5 machines produce 5 widgets. That means together they produce 1 widget every minute? Let's check:\n  -",
+    "auto_ok": true,
+    "seconds": 4.1
+   },
+   {
+    "id": "logic",
+    "q": "All bloops are razzies. All razzies are lazzies. Are all bloops definitely lazzies? Answer yes or no.",
+    "expect": "yes",
+    "answer": "No. This is a classic example of the **categorical syllogism** fallacy, specifically involving **overlapping categories**. Let's break it down:\n\n- Premise 1: All bloops are razzies.  \n- Premise 2: All razzies are lazzies.  \n\nFrom these two statements, we can logically deduce that **all bloops are lazzies** (since if all A are B and all B are C,",
+    "auto_ok": false,
+    "seconds": 4.0
+   },
+   {
+    "id": "code_reverse",
+    "q": "Write one line of Python that prints the string 'hello' reversed.",
+    "expect": "olleh",
+    "answer": "```python\nprint('hello'[::-1])\n```",
+    "auto_ok": false,
+    "seconds": 0.7
+   },
+   {
+    "id": "code_bug",
+    "q": "This Python has one bug: def f(x): return x + 1; print(f('3')). What is the bug? One short sentence.",
+    "expect": "str",
+    "answer": "The function `f` expects a single argument, but `print(f('3'))` passes `'3'` as a string, so it returns `'3' + 1`, which raises a `TypeError`.",
+    "auto_ok": true,
+    "seconds": 2.3
+   },
+   {
+    "id": "follow_negation",
+    "q": "Repeat this sentence but do NOT include the word 'cat': The cat sat on the mat.",
+    "expect": "no cat",
+    "answer": "The cat sat on the mat. → Wait, I must not use the word \"cat\". So rephrase: A feline sat on the mat. (But that still includes \"feline\" which is related? The instruction says do NOT include the word 'cat'. It doesn't forbid synonyms. However, better to avoid any mention of cat entirely. Let's rewrite without referencing cat at all.)\n\nOriginal sentence: \"The cat sat on the mat.\"\n\nWe need",
+    "auto_ok": false,
+    "seconds": 7.2
+   },
+   {
+    "id": "zh_translate",
+    "q": "把这句英文翻译成中文：The server is temporarily unavailable.",
+    "expect": "服务器",
+    "answer": "服务器暂时不可用。",
+    "auto_ok": true,
+    "seconds": 2.4
+   },
+   {
+    "id": "zh_math_word",
+    "q": "一个水池有进水管和出水管，单开进水管6小时注满，单开出水管8小时放空。两管齐开，几小时注满？只给数字或分数。",
+    "expect": "24",
+    "answer": "设进水管的流入速率为 \\(a\\)（单位：池体/小时），出水管的流出速率为 \\(b\\)（单位：池体/小时）。  \n单开进水管 6 小时注满，故  \n\\[\na \\times 6 = 1 \\quad\\Longrightarrow\\quad a = \\frac{1}{6}.\n\\]\n\n单开出水管 8 小时放空，故  \n\\[\nb",
+    "auto_ok": false,
+    "seconds": 8.2
+   },
+   {
+    "id": "extract",
+    "q": "From this log line extract the IP address only, nothing else: '2026-01-01 ERROR 192.168.1.42 connection refused'.",
+    "expect": "192.168.1.42",
+    "answer": "192.168.1.42",
+    "auto_ok": true,
+    "seconds": 2.4
+   },
+   {
+    "id": "count",
+    "q": "How many words are in this sentence: 'to be or not to be that is the question'. Answer with just the number.",
+    "expect": "9",
+    "answer": "To determine the number of words in the sentence \"to be or not to be that is the question\", we can split it into individual words and count them.\n\nThe sentence is:\nto, be, or, not, to, be, that, is, the, question\n\nNow, let's list each word:\n\n1. to\n2. be\n3. or\n4. not\n5. to\n6. be\n7. that\n8. is",
+    "auto_ok": false,
+    "seconds": 7.2
+   }
+  ]
+ }
+]

@@ -1,0 +1,38 @@
+[
+ {
+  "name": "lfm3-1.7b-q4",
+  "base_url": "http://127.0.0.1:8088/v1",
+  "model": "lfm3-1.7b-q4",
+  "repeats": [
+   {
+    "elapsed": 5.02,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 131.9,
+    "decode_tps": 27.3,
+    "finish": "length"
+   },
+   {
+    "elapsed": 4.72,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 220.5,
+    "decode_tps": 28.1,
+    "finish": "length"
+   },
+   {
+    "elapsed": 4.8,
+    "prompt_tokens": 32,
+    "completion_tokens": 128,
+    "prompt_tps": 236.4,
+    "decode_tps": 27.6,
+    "finish": "length"
+   }
+  ],
+  "median_elapsed": 4.8,
+  "median_prompt_tps": 220.5,
+  "median_decode_tps": 27.6,
+  "prompt_tokens": 32,
+  "completion_tokens": 128
+ }
+]
