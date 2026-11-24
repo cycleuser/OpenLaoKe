@@ -1054,8 +1054,9 @@ class REPL:
                 if iteration == 1 and self.app_state.verbose:
                     self.console.print(f"[{self._c('muted')}]Messages: {messages}[/]")
 
+                # Streaming is the only provider path (the old non-streaming
+                # send_message fallback was dead code and has been removed).
                 streaming_supported = True
-                response = None
                 usage = None
                 cost = None
                 content_text = ""
@@ -1331,128 +1332,6 @@ class REPL:
                             messages.append(tool_result_message(tool_use.id, result_content))
                             self._record_tool_result(tool_use.id, result_content)
                             self._note_artifact_result(tool_use, result)
-
-                    self.app_state._persist()
-
-                else:
-                    spinner = self.console.status(
-                        f"[bold {self._c('primary')}]Thinking...[/]",
-                        spinner="dots",
-                    )
-                    spinner.start()
-
-                    try:
-                        response, usage, cost = await self.api.send_message(
-                            system_prompt=system_prompt,
-                            messages=messages,
-                            tools=tools,
-                            model=self.app_state.session_config.model,
-                            thinking_budget=self.app_state.session_config.thinking_budget,
-                            reasoning_effort=self.app_state.session_config.reasoning_effort,
-                        )
-                    finally:
-                        spinner.stop()
-
-                    if self._guard:
-                        content_for_check = response.content or ""
-                        quality_msg = self._guard.check_after_api_call(
-                            content_for_check, len(response.tool_uses)
-                        )
-                        if quality_msg:
-                            messages.append({"role": "user", "content": quality_msg})
-
-                    self.app_state.accumulate_tokens(usage)
-                    self.app_state.accumulate_cost(cost)
-                    self._note_context_usage(usage)
-
-                    if response.thinking:
-                        self._last_thinking = response.thinking
-                        self.app_state.last_thinking = response.thinking
-                        self._thinking_duration = (
-                            (time.time() - self._turn_start) * 1000 if self._turn_start else 0
-                        )
-                        self._display_thinking_inline(response.thinking)
-
-                    if response.content:
-                        self._render_response(response.content)
-
-                    if self._hook_system.has_hooks("message_transform"):
-                        from openlaoke.core.hook_system import HookInput, HookOutput
-
-                        msg_hook_input = HookInput(
-                            messages=[{"role": "assistant", "content": response.content or ""}],
-                            model_name=self.app_state.session_config.model,
-                        )
-                        msg_hook_output = HookOutput()
-                        self._hook_system.execute_hooks(
-                            "message_transform", msg_hook_input, msg_hook_output
-                        )
-                        if msg_hook_output.messages:
-                            response.content = msg_hook_output.messages[0].get(
-                                "content", response.content
-                            )
-
-                    messages.append(assistant_turn(response.content or "", response.tool_uses))
-                    self.app_state.add_message(
-                        AssistantMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=response.content or "",
-                            tool_uses=response.tool_uses,
-                            thinking=response.thinking or "",
-                        ),
-                        persist=False,
-                    )
-
-                    if not response.tool_uses:
-                        rc = (response.content or "").strip().upper()
-                        if rc.startswith("DONE") or "\nDONE" in rc:
-                            self.console.print(f"  [{self._c('success')}]Task complete (DONE)[/]")
-                            break
-                        break
-
-                    for tool_use in response.tool_uses:
-                        if not self._running:
-                            break
-
-                        corrected_name, corrected_params, val_hint = self._tool_validator.validate(
-                            tool_use.name, tool_use.input
-                        )
-                        if corrected_name != tool_use.name or corrected_params != tool_use.input:
-                            tool_use.name = corrected_name
-                            tool_use.input = corrected_params
-                            if val_hint:
-                                messages.append({"role": "user", "content": val_hint})
-
-                        tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
-                        failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
-
-                        if self._guard:
-                            loop_msg = self._guard.notify_tool_call(tool_use.name)
-                            if loop_msg:
-                                messages.append({"role": "user", "content": loop_msg})
-
-                        if failed_tool_calls[tool_key] > 3:
-                            self.console.print(
-                                f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
-                            )
-                            messages.append(
-                                tool_result_message(
-                                    tool_use.id,
-                                    f"ERROR: Tool '{tool_use.name}' has been called "
-                                    f"{failed_tool_calls[tool_key]} times with the same parameters.",
-                                )
-                            )
-                            continue
-
-                        result = await self._execute_tool(tool_use)
-
-                        result_content = (
-                            result.content
-                            if isinstance(result.content, str)
-                            else str(result.content)
-                        )
-                        messages.append(tool_result_message(tool_use.id, result_content))
-                        self._record_tool_result(tool_use.id, result_content)
 
                     self.app_state._persist()
 
