@@ -929,6 +929,12 @@ class REPL:
                     )
                 messages.append({"role": "user", "content": tool_hint, "system_injected": True})
 
+        # Config on disk does not change mid-turn; read it once instead of
+        # hitting the filesystem on every iteration.
+        from openlaoke.utils.config import load_config as _load_config
+
+        _global_context_cap = _load_config().context_cap_tokens
+
         while iteration < max_iterations and self._running:
             iteration += 1
 
@@ -973,12 +979,11 @@ class REPL:
                 "large": 32768,
             }.get(model_size, 8192)
             from openlaoke.core.context_budget import estimate_messages_tokens, resolve_budget
-            from openlaoke.utils.config import load_config
 
             budget = resolve_budget(
                 model_window=context_limit or fallback_ctx,
                 session_cap=self.app_state.context_cap,
-                global_cap=load_config().context_cap_tokens,
+                global_cap=_global_context_cap,
                 used_tokens=estimate_messages_tokens(messages),
             )
             self._budget = budget
