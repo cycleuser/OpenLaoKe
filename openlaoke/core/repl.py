@@ -657,7 +657,13 @@ class REPL:
 
     def _resolve_max_iterations(self) -> int:
         steps = getattr(self.app_state, "max_steps", 0) or 0
-        return steps if steps > 0 else 100
+        if steps > 0:
+            return steps
+        # No explicit override: honour the active harness mode so the
+        # interactive loop respects --mode instead of a fixed guess.
+        from openlaoke.core.harness_modes import get_mode
+
+        return get_mode(getattr(self.app_state, "harness_mode", None)).max_steps
 
     def _todo_auto_continue(self, messages: list[Any]) -> bool:
         """Wake the model when it stops with tasks still open.
@@ -796,7 +802,13 @@ class REPL:
             self._force_final = True
 
     async def _run_api_loop(self) -> None:
+        from openlaoke.core.harness_modes import get_mode
+
+        _mode = get_mode(getattr(self.app_state, "harness_mode", None))
         max_iterations = self._resolve_max_iterations()
+        # Identical-call loop breaker threshold comes from the harness mode,
+        # so a "thorough" mode tolerates more retries than a "fast" one.
+        max_repeat_calls = _mode.max_repeat_calls
         iteration = 0
         failed_tool_calls: dict[str, int] = {}
         self._artifact_written = set()
@@ -1284,7 +1296,7 @@ class REPL:
                                 if loop_msg:
                                     messages.append({"role": "user", "content": loop_msg})
 
-                            if failed_tool_calls[tool_key] > 3:
+                            if failed_tool_calls[tool_key] > max_repeat_calls:
                                 self.console.print(
                                     f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
                                 )

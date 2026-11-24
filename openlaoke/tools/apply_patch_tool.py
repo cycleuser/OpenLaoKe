@@ -243,7 +243,7 @@ class ApplyPatchTool(Tool):
         if len(text.encode("utf-8")) > MAX_PATCH_BYTES:
             return self._error(ctx, f"Error: patch is larger than {MAX_PATCH_BYTES} bytes")
 
-        from openlaoke.utils.path_safety import resolve_path, validate_path
+        from openlaoke.utils.path_safety import resolve_path, validate_path_strict
 
         cwd = ctx.app_state.get_cwd()
         try:
@@ -256,7 +256,10 @@ class ApplyPatchTool(Tool):
             if not patch.path:
                 return self._error(ctx, "Patch rejected: a section has no path")
             absolute = resolve_path(patch.path, cwd)
-            path_error = validate_path(absolute, cwd)
+            # Strict: workspace-only. A patch call is one permission decision
+            # that can touch many files at once; scattering them outside the
+            # project is exactly what a bad patch does by accident.
+            path_error = validate_path_strict(absolute, cwd)
             if path_error:
                 return self._error(ctx, path_error)
 

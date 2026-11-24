@@ -36,6 +36,23 @@ def validate_path(resolved: str, cwd: str) -> str | None:
     return f"Path '{resolved}' is outside workspace and home directory"
 
 
+def validate_path_strict(resolved: str, cwd: str) -> str | None:
+    """Workspace-only containment for multi-file writers (apply_patch).
+
+    :func:`validate_path` allows ``$HOME`` because some agent flows legitimately
+    touch ``~/.openlaoke`` and friends. A patch tool accepts a whole tree of
+    paths in a single call, so it deserves tighter confinement than a
+    one-file ``Write``; otherwise a stray ``*** Add File: ../../evil``
+    silently scatters files across the user's home. Callers that truly want
+    to write outside the project can use ``Write`` or ``Bash`` instead.
+    """
+    real_resolved = os.path.realpath(resolved)
+    real_cwd = os.path.realpath(cwd)
+    if _contains(real_cwd, real_resolved):
+        return None
+    return f"Path '{resolved}' is outside the workspace"
+
+
 def _contains(parent: str, child: str) -> bool:
     """Check if *child* path is inside *parent*."""
     try:
