@@ -1,0 +1,38 @@
+[
+ {
+  "name": "spark-2.6-1.7b-q4",
+  "base_url": "http://127.0.0.1:8094/v1",
+  "model": "spark-2.6-1.7b-q4",
+  "repeats": [
+   {
+    "elapsed": 5.8,
+    "prompt_tokens": 38,
+    "completion_tokens": 128,
+    "prompt_tps": 119.8,
+    "decode_tps": 23.4,
+    "finish": "length"
+   },
+   {
+    "elapsed": 5.47,
+    "prompt_tokens": 38,
+    "completion_tokens": 128,
+    "prompt_tps": 60.0,
+    "decode_tps": 23.8,
+    "finish": "length"
+   },
+   {
+    "elapsed": 5.32,
+    "prompt_tokens": 38,
+    "completion_tokens": 128,
+    "prompt_tps": 39.5,
+    "decode_tps": 24.5,
+    "finish": "length"
+   }
+  ],
+  "median_elapsed": 5.47,
+  "median_prompt_tps": 60.0,
+  "median_decode_tps": 23.8,
+  "prompt_tokens": 38,
+  "completion_tokens": 128
+ }
+]

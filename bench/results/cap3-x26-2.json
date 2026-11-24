@@ -1,0 +1,136 @@
+[
+ {
+  "name": "spark26",
+  "model": "spark-2.6-1.7b-q4",
+  "rows": [
+   {
+    "id": "pct_chain",
+    "group": "算术",
+    "q": "一件商品原价 40 元，先涨价 25%，再按新价降价 20%。最终价格多少元？只给数字。",
+    "hint": "40 涨到 50，再降 20% 是 40",
+    "answer": "10.4",
+    "seconds": 0.3
+   },
+   {
+    "id": "pct_back",
+    "group": "算术",
+    "q": "A number's 30% is 45. What is 10% of that number? Answer with just the number.",
+    "hint": "150 的 10% = 15",
+    "answer": "22.5",
+    "seconds": 0.5
+   },
+   {
+    "id": "sequence",
+    "group": "算术",
+    "q": "What number comes next: 2, 6, 12, 20, 30, ?  Answer with just the number.",
+    "hint": "n(n+1)，下一个 42",
+    "answer": "40",
+    "seconds": 0.4
+   },
+   {
+    "id": "rate",
+    "group": "算术",
+    "q": "A car covers 150 km in 2.5 hours. What is its average speed in km/h? Answer with just the number.",
+    "hint": "60",
+    "answer": "24",
+    "seconds": 0.3
+   },
+   {
+    "id": "zh_ratio",
+    "group": "算术",
+    "q": "一个班有 40 人，其中 60% 是女生，女生里有四分之一戴眼镜。戴眼镜的女生有多少人？只给数字。",
+    "hint": "24 个女生中的 1/4 = 6",
+    "answer": "4",
+    "seconds": 0.1
+   },
+   {
+    "id": "read_alias",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\nx = [1, 2, 3]\ny = x\ny.append(4)\nprint(len(x))\n```\nAnswer with just the number.",
+    "hint": "4，y 和 x 是同一个列表",
+    "answer": "3",
+    "seconds": 0.1
+   },
+   {
+    "id": "read_slice",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ns = \"abcdef\"\nprint(s[1:4][::-1])\n```\nAnswer with just the string.",
+    "hint": "bcd 反转 = dcb",
+    "answer": "fedc",
+    "seconds": 0.2
+   },
+   {
+    "id": "read_scope",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ndef f(a, b=[]):\n    b.append(a)\n    return b\n\nprint(f(1), f(2))\n```\nAnswer with the exact output.",
+    "hint": "[1, 2] [1, 2]，默认参数只求值一次",
+    "answer": "[1, 1]\n[2, 2]",
+    "seconds": 0.7
+   },
+   {
+    "id": "read_except",
+    "group": "读代码",
+    "q": "What does this print?\n\n```python\ntry:\n    print(int('7.5'))\nexcept ValueError:\n    print('value error')\n```\nAnswer with the exact output.",
+    "hint": "value error",
+    "answer": "7",
+    "seconds": 0.2
+   },
+   {
+    "id": "write_dedupe",
+    "group": "写代码",
+    "q": "Write one line of Python that turns the list `[3, 1, 3, 2, 1]` into `[3, 1, 2]`, keeping the first occurrence order. Code only.",
+    "hint": "list(dict.fromkeys(...))",
+    "answer": "[3, 1, 2] = [3, 1, 3, 2, 1].filter(lambda x: x != 3)",
+    "seconds": 1.5
+   },
+   {
+    "id": "write_bugfix",
+    "group": "写代码",
+    "q": "This function should return the average of a list, but it crashes on an empty list and is wrong for odd cases: `def avg(xs): return sum(xs) / len(xs)`. Fix it in one line so an empty list returns 0.0. Code only.",
+    "hint": "sum(xs)/len(xs) if xs else 0.0",
+    "answer": "```python\ndef avg(xs):\n    return sum(xs) / len(xs) if xs else 0.0\n```",
+    "seconds": 1.3
+   },
+   {
+    "id": "write_regex",
+    "group": "写代码",
+    "q": "Write a Python regex that matches an ISO date like 2026-11-23 and captures year, month and day. Code only.",
+    "hint": "(\\d{4})-(\\d{2})-(\\d{2})",
+    "answer": "```python\nregex = r'(\\d{4})-(\\d{2})-(\\d{2})'\n```",
+    "seconds": 1.1
+   },
+   {
+    "id": "follow_format",
+    "group": "指令",
+    "q": "Reply with exactly three lines, each starting with '-' and containing exactly one colour word, in this order: red, green, blue. Nothing else.",
+    "hint": "三行、只含颜色词",
+    "answer": "- red\n- green\n- blue",
+    "seconds": 0.4
+   },
+   {
+    "id": "follow_negation",
+    "group": "指令",
+    "q": "Write one short sentence about the sea. Do not use the letter 'e' anywhere.",
+    "hint": "不能出现字母 e",
+    "answer": "Fish",
+    "seconds": 0.2
+   },
+   {
+    "id": "json_path",
+    "group": "数据",
+    "q": "Given {\"a\": {\"b\": [1, 2, {\"c\": 3}]}}, what is the value at a.b[2].c? Answer with just the value.",
+    "hint": "3",
+    "answer": "3",
+    "seconds": 0.1
+   },
+   {
+    "id": "sql_null",
+    "group": "数据",
+    "q": "In SQL, what does `SELECT COUNT(*) FROM t WHERE x IS NULL` return? One short sentence.",
+    "hint": "x 为 NULL 的行数",
+    "answer": "0",
+    "seconds": 0.1
+   }
+  ]
+ }
+]

@@ -251,6 +251,15 @@ MODELS: dict[str, dict[str, str]] = {
         "jcode_model": "spark-1.7b-q4",
         "opencode": "spark-1.7b-q4/spark-1.7b-q4",
     },
+    "spark-2.6-1.7b-q4": {
+        "ol_provider": "spark_2_6_1_7b_q4_gguf",
+        "ol_model": "spark-2.6-1.7b-q4",
+        "pi": "spark-2.6-1.7b-q4",
+        "pi_model": "spark-2.6-1.7b-q4",
+        "jcode": "spark-26-17b-q4",
+        "jcode_model": "spark-2.6-1.7b-q4",
+        "opencode": "spark-2.6-1.7b-q4/spark-2.6-1.7b-q4",
+    },
 }
 
 
