@@ -10,6 +10,7 @@ same command surface: ``new``, ``name``, ``session``, ``tree``, ``fork``,
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -321,7 +322,8 @@ class ShareCommand(SlashCommand):
         tmp = Path(os.path.expanduser("~/.openlaoke")) / f"share_{ctx.app_state.session_id}.json"
         _write_json(tmp, data)
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [
                     "gh",
                     "gist",

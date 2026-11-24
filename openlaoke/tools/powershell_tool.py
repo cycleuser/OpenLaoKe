@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import platform
 import subprocess
 from typing import Any
@@ -54,7 +55,8 @@ class PowerShellTool(Tool):
         try:
             powershell = self._get_powershell_cmd()
 
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [powershell, "-Command", command],
                 capture_output=True,
                 text=True,
