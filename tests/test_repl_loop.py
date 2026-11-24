@@ -280,3 +280,31 @@ def test_artifact_gate_forces_final_after_verify():
     run(r)
     assert len(w.calls) == 1 and len(b.calls) == 1
     assert r.api.turn_index == 3  # write turn, run turn, forced final turn
+
+
+def test_stream_provider_turn_captures_reasoning():
+    from openlaoke.types.core_types import StreamChunk, StreamEventType
+
+    r = make_repl([])
+    r.api._turns = [
+        [
+            StreamChunk(event_type=StreamEventType.REASONING, text="think "),
+            StreamChunk(event_type=StreamEventType.REASONING, text="hard"),
+        ]
+    ]
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+    assert turn.reasoning == "think hard"
+    assert turn.token_count == 0 and turn.reasoning_count == 2
+    assert turn.stream_error is None
+
+
+def test_prepare_turn_context_prunes_long_history():
+    r = make_repl([])
+    msgs = []
+    for i in range(20):
+        msgs.append({"role": "user", "content": f"u{i} " + "x" * 400})
+        msgs.append({"role": "assistant", "content": f"a{i} " + "y" * 400})
+    out_msgs, tools, model_size = r._prepare_turn_context(msgs, "sys", None, 8192)
+    assert isinstance(out_msgs, list)
+    assert isinstance(tools, list)
+    assert model_size in ("tiny", "small", "medium", "large")

@@ -920,6 +920,97 @@ class REPL:
             )
         return turn
 
+    def _prepare_turn_context(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str,
+        context_limit: int | None,
+        global_context_cap: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+        """Prune/compact history to budget and build the tool list for a turn.
+
+        Returns ``(messages, tools, model_size)``. ``messages`` may be a pruned
+        replacement; ``tools`` is empty on the forced-final turn. Also records
+        the cacheable-prefix fingerprint (so cache breaks are visible) and
+        sanitizes tool schemas for small models.
+        """
+        from openlaoke.core.compact.fast_pruner import fast_prune, fast_prune_aggressive
+        from openlaoke.core.small_model_optimizations import (
+            SmallModelGuard,
+            estimate_model_size_from_name,
+            sanitize_tool_schema,
+        )
+
+        model_size = estimate_model_size_from_name(self.app_state.session_config.model)
+        # Auto-enable caveman mode for tiny/small models (unless explicitly toggled)
+        if model_size in ("tiny", "small"):
+            self.app_state.caveman_mode = True
+        if self._guard is None or self._guard.model_size != model_size:
+            self._guard = SmallModelGuard(model_size=model_size)
+        # Prefer the model's real context window from the catalog; fall back to
+        # a size-based estimate for providers the catalog does not cover.
+        fallback_ctx = {
+            "tiny": 4096,
+            "small": 8192,
+            "medium": 16384,
+            "large": 32768,
+        }.get(model_size, 8192)
+        from openlaoke.core.context_budget import estimate_messages_tokens, resolve_budget
+
+        budget = resolve_budget(
+            model_window=context_limit or fallback_ctx,
+            session_cap=self.app_state.context_cap,
+            global_cap=global_context_cap,
+            used_tokens=estimate_messages_tokens(messages),
+        )
+        self._budget = budget
+        self.app_state.compact_state["model_window"] = context_limit or fallback_ctx
+        self.app_state.compact_state["used_tokens"] = budget.used_tokens
+        self.app_state.compact_state["used_source"] = budget.source
+        ctx_budget, keep_tail = budget.prune_targets()
+
+        if len(messages) > 10:
+            if model_size in ("tiny", "small"):
+                prune_result = fast_prune_aggressive(messages, max_tokens=ctx_budget)
+            else:
+                prune_result = fast_prune(messages, max_tokens=ctx_budget, keep_tail_tokens=keep_tail)
+            if prune_result.tokens_after < prune_result.tokens_before:
+                messages = prune_result.messages
+                self.console.print(
+                    f"  [{self._c('muted')}](context compacted: "
+                    f"{prune_result.tokens_before} -> {prune_result.tokens_after} tokens)[/]"
+                )
+                if self.app_state.verbose:
+                    self.console.print(
+                        f"[{self._c('muted')}]Context pruned in {prune_result.elapsed_ms:.1f}ms[/]"
+                    )
+
+        tools = [] if self._force_final else self.registry.get_all_for_prompt()
+
+        # Fingerprint the cacheable prefix every turn: a change here is what
+        # makes the next request pay full price, and it is invisible in the UI.
+        self._cache_monitor.note_request(
+            model=self.app_state.session_config.model,
+            system_prompt=system_prompt,
+            tool_names=[str(defn.get("name", "")) for defn in tools],
+            messages=messages,
+        )
+
+        # Apply cache_control markers for Anthropic providers
+        if self.api:
+            provider = self.api.config.get_active_provider() if self.api.config else None
+            if provider and getattr(provider, "provider_type", None):
+                from openlaoke.types.providers import ProviderType
+
+                if provider.provider_type == ProviderType.ANTHROPIC:
+                    messages = CacheGuard.apply_cache_markers(messages)
+
+        for tool_def in tools:
+            if "input_schema" in tool_def:
+                tool_def["input_schema"] = sanitize_tool_schema(tool_def["input_schema"])
+
+        return messages, tools, model_size
+
     async def _dispatch_tools(
         self,
         tool_uses: list[ToolUseBlock],
@@ -1155,83 +1246,9 @@ class REPL:
                 context_cap=self.app_state.context_cap,
             )
 
-            from openlaoke.core.compact.fast_pruner import fast_prune, fast_prune_aggressive
-            from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
-
-            model_size = estimate_model_size_from_name(self.app_state.session_config.model)
-            # Auto-enable caveman mode for tiny/small models (unless explicitly toggled)
-            if model_size in ("tiny", "small"):
-                self.app_state.caveman_mode = True
-            if self._guard is None or self._guard.model_size != model_size:
-                from openlaoke.core.small_model_optimizations import SmallModelGuard
-
-                self._guard = SmallModelGuard(model_size=model_size)
-            # Prefer the model's real context window from the catalog; fall back
-            # to a size-based estimate for providers the catalog does not cover.
-            fallback_ctx = {
-                "tiny": 4096,
-                "small": 8192,
-                "medium": 16384,
-                "large": 32768,
-            }.get(model_size, 8192)
-            from openlaoke.core.context_budget import estimate_messages_tokens, resolve_budget
-
-            budget = resolve_budget(
-                model_window=context_limit or fallback_ctx,
-                session_cap=self.app_state.context_cap,
-                global_cap=_global_context_cap,
-                used_tokens=estimate_messages_tokens(messages),
+            messages, tools, model_size = self._prepare_turn_context(
+                messages, system_prompt, context_limit, _global_context_cap
             )
-            self._budget = budget
-            self.app_state.compact_state["model_window"] = context_limit or fallback_ctx
-            self.app_state.compact_state["used_tokens"] = budget.used_tokens
-            self.app_state.compact_state["used_source"] = budget.source
-            ctx_budget, keep_tail = budget.prune_targets()
-
-            if len(messages) > 10:
-                if model_size in ("tiny", "small"):
-                    prune_result = fast_prune_aggressive(messages, max_tokens=ctx_budget)
-                else:
-                    prune_result = fast_prune(
-                        messages, max_tokens=ctx_budget, keep_tail_tokens=keep_tail
-                    )
-                if prune_result.tokens_after < prune_result.tokens_before:
-                    messages = prune_result.messages
-                    self.console.print(
-                        f"  [{self._c('muted')}](context compacted: "
-                        f"{prune_result.tokens_before} -> {prune_result.tokens_after} tokens)[/]"
-                    )
-                    if self.app_state.verbose:
-                        self.console.print(
-                            f"[{self._c('muted')}]Context pruned in "
-                            f"{prune_result.elapsed_ms:.1f}ms[/]"
-                        )
-
-            tools = [] if self._force_final else self.registry.get_all_for_prompt()
-
-            # Fingerprint the cacheable prefix every turn: a change here is what
-            # makes the next request pay full price, and it is invisible in the UI.
-            self._cache_monitor.note_request(
-                model=self.app_state.session_config.model,
-                system_prompt=system_prompt,
-                tool_names=[str(defn.get("name", "")) for defn in tools],
-                messages=messages,
-            )
-
-            # Apply cache_control markers for Anthropic providers
-            if self.api:
-                provider = self.api.config.get_active_provider() if self.api.config else None
-                if provider and getattr(provider, "provider_type", None):
-                    from openlaoke.types.providers import ProviderType
-
-                    if provider.provider_type == ProviderType.ANTHROPIC:
-                        messages = CacheGuard.apply_cache_markers(messages)
-
-            from openlaoke.core.small_model_optimizations import sanitize_tool_schema
-
-            for tool_def in tools:
-                if "input_schema" in tool_def:
-                    tool_def["input_schema"] = sanitize_tool_schema(tool_def["input_schema"])
 
             if self.app_state.insomnia_mode:
                 self.console.print(f"[{self._c('muted')}]Insomnia iteration {iteration}[/]")
