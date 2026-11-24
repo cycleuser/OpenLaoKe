@@ -920,6 +920,83 @@ class REPL:
             )
         return turn
 
+    async def _dispatch_tools(
+        self,
+        tool_uses: list[ToolUseBlock],
+        messages: list[dict[str, Any]],
+        failed_tool_calls: dict[str, int],
+        max_repeat_calls: int,
+    ) -> None:
+        """Run this turn's tool calls: repair names, break repeat loops, dispatch.
+
+        Read-only batches run concurrently; everything else runs in order. Each
+        result is appended to ``messages`` and recorded, and a successful write
+        feeds the artifact gate. Mutates ``messages`` and ``failed_tool_calls``
+        in place, then persists once.
+        """
+        _all_readonly = all(self.registry.is_readonly(tu.name) for tu in tool_uses)
+        if _all_readonly and len(tool_uses) > 1:
+            results = await asyncio.gather(
+                *[self._execute_tool(tu) for tu in tool_uses],
+                return_exceptions=True,
+            )
+            for tool_use, result in zip(tool_uses, results, strict=True):
+                if isinstance(result, BaseException):
+                    result_content = f"Error: {result}"
+                else:
+                    result_content = (
+                        result.content if isinstance(result.content, str) else str(result.content)
+                    )
+                messages.append(tool_result_message(tool_use.id, result_content))
+                self._record_tool_result(tool_use.id, result_content)
+                if not isinstance(result, BaseException):
+                    self._note_artifact_result(tool_use, result)
+        else:
+            for tool_use in tool_uses:
+                if not self._running:
+                    break
+
+                corrected_name, corrected_params, val_hint = self._tool_validator.validate(
+                    tool_use.name, tool_use.input
+                )
+                if corrected_name != tool_use.name or corrected_params != tool_use.input:
+                    tool_use.name = corrected_name
+                    tool_use.input = corrected_params
+                    if val_hint:
+                        messages.append({"role": "user", "content": val_hint})
+
+                tool_key = f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
+                failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
+
+                if self._guard:
+                    loop_msg = self._guard.notify_tool_call(tool_use.name)
+                    if loop_msg:
+                        messages.append({"role": "user", "content": loop_msg})
+
+                if failed_tool_calls[tool_key] > max_repeat_calls:
+                    self.console.print(
+                        f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
+                    )
+                    messages.append(
+                        tool_result_message(
+                            tool_use.id,
+                            f"ERROR: Tool '{tool_use.name}' has been called "
+                            f"{failed_tool_calls[tool_key]} times with the same parameters.",
+                        )
+                    )
+                    continue
+
+                result = await self._execute_tool(tool_use)
+
+                result_content = (
+                    result.content if isinstance(result.content, str) else str(result.content)
+                )
+                messages.append(tool_result_message(tool_use.id, result_content))
+                self._record_tool_result(tool_use.id, result_content)
+                self._note_artifact_result(tool_use, result)
+
+        self.app_state._persist()
+
     async def _run_api_loop(self) -> None:
         from openlaoke.core.harness_modes import get_mode
 
@@ -1299,78 +1376,9 @@ class REPL:
                             continue
                         break
 
-                    # Parallel dispatch for read-only tool batches
-                    _all_readonly = all(self.registry.is_readonly(tu.name) for tu in tool_uses)
-                    if _all_readonly and len(tool_uses) > 1:
-                        results = await asyncio.gather(
-                            *[self._execute_tool(tu) for tu in tool_uses],
-                            return_exceptions=True,
-                        )
-                        for tool_use, result in zip(tool_uses, results, strict=True):
-                            if isinstance(result, BaseException):
-                                result_content = f"Error: {result}"
-                            else:
-                                result_content = (
-                                    result.content
-                                    if isinstance(result.content, str)
-                                    else str(result.content)
-                                )
-                            messages.append(tool_result_message(tool_use.id, result_content))
-                            self._record_tool_result(tool_use.id, result_content)
-                            if not isinstance(result, BaseException):
-                                self._note_artifact_result(tool_use, result)
-                    else:
-                        for tool_use in tool_uses:
-                            if not self._running:
-                                break
-
-                            corrected_name, corrected_params, val_hint = (
-                                self._tool_validator.validate(tool_use.name, tool_use.input)
-                            )
-                            if (
-                                corrected_name != tool_use.name
-                                or corrected_params != tool_use.input
-                            ):
-                                tool_use.name = corrected_name
-                                tool_use.input = corrected_params
-                                if val_hint:
-                                    messages.append({"role": "user", "content": val_hint})
-
-                            tool_key = (
-                                f"{tool_use.name}:{json.dumps(tool_use.input, sort_keys=True)}"
-                            )
-                            failed_tool_calls[tool_key] = failed_tool_calls.get(tool_key, 0) + 1
-
-                            if self._guard:
-                                loop_msg = self._guard.notify_tool_call(tool_use.name)
-                                if loop_msg:
-                                    messages.append({"role": "user", "content": loop_msg})
-
-                            if failed_tool_calls[tool_key] > max_repeat_calls:
-                                self.console.print(
-                                    f"\n[{self._c('error')}]Tool '{tool_use.name}' called too many times with same parameters.[/]"
-                                )
-                                messages.append(
-                                    tool_result_message(
-                                        tool_use.id,
-                                        f"ERROR: Tool '{tool_use.name}' has been called "
-                                        f"{failed_tool_calls[tool_key]} times with the same parameters.",
-                                    )
-                                )
-                                continue
-
-                            result = await self._execute_tool(tool_use)
-
-                            result_content = (
-                                result.content
-                                if isinstance(result.content, str)
-                                else str(result.content)
-                            )
-                            messages.append(tool_result_message(tool_use.id, result_content))
-                            self._record_tool_result(tool_use.id, result_content)
-                            self._note_artifact_result(tool_use, result)
-
-                    self.app_state._persist()
+                    await self._dispatch_tools(
+                        tool_uses, messages, failed_tool_calls, max_repeat_calls
+                    )
 
             except asyncio.CancelledError:
                 self._interrupt_requested = True

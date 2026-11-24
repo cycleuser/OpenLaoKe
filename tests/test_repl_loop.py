@@ -264,3 +264,19 @@ def test_not_running_skips_loop():
     r = make_repl([[text("should not run")]], running=False)
     run(r)
     assert r.api.turn_index == 0
+
+
+def test_artifact_gate_forces_final_after_verify():
+    # Write a file, run it (verifies), then the gate should force a final
+    # text-only turn and stop.
+    w = FakeTool("Write")
+    b = FakeTool("Bash")
+    turns = [
+        [tool_call("c1", "Write", '{"intent": "t", "file_path": "x.py"}')],
+        [tool_call("c2", "Bash", '{"intent": "t", "command": "python x.py"}')],
+        [text("finished")],
+    ]
+    r = make_repl(turns, tools=[w, b])
+    run(r)
+    assert len(w.calls) == 1 and len(b.calls) == 1
+    assert r.api.turn_index == 3  # write turn, run turn, forced final turn
