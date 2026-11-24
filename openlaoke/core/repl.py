@@ -1065,10 +1065,11 @@ class REPL:
                     start_time = time.time()
                     self._turn_start = start_time
                     status_text = self._build_streaming_display("", 0, 0.0, 0.0)
+                    last_render = start_time
 
                     try:
                         with Live(
-                            status_text, console=self.console, refresh_per_second=10, transient=True
+                            status_text, console=self.console, refresh_per_second=20, transient=True
                         ) as live:
                             async for chunk in self.api.stream_message(
                                 system_prompt=system_prompt,
@@ -1106,13 +1107,25 @@ class REPL:
                                     if chunk.cost:
                                         cost = chunk.cost
 
-                                elapsed = max(time.time() - start_time, 0.01)
-                                tps = token_count / elapsed
-                                live.update(
-                                    self._build_streaming_display(
-                                        content_text, token_count, tps, elapsed
+                                # Rebuild at most ~25 times a second. The old
+                                # code rebuilt on every chunk; rich redraw rate
+                                # is capped anyway, so the extra work was pure
+                                # CPU competing with network/parse.
+                                now = time.time()
+                                if now - last_render >= 0.04:
+                                    last_render = now
+                                    elapsed = max(now - start_time, 0.01)
+                                    shown = token_count or reasoning_count
+                                    tps = shown / elapsed
+                                    live.update(
+                                        self._build_streaming_display(
+                                            content_text,
+                                            shown,
+                                            tps,
+                                            elapsed,
+                                            reasoning=not content_text and bool(reasoning_text),
+                                        )
                                     )
-                                )
                     except httpx.HTTPStatusError as e:
                         reason = ""
                         with contextlib.suppress(Exception):
@@ -1212,13 +1225,7 @@ class REPL:
                         continue
 
                     for tu in tool_uses:
-                        file_path = tu.input.get("file_path", "")
-                        action = (
-                            f"  [{self._c('secondary')}]{tu.name}[/] {file_path}"
-                            if file_path
-                            else f"  [{self._c('secondary')}]{tu.name}[/]"
-                        )
-                        self.console.print(action)
+                        self.console.print(self._tool_action_line(tu))
 
                     if usage and cost:
                         self.app_state.accumulate_tokens(usage)
@@ -1704,11 +1711,10 @@ class REPL:
         return result
 
     def _build_streaming_display(
-        self, content: str, tokens: int, tps: float, elapsed: float
+        self, content: str, tokens: int, tps: float, elapsed: float, reasoning: bool = False
     ) -> Any:
         # A single line of plain styled text: rich Live clears it cleanly, and
-        # model output is never parsed as markup (which mangled the old boxed
-        # view and leaked literal colour tags).
+        # model output is never parsed as markup.
         from rich.text import Text
 
         meta = f"  {elapsed:.0f}s"
@@ -1719,13 +1725,22 @@ class REPL:
 
         width = getattr(getattr(self, "console", None), "width", 80)
         room = max(20, width - len(meta) - 6)
-        tail = " ".join(content.split())
+        # Only the tail is ever shown. Slice a bounded window first so this
+        # stays O(room) instead of O(len(content)) on every streamed chunk
+        # (the old `content.split()` made long streams quadratic).
+        window = content[-max(200, room * 2) :] if content else ""
+        tail = " ".join(window.split())
         if len(tail) > room:
             tail = "…" + tail[-room:]
+        if not tail:
+            tail = "thinking…" if reasoning else "streaming…"
+
+        frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        spin = frames[int(elapsed * 12) % len(frames)]
 
         status = Text()
-        status.append("  ✻ ", style=self._c("primary"))
-        status.append(tail or "streaming…", style=self._c("muted"))
+        status.append(f"  {spin} ", style=self._c("primary"))
+        status.append(tail, style=self._c("muted"))
         status.append(meta, style=self._c("muted"))
         return status
 
@@ -1852,6 +1867,46 @@ class REPL:
             == PermissionResult.DENY
         )
 
+    def _tool_action_line(self, tu: ToolUseBlock) -> str:
+        """One compact, informative line for a tool call about to run.
+
+        The old line only showed the tool name plus ``file_path``, so ``Bash``
+        printed as a bare word and you could not tell what was about to run.
+        This picks the most telling argument per tool and trims it.
+        """
+        name = tu.name
+        data = tu.input or {}
+
+        def _short(value: Any, limit: int = 72) -> str:
+            text = " ".join(str(value).split())
+            return text if len(text) <= limit else text[: limit - 1] + "…"
+
+        subject = ""
+        if name == "Bash":
+            subject = _short(data.get("command", ""))
+        elif name in ("Grep", "Glob"):
+            subject = _short(data.get("pattern", ""))
+            path = data.get("path")
+            if path:
+                subject += f"  {_short(path, 32)}"
+        elif name in ("Write", "Edit", "Read", "apply_patch"):
+            subject = _short(data.get("file_path") or data.get("path") or "")
+        elif name in ("WebFetch",):
+            subject = _short(data.get("url", ""))
+        elif name in ("WebSearch",):
+            subject = _short(data.get("query") or data.get("pattern") or "")
+        elif name == "TodoWrite":
+            todos = data.get("todos")
+            if isinstance(todos, list):
+                subject = f"{len(todos)} items"
+        else:
+            subject = _short(data.get("file_path") or data.get("path") or data.get("command") or "")
+
+        line = f"  [{self._c('secondary')}]{name}[/]"
+        if subject:
+            line += f" [{self._c('muted')}]{subject}[/]"
+        return line
+
     def _print_tool_result(self, rendered: str, tool_name: str, is_error: bool) -> None:
         if is_error:
             style = self._c("error")
@@ -1898,7 +1953,7 @@ class REPL:
             params: dict[str, str] = {}
             for i, mark in enumerate(marks):
                 stop = marks[i + 1].start() if i + 1 < len(marks) else len(inner)
-                value = inner[mark.end():stop].rstrip("}").strip()
+                value = inner[mark.end() : stop].rstrip("}").strip()
                 value = re.sub(r"(?:\s*<\|[^|]*\|>)+\s*$", "", value).strip()
                 if value:
                     params[mark.group(1)] = value
