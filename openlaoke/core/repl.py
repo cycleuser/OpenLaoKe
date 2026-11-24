@@ -20,6 +20,7 @@ import re
 import signal
 import time
 import uuid
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -73,6 +74,21 @@ _KV_PATTERN = re.compile(r"(\w[\w_]*)\s*=\s*")
 
 _BRACE_CALL = re.compile(r"\b(\w+)\s*\{(.+)\}", re.DOTALL)
 _BRACE_KV = re.compile(r"(\w+)\s*:\s*<\|[^|]*\|[^>]*>")
+
+
+@dataclass
+class StreamedTurn:
+    """What one streamed provider response produced (see _stream_provider_turn)."""
+
+    content: str = ""
+    reasoning: str = ""
+    tool_uses: list[Any] = field(default_factory=list)
+    usage: Any = None
+    cost: Any = None
+    stream_error: str | None = None
+    token_count: int = 0
+    reasoning_count: int = 0
+    elapsed: float = 0.0
 
 
 class REPL:
@@ -801,6 +817,109 @@ class REPL:
             self._artifact_verified = True
             self._force_final = True
 
+    async def _stream_provider_turn(
+        self,
+        *,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+    ) -> StreamedTurn:
+        """Stream one provider response, accumulating text/reasoning/tool calls.
+
+        Prints the live status line and the final tokens/tps summary as UI side
+        effects, but never raises: a transport error is returned as
+        ``stream_error`` for the caller to surface, exactly as the old inline
+        code did.
+        """
+        turn = StreamedTurn()
+        start_time = time.time()
+        self._turn_start = start_time
+        status_text = self._build_streaming_display("", 0, 0.0, 0.0)
+        last_render = start_time
+
+        try:
+            with Live(
+                status_text, console=self.console, refresh_per_second=20, transient=True
+            ) as live:
+                async for chunk in self.api.stream_message(
+                    system_prompt=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                    model=self.app_state.session_config.model,
+                    thinking_budget=self.app_state.session_config.thinking_budget,
+                    reasoning_effort=self.app_state.session_config.reasoning_effort,
+                ):
+                    if chunk.event_type == StreamEventType.TEXT:
+                        turn.content += chunk.text
+                        turn.token_count += 1
+                    elif chunk.event_type == StreamEventType.REASONING:
+                        turn.reasoning += chunk.text
+                        turn.reasoning_count += 1
+                    elif chunk.event_type == StreamEventType.TOOL_CALL_START:
+                        try:
+                            args = (
+                                json.loads(chunk.tool_call_arguments)
+                                if chunk.tool_call_arguments
+                                else {}
+                            )
+                        except json.JSONDecodeError:
+                            args = {}
+                        turn.tool_uses.append(
+                            ToolUseBlock(
+                                id=chunk.tool_call_id,
+                                name=chunk.tool_call_name,
+                                input=args,
+                            )
+                        )
+                    elif chunk.event_type == StreamEventType.USAGE:
+                        if chunk.usage:
+                            turn.usage = chunk.usage
+                        if chunk.cost:
+                            turn.cost = chunk.cost
+
+                    # Rebuild at most ~25 times a second (rich caps redraws anyway).
+                    now = time.time()
+                    if now - last_render >= 0.04:
+                        last_render = now
+                        elapsed = max(now - start_time, 0.01)
+                        shown = turn.token_count or turn.reasoning_count
+                        tps = shown / elapsed
+                        live.update(
+                            self._build_streaming_display(
+                                turn.content,
+                                shown,
+                                tps,
+                                elapsed,
+                                reasoning=not turn.content and bool(turn.reasoning),
+                            )
+                        )
+        except httpx.HTTPStatusError as e:
+            reason = ""
+            with contextlib.suppress(Exception):
+                reason = (e.response.text or "").strip()[:300]
+            turn.stream_error = f"API {e.response.status_code}"
+            if reason:
+                turn.stream_error += f": {reason}"
+        except Exception as e:  # noqa: BLE001 - surfaced via stream_error
+            turn.stream_error = str(e)[:200]
+
+        turn.elapsed = max(time.time() - start_time, 0.01)
+        shown_tokens = turn.token_count or turn.reasoning_count
+        label = (
+            "tokens"
+            if turn.token_count
+            else ("reasoning tokens" if turn.reasoning_count else "tokens")
+        )
+        tps = shown_tokens / turn.elapsed
+        self.console.print(
+            f"  [{self._c('muted')}]{shown_tokens} {label} · {tps:.0f} t/s · {turn.elapsed:.1f}s[/]"
+        )
+        if self.app_state.verbose:
+            self.console.print(
+                f"  [{self._c('muted')}]{self._format_context_composition(messages)}[/]"
+            )
+        return turn
+
     async def _run_api_loop(self) -> None:
         from openlaoke.core.harness_modes import get_mode
 
@@ -1065,113 +1184,31 @@ class REPL:
                 plan_retry_count = 0
 
                 if streaming_supported:
-                    token_count = 0
-                    reasoning_count = 0
-                    stream_error: str | None = None
-                    start_time = time.time()
-                    self._turn_start = start_time
-                    status_text = self._build_streaming_display("", 0, 0.0, 0.0)
-                    last_render = start_time
-
-                    try:
-                        with Live(
-                            status_text, console=self.console, refresh_per_second=20, transient=True
-                        ) as live:
-                            async for chunk in self.api.stream_message(
-                                system_prompt=system_prompt,
-                                messages=messages,
-                                tools=tools,
-                                model=self.app_state.session_config.model,
-                                thinking_budget=self.app_state.session_config.thinking_budget,
-                                reasoning_effort=self.app_state.session_config.reasoning_effort,
-                            ):
-                                if chunk.event_type == StreamEventType.TEXT:
-                                    content_text += chunk.text
-                                    token_count += 1
-                                elif chunk.event_type == StreamEventType.REASONING:
-                                    reasoning_text += chunk.text
-                                    reasoning_count += 1
-                                elif chunk.event_type == StreamEventType.TOOL_CALL_START:
-                                    try:
-                                        args = (
-                                            json.loads(chunk.tool_call_arguments)
-                                            if chunk.tool_call_arguments
-                                            else {}
-                                        )
-                                    except json.JSONDecodeError:
-                                        args = {}
-                                    tool_uses.append(
-                                        ToolUseBlock(
-                                            id=chunk.tool_call_id,
-                                            name=chunk.tool_call_name,
-                                            input=args,
-                                        )
-                                    )
-                                elif chunk.event_type == StreamEventType.USAGE:
-                                    if chunk.usage:
-                                        usage = chunk.usage
-                                    if chunk.cost:
-                                        cost = chunk.cost
-
-                                # Rebuild at most ~25 times a second. The old
-                                # code rebuilt on every chunk; rich redraw rate
-                                # is capped anyway, so the extra work was pure
-                                # CPU competing with network/parse.
-                                now = time.time()
-                                if now - last_render >= 0.04:
-                                    last_render = now
-                                    elapsed = max(now - start_time, 0.01)
-                                    shown = token_count or reasoning_count
-                                    tps = shown / elapsed
-                                    live.update(
-                                        self._build_streaming_display(
-                                            content_text,
-                                            shown,
-                                            tps,
-                                            elapsed,
-                                            reasoning=not content_text and bool(reasoning_text),
-                                        )
-                                    )
-                    except httpx.HTTPStatusError as e:
-                        reason = ""
-                        with contextlib.suppress(Exception):
-                            reason = (e.response.text or "").strip()[:300]
-                        stream_error = f"API {e.response.status_code}"
-                        if reason:
-                            stream_error += f": {reason}"
-                    except Exception as e:
-                        stream_error = str(e)[:200]
-
-                    elapsed = max(time.time() - start_time, 0.01)
-                    shown_tokens = token_count or reasoning_count
-                    label = (
-                        "tokens"
-                        if token_count
-                        else ("reasoning tokens" if reasoning_count else "tokens")
+                    turn = await self._stream_provider_turn(
+                        system_prompt=system_prompt, messages=messages, tools=tools
                     )
-                    tps = shown_tokens / elapsed
-                    self.console.print(
-                        f"  [{self._c('muted')}]{shown_tokens} {label} · {tps:.0f} t/s · {elapsed:.1f}s[/]"
-                    )
-                    if self.app_state.verbose:
+                    content_text = turn.content
+                    reasoning_text = turn.reasoning
+                    tool_uses = turn.tool_uses
+                    usage = turn.usage
+                    cost = turn.cost
+
+                    if turn.stream_error:
                         self.console.print(
-                            f"  [{self._c('muted')}]{self._format_context_composition(messages)}[/]"
+                            f"  [bold {self._c('error')}]Error:[/] {turn.stream_error}"
                         )
-
-                    if stream_error:
-                        self.console.print(f"  [bold {self._c('error')}]Error:[/] {stream_error}")
                         break
 
                     if (
-                        token_count == 0
-                        and reasoning_count == 0
+                        turn.token_count == 0
+                        and turn.reasoning_count == 0
                         and not tool_uses
                         and not content_text.strip()
-                        and elapsed > 5
+                        and turn.elapsed > 5
                     ):
                         self.console.print(
                             f"  [bold {self._c('error')}]Model returned no output[/]"
-                            f" (waited {elapsed:.0f}s). Try a different model or check the provider."
+                            f" (waited {turn.elapsed:.0f}s). Try a different model or check the provider."
                         )
                         break
 
