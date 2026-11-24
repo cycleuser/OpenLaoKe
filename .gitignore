@@ -252,3 +252,8 @@ wechat.md
 /tests/
 .toml
 .codegraph/daemon.pid
+
+# benchmark scratch fixtures accidentally generated at repo root
+/a.py
+/b.py
+/util.py

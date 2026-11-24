@@ -142,14 +142,30 @@ async def execute_tool(
     if policy.check_tool is not None and not policy.check_tool(tool_use.name, tool_use.input):
         return _error(tool_use.id, f"Permission denied for {tool_use.name}")
 
-    validation = tool.validate_input(tool_use.input)
+    # Coerce argument types against the schema the way the interactive REPL
+    # does. Small models routinely send "42" for an int or "true" for a bool;
+    # without this the headless/sub-agent path fails validation on input the
+    # interactive path would have accepted. Same helper, same behaviour.
+    input_data = tool_use.input
+    try:
+        from openlaoke.core.small_model_optimizations import (
+            coerce_tool_args,
+            sanitize_tool_schema,
+        )
+
+        schema = sanitize_tool_schema(tool.get_input_schema())
+        input_data = coerce_tool_args(input_data, schema)
+    except Exception:  # noqa: BLE001 - coercion is best-effort, never fatal
+        input_data = tool_use.input
+
+    validation = tool.validate_input(input_data)
     if not validation.result:
         return _error(tool_use.id, f"Validation error: {validation.message}")
 
     ctx = ToolContext(app_state=app_state, tool_use_id=tool_use.id)
     if policy.on_tool_start is not None:
         policy.on_tool_start(tool_use)
-    result = await tool.safe_call(ctx, **tool_use.input)
+    result = await tool.safe_call(ctx, **input_data)
     if policy.transform_result is not None:
         result = policy.transform_result(tool_use, result)
     if policy.on_tool_end is not None:
@@ -369,9 +385,7 @@ async def run_loop(
                 ):
                     verified_artifact = True
                     command = str(tu.input.get("command") or "").lower()
-                    verified_names.update(
-                        name for name in written_names if name.lower() in command
-                    )
+                    verified_names.update(name for name in written_names if name.lower() in command)
 
             if policy.stop_on_verified_artifact and verified_artifact:
                 force_final = True

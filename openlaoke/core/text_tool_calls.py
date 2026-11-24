@@ -42,9 +42,7 @@ _BARE_FUNCTION = re.compile(r"<function=([^>\n]+)>\s*(.*?)\s*</function>", re.DO
 _NAME = r"[A-Za-z_][A-Za-z0-9_.-]*"
 _ARG_KEY = re.compile(r"<arg_key>(.*?)</arg_key>", re.DOTALL)
 _ARG_VALUE = re.compile(r"<arg_value>(.*?)</arg_value>", re.DOTALL)
-_ARGTAG_WHOLE = re.compile(
-    rf"^\s*({_NAME})\s*(.*?)\s*(?:</tool_call>)?\s*$", re.DOTALL
-)
+_ARGTAG_WHOLE = re.compile(rf"^\s*({_NAME})\s*(.*?)\s*(?:</tool_call>)?\s*$", re.DOTALL)
 # A model that never emits a closing tag still gets one shot at recovery.
 _TRAILING_BLOCK = re.compile(r"<tool_call>((?:(?!<tool_call>).)*)$", re.DOTALL)
 
@@ -79,7 +77,8 @@ def _parse_json_block(body: str) -> ToolUseBlock | None:
         return None
     if not isinstance(payload, dict):
         return None
-    function = payload.get("function") if isinstance(payload.get("function"), dict) else {}
+    raw_function = payload.get("function")
+    function = raw_function if isinstance(raw_function, dict) else {}
     name = payload.get("name") or function.get("name") or ""
     arguments = payload.get("arguments") or payload.get("parameters") or function.get("arguments")
     if isinstance(arguments, str):
@@ -132,9 +131,7 @@ def _parse_argtag_block(body: str) -> list[ToolUseBlock]:
     values = _ARG_VALUE.findall(rest)
     if not keys or len(keys) != len(values):
         return []
-    arguments = {
-        key.strip(): _coerce(value) for key, value in zip(keys, values, strict=False)
-    }
+    arguments = {key.strip(): _coerce(value) for key, value in zip(keys, values, strict=False)}
     arguments = {k: v for k, v in arguments.items() if k}
     if not arguments:
         return []
@@ -156,9 +153,7 @@ def parse_text_tool_calls(text: str) -> tuple[str, list[ToolUseBlock]]:
     for match in _TOOL_BLOCK.finditer(text):
         body = match.group(1)
         json_call = _parse_json_block(body)
-        parsed = (
-            [json_call] if json_call else (_parse_xml_block(body) or _parse_argtag_block(body))
-        )
+        parsed = [json_call] if json_call else (_parse_xml_block(body) or _parse_argtag_block(body))
         if parsed:
             calls.extend(parsed)
             spans.append(match.span())
