@@ -85,7 +85,10 @@ class TokenBudget:
             cache_available=self.cache_read_tokens,
             messages_allocated=messages_allocated,
             output_allocated=output_allocated,
-            remaining=total_available - system_reserved - tools_reserved - messages_allocated,
+            # Leftover budget after the message allocation. Both the message
+            # allocation and the remainder are clamped at zero so an
+            # over-committed budget reports 0, never a negative number.
+            remaining=max(0, total_available - system_reserved - tools_reserved - messages_allocated),
         )
 
     def check_overflow(self, current_tokens: int) -> bool:

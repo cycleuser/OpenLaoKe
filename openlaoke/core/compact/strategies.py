@@ -120,7 +120,9 @@ class AutoCompactStrategy(CompactStrategy):
             result = await summarizer.summarize_with_preserve(messages)
             summary_msg = summarizer.create_summary_message(result.summary)
 
-            to_preserve, _ = summarizer.split_messages(messages)
+            # split_messages returns (to_summarize, to_preserve): keep the
+            # latter, since the former are covered by the summary.
+            _, to_preserve = summarizer.split_messages(messages)
             new_messages = [summary_msg] + to_preserve
 
             tokens_after = self.estimate_tokens(new_messages)
