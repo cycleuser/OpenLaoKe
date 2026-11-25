@@ -31,6 +31,21 @@ def extract_content(message: Any) -> str:
         UserMessage,
     )
 
+    if isinstance(message, dict):
+        # Provider-style message dicts (what the interactive REPL keeps in its
+        # running conversation). Without this branch dict histories were counted
+        # as zero tokens and fast_prune never compacted them.
+        parts: list[str] = []
+        content = message.get("content")
+        if content:
+            parts.append(str(content))
+        for tc in message.get("tool_calls") or []:
+            fn = tc.get("function") if isinstance(tc, dict) else None
+            if isinstance(fn, dict):
+                parts.append(f"Tool: {fn.get('name', '')}")
+                if fn.get("arguments"):
+                    parts.append(str(fn["arguments"]))
+        return "\n".join(parts)
     if isinstance(message, UserMessage):
         return message.content
     if isinstance(message, AssistantMessage):
