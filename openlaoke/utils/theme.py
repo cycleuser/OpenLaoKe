@@ -411,6 +411,10 @@ class ThemeManager:
         self._current_theme_name = current_theme
         self._theme_cache: dict[str, Theme] = {}
         self._load_themes()
+        # Keep the reported name and the resolved theme in agreement from the
+        # start (current_theme would silently fall back to "dark" otherwise).
+        if self._current_theme_name not in self._theme_cache:
+            self._current_theme_name = "dark"
 
     def _load_themes(self) -> None:
         self._theme_cache = get_all_themes()
@@ -427,7 +431,9 @@ class ThemeManager:
 
     def set_theme(self, name: str) -> bool:
         if name not in self._theme_cache:
-            self._load_themes()
+            # Reload through the module cache reset, otherwise a theme file
+            # written since start-up is invisible here.
+            self.reload_themes()
         if name in self._theme_cache:
             self._current_theme_name = name
             return True
