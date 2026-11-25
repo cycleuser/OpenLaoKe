@@ -1088,38 +1088,20 @@ class REPL:
 
         self.app_state._persist()
 
-    async def _run_api_loop(self) -> None:
-        from openlaoke.core.harness_modes import get_mode
-
-        _mode = get_mode(getattr(self.app_state, "harness_mode", None))
-        max_iterations = self._resolve_max_iterations()
-        # Identical-call loop breaker threshold comes from the harness mode,
-        # so a "thorough" mode tolerates more retries than a "fast" one.
-        max_repeat_calls = _mode.max_repeat_calls
-        iteration = 0
-        failed_tool_calls: dict[str, int] = {}
-        self._artifact_written = set()
-        self._artifact_verified = False
-        self._force_final = False
-
+    def _history_to_messages(self) -> list[dict[str, Any]]:
+        """Convert the stored session messages into provider message dicts."""
         messages: list[Any] = []
         for msg in self.app_state.messages:
             if msg.role == MessageRole.USER:
                 messages.append({"role": "user", "content": msg.content})
             elif msg.role == MessageRole.ASSISTANT:
-                assistant_msg: dict[str, Any] = {
-                    "role": "assistant",
-                    "content": msg.content,
-                }
+                assistant_msg: dict[str, Any] = {"role": "assistant", "content": msg.content}
                 if hasattr(msg, "tool_uses") and msg.tool_uses:
                     assistant_msg["tool_calls"] = [
                         {
                             "id": tu.id,
                             "type": "function",
-                            "function": {
-                                "name": tu.name,
-                                "arguments": json.dumps(tu.input),
-                            },
+                            "function": {"name": tu.name, "arguments": json.dumps(tu.input)},
                         }
                         for tu in msg.tool_uses
                     ]
@@ -1130,9 +1112,18 @@ class REPL:
                 and msg.tool_use_id
             ):
                 messages.append(tool_result_message(msg.tool_use_id, msg.content))
+        return messages
 
+    async def _inject_runtime_context(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[int | None, str]:
+        """Append the runtime context block; return (context_limit, model_size).
+
+        Bundles session context, world sensor, memory digest, small-model
+        guidance and thinking prefix into one system-injected user message, and
+        adds an Ollama tool-format hint when the provider needs it.
+        """
         runtime_blocks: list[str] = []
-        system_prompt = self._cache_guard.system_prompt
         session_ctx = self._cache_guard.ensure_session_context(
             model=self.app_state.session_config.model,
         )
@@ -1163,17 +1154,12 @@ class REPL:
             if _active_provider
             else None
         )
-        small_model_guidance = get_small_model_guidance(model_size)
-        memory_prompt = ""
-        thinking_prefix = apply_structured_thinking_prefix("code")
-        runtime_parts: list[str] = []
-        if small_model_guidance:
-            runtime_parts.append(small_model_guidance)
-        if memory_prompt:
-            runtime_parts.append(memory_prompt)
-        if thinking_prefix:
-            runtime_parts.append(thinking_prefix)
-        runtime_blocks.extend(runtime_parts)
+        for part in (
+            get_small_model_guidance(model_size),
+            apply_structured_thinking_prefix("code"),
+        ):
+            if part:
+                runtime_blocks.append(part)
         if runtime_blocks:
             messages.append(
                 {
@@ -1183,8 +1169,7 @@ class REPL:
                 }
             )
 
-        needs_tool_hint = self._is_ollama_provider()
-        if needs_tool_hint:
+        if self._is_ollama_provider():
             latest_user = next(
                 (
                     msg.get("content", "")
@@ -1215,6 +1200,26 @@ class REPL:
                         "Glob(pattern) Bash(command)]"
                     )
                 messages.append({"role": "user", "content": tool_hint, "system_injected": True})
+
+        return context_limit, model_size
+
+    async def _run_api_loop(self) -> None:
+        from openlaoke.core.harness_modes import get_mode
+
+        _mode = get_mode(getattr(self.app_state, "harness_mode", None))
+        max_iterations = self._resolve_max_iterations()
+        # Identical-call loop breaker threshold comes from the harness mode,
+        # so a "thorough" mode tolerates more retries than a "fast" one.
+        max_repeat_calls = _mode.max_repeat_calls
+        iteration = 0
+        failed_tool_calls: dict[str, int] = {}
+        self._artifact_written = set()
+        self._artifact_verified = False
+        self._force_final = False
+
+        messages = self._history_to_messages()
+        system_prompt = self._cache_guard.system_prompt
+        context_limit, model_size = await self._inject_runtime_context(messages)
 
         # Config on disk does not change mid-turn; read it once instead of
         # hitting the filesystem on every iteration.

@@ -308,3 +308,30 @@ def test_prepare_turn_context_prunes_long_history():
     assert isinstance(out_msgs, list)
     assert isinstance(tools, list)
     assert model_size in ("tiny", "small", "medium", "large")
+
+
+def test_history_to_messages_shapes():
+    from openlaoke.types.core_types import (
+        AssistantMessage,
+        MessageRole,
+        SystemMessage,
+        ToolUseBlock,
+        UserMessage,
+    )
+
+    r = make_repl([])
+    r.app_state.messages = [
+        UserMessage(role=MessageRole.USER, content="hi"),
+        AssistantMessage(
+            role=MessageRole.ASSISTANT,
+            content="ok",
+            tool_uses=[ToolUseBlock(id="t1", name="Read", input={"file_path": "a"})],
+        ),
+        SystemMessage(role=MessageRole.SYSTEM, content="result", tool_use_id="t1"),
+    ]
+    out = r._history_to_messages()
+    assert out[0] == {"role": "user", "content": "hi"}
+    assert out[1]["role"] == "assistant"
+    assert out[1]["tool_calls"][0]["id"] == "t1"
+    assert out[1]["tool_calls"][0]["function"]["name"] == "Read"
+    assert out[2] == {"role": "tool", "tool_call_id": "t1", "content": "result"}
