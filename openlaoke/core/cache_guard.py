@@ -473,5 +473,3 @@ class CacheGuard:
         )
 
         return base
-
-        return base
