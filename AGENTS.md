@@ -41,7 +41,7 @@ $DEV -m openlaoke ...           # 运行
 openlaoke/
 ├── entrypoints/cli.py     # argparse CLI + 配置向导入口
 ├── core/
-│   ├── repl.py            # 交互循环、流式输出、工具分发
+│   ├── repl.py            # 交互循环（_run_api_loop 编排 + 拆分出的流式/分发/上下文方法）
 │   ├── agent_runner.py    # 与提供商无关的智能体回合
 │   ├── multi_provider_api.py  # 多提供商客户端
 │   ├── sessions.py        # 会话持久化（整文件 JSON，version 字段标识格式）
@@ -67,6 +67,14 @@ openlaoke/
 - **技能**：`openlaoke/core/skill_system.py` + `tools/invoke_skill_tool.py`（渐进披露，正文按需加载）。
 - **会话**：`openlaoke/core/sessions.py` + `openlaoke/snapshot/`。
 - **压缩**：`openlaoke/core/compact/fast_pruner.py`（纯算法，<5ms，不调 LLM）。
+- **交互循环拆分**：`repl._run_api_loop` 只做编排，具体职责拆到几个可测方法：
+  `_history_to_messages`（历史→消息字典）、`_inject_runtime_context`（会话/记忆/
+  引导注入，返回 context_limit 与 model_size）、`_prepare_turn_context`（预算/
+  剪枝/工具表/缓存指纹）、`_stream_provider_turn`（返回 `StreamedTurn`，错误以数据
+  返回不抛）、`_dispatch_tools`（只读并行/串行修名/重复熔断/artifact gate）。
+- **循环测试**：`tests/test_repl_loop.py` 用假 provider 流 + 真 AppState/registry +
+  假 console 驱动真实 `_run_api_loop`，覆盖流式累加、工具调用、重复熔断、只读并行、
+  artifact gate、计划重试、队列输入注入、小模型运行时上下文注入等。
 
 ## 配置路径
 
