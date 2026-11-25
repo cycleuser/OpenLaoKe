@@ -331,10 +331,16 @@ def fast_prune(
             )
             new_tokens += summary_tokens
         else:
-            # Digest would not save space — keep everything as-is.
-            new_messages = list(messages)
-            new_tokens = total_tokens
-            middle_summary = None
+            # Digest would not save space — return the history exactly as it
+            # came in. Returning the original list also matters for
+            # correctness: the tail is appended after this block, so restoring
+            # the full list here would duplicate it.
+            return PruneResult(
+                messages=list(messages),
+                tokens_before=total_tokens,
+                tokens_after=total_tokens,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
 
     if middle_summary is not None:
         # Insert digest right after the head block (before first non-head
@@ -521,8 +527,15 @@ def fast_prune_aggressive(
             new_tokens += summary_tokens
             new_messages.append(summary_msg)
         else:
-            new_messages = list(messages)
-            new_tokens = total_tokens
+            # Digest would not save space — return the history unchanged.
+            # As above, the tail is appended after this block, so restoring the
+            # full list here would duplicate it.
+            return PruneResult(
+                messages=list(messages),
+                tokens_before=total_tokens,
+                tokens_after=total_tokens,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
 
     new_messages.extend(messages[tail_start:])
     elapsed = (time.monotonic() - start) * 1000
