@@ -94,6 +94,7 @@ class AppState:
     max_tool_history: int = 4096
     max_steps: int = 100
     harness_mode: str = "balanced"
+    use_all_tools: bool = False
 
     _snapshot_store: SnapshotStore | None = field(default=None, repr=False)
 

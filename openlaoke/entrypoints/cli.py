@@ -429,7 +429,7 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
     mode = get_mode(getattr(app_state, "harness_mode", None))
     kwargs = engine_kwargs_for(app_state, mode)
     policy = EnginePolicy(
-        **kwargs,  # type: ignore[arg-type]
+        **kwargs,
         tools=registry.get_all_for_prompt(),
         on_text=lambda text: print(text),
     )

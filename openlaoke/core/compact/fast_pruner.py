@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class PruneResult:
-    messages: list[Message]
+    messages: list[Any]
     tokens_before: int
     tokens_after: int
     elapsed_ms: float = 0.0
@@ -185,7 +185,7 @@ def _truncate_tool_result(content: str, head_lines: int = 30, tail_lines: int = 
 
 
 def fast_prune(
-    messages: list[Message],
+    messages: list[Any],
     max_tokens: int = 8192,
     keep_tail_tokens: int = 8192,
     protect_read_results: bool = True,
@@ -357,7 +357,7 @@ def fast_prune(
 
 
 def fast_prune_aggressive(
-    messages: list[Message],
+    messages: list[Any],
     max_tokens: int = 4096,
 ) -> PruneResult:
     """Aggressive pruning for local/small models where prefill dominates.

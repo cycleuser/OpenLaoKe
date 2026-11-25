@@ -832,6 +832,10 @@ class REPL:
         code did.
         """
         turn = StreamedTurn()
+        if self.api is None:
+            turn.stream_error = "No API client configured"
+            return turn
+        api = self.api
         start_time = time.time()
         self._turn_start = start_time
         status_text = self._build_streaming_display("", 0, 0.0, 0.0)
@@ -841,7 +845,7 @@ class REPL:
             with Live(
                 status_text, console=self.console, refresh_per_second=20, transient=True
             ) as live:
-                async for chunk in self.api.stream_message(
+                async for chunk in api.stream_message(
                     system_prompt=system_prompt,
                     messages=messages,
                     tools=tools,
