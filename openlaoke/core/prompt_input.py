@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
@@ -369,10 +369,10 @@ def _build_model_picker_app(
 
     body = HSplit(
         [
-            Window(FormattedTextControl(render_header), height=2),
+            Window(FormattedTextControl(cast(Any, render_header)), height=2),
             filter_field,
             Frame(
-                Window(FormattedTextControl(render_rows), height=_PICKER_ROWS + 4),
+                Window(FormattedTextControl(cast(Any, render_rows)), height=_PICKER_ROWS + 4),
                 title="Models",
             ),
         ]
@@ -415,14 +415,14 @@ async def _run_model_picker_text(entries: list[dict[str, Any]]) -> str | None:
     except (EOFError, KeyboardInterrupt):
         return None
     if not choice:
-        return entries[0]["display"]
+        return cast(str, entries[0]["display"])
     if choice.isdigit():
         index = int(choice) - 1
-        return entries[index]["display"] if 0 <= index < len(entries) else None
+        return cast(str, entries[index]["display"]) if 0 <= index < len(entries) else None
     lowered = choice.lower()
     for entry in entries:
         if lowered in entry["display"].lower():
-            return entry["display"]
+            return cast(str, entry["display"])
     return None
 
 
