@@ -37,7 +37,9 @@ from openlaoke.types.core_types import (
 # Fakes
 # --------------------------------------------------------------------------- #
 class FakeTool(Tool):
-    def __init__(self, name: str, *, readonly: bool = True, result: str = "ok", is_error: bool = False):
+    def __init__(
+        self, name: str, *, readonly: bool = True, result: str = "ok", is_error: bool = False
+    ):
         self.name = name
         self.description = name
         self.input_schema = {"type": "object", "properties": {}}
@@ -48,7 +50,9 @@ class FakeTool(Tool):
 
     async def call(self, ctx, **kwargs):
         self.calls.append(kwargs)
-        return ToolResultBlock(tool_use_id=ctx.tool_use_id, content=self._result, is_error=self._is_error)
+        return ToolResultBlock(
+            tool_use_id=ctx.tool_use_id, content=self._result, is_error=self._is_error
+        )
 
 
 class FakeAPI:
@@ -61,8 +65,10 @@ class FakeAPI:
         self.turn_index = 0
         self.send_calls = 0
         self.close_called = False
+        self.requests: list[list[dict]] = []
 
-    async def stream_message(self, **_kwargs):
+    async def stream_message(self, **kwargs):
+        self.requests.append([dict(m) for m in kwargs.get("messages", [])])
         chunks = self._turns[self.turn_index] if self.turn_index < len(self._turns) else []
         self.turn_index += 1
         for ch in chunks:
@@ -117,9 +123,11 @@ class FakeCacheGuard:
         return messages
 
 
-def make_repl(turns, tools=None, *, harness_mode="balanced", max_steps=0, running=True):
+def make_repl(
+    turns, tools=None, *, harness_mode="balanced", max_steps=0, running=True, model="gpt-4o"
+):
     app = AppState(session_id="test-session", cwd="/tmp")
-    app.session_config.model = "gpt-4o"  # large -> minimal guard interference
+    app.session_config.model = model  # default large -> minimal guard interference
     app.harness_mode = harness_mode
     if max_steps:
         app.max_steps = max_steps
@@ -335,3 +343,33 @@ def test_history_to_messages_shapes():
     assert out[1]["tool_calls"][0]["id"] == "t1"
     assert out[1]["tool_calls"][0]["function"]["name"] == "Read"
     assert out[2] == {"role": "tool", "tool_call_id": "t1", "content": "result"}
+
+
+def test_plan_response_triggers_retry():
+    # A clear "I will now..." promise with no tool call should be retried,
+    # then the next turn's plain answer ends the loop.
+    turns = [[text("I will now create the file.")], [text("all finished")]]
+    r = make_repl(turns)
+    run(r)
+    assert r.api.turn_index == 2
+    retried = any(
+        "Do NOT describe steps" in m.get("content", "") for req in r.api.requests for m in req
+    )
+    assert retried
+
+
+def test_queued_input_is_injected_mid_run():
+    r = make_repl([[text("ok")]])
+    r._input_queue.append("please also do X")
+    run(r)
+    injected = any(m.get("content") == "please also do X" for req in r.api.requests for m in req)
+    assert injected
+
+
+def test_runtime_context_injected_for_small_model():
+    # gemma-3-1b -> tiny -> small-model guidance is non-empty, so the runtime
+    # context block must be appended as a system-injected message.
+    r = make_repl([[text("done")]], model="gemma-3-1b")
+    run(r)
+    assert r.api.requests
+    assert any(m.get("system_injected") for m in r.api.requests[0])
