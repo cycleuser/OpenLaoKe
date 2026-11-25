@@ -47,9 +47,18 @@ class CompactConfig:
     summary_model: str | None = None
 
     def get_token_budget(self, max_input: int = 200000, max_output: int = 8192) -> TokenBudget:
+        # Scale the reserves down for small context windows. With the fixed
+        # 10k + 5k defaults, any window below 15k would report zero available
+        # tokens: compaction would fire on every turn and its target would be
+        # zero, so the history would be trimmed down to nothing. At the default
+        # 200k window both clamps are inert and the values are unchanged.
+        reserved = min(10_000, max_input // 10)
+        tools = min(5_000, max_input // 40)
         return TokenBudget(
             max_input_tokens=max_input,
             max_output_tokens=max_output,
+            reserved_tokens=reserved,
+            tool_tokens=tools,
             trigger_threshold=self.trigger_threshold,
             keep_fraction=self.keep_fraction,
         )
