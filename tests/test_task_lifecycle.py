@@ -585,3 +585,170 @@ async def test_a_missing_resume_file_starts_over(tmp_path, monkeypatch) -> None:
     )
 
     assert seen["messages"] == [{"role": "user", "content": "fresh prompt"}]
+
+
+# --------------------------------------------------------------------------- #
+# termination, handle cleanup and unreadable logs
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_a_cancelled_handle_is_awaited_before_the_process_is_killed(manager, state) -> None:
+    from openlaoke.core.task import TaskHandle
+
+    task = manager.create_task_state(TaskType.LOCAL_BASH, "agent job")
+    task.status = TaskStatus.RUNNING
+    cancelled: list[bool] = []
+
+    class FakeProc:
+        returncode = None
+
+        def kill(self):
+            return None
+
+        async def wait(self):
+            return 0
+
+    async def never():
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    handle = TaskHandle(task_id=task.id, task=asyncio.create_task(never()))
+    # Let the coroutine actually start, otherwise cancellation closes it before
+    # its cleanup can run (which is also true in production).
+    await asyncio.sleep(0)
+    manager._handles[task.id] = handle
+
+    await manager._terminate(task, FakeProc())  # type: ignore[arg-type]
+
+    assert cancelled == [True]
+    assert task.id not in manager._handles
+    assert state.get_task(task.id).status is TaskStatus.KILLED
+    assert state.get_task(task.id).exit_code is None
+
+
+@pytest.mark.asyncio
+async def test_terminating_a_finished_task_keeps_its_status(manager, state) -> None:
+    task = manager.create_task_state(TaskType.LOCAL_BASH, "already done")
+    task.status = TaskStatus.COMPLETED
+
+    class FakeProc:
+        returncode = 0
+
+        def kill(self):
+            raise AssertionError("a finished process must not be killed")
+
+    await manager._terminate(task, FakeProc())  # type: ignore[arg-type]
+
+    assert state.get_task(task.id).status is TaskStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_cancel_terminates_a_running_process(manager, state) -> None:
+    outcome = await manager.run_bash("sleep 5", "long", auto_background_ms=0)
+
+    # Force the process into the manager's table the way a background job is.
+    started = manager.create_task_state(TaskType.LOCAL_BASH, "sleep")
+    started.status = TaskStatus.RUNNING
+
+    class FakeProc:
+        returncode = None
+
+        def kill(self):
+            self.killed = True
+
+        async def wait(self):
+            return 0
+
+    proc = FakeProc()
+    manager._procs[started.id] = proc  # type: ignore[assignment]
+
+    assert await manager.cancel(started.id) is True
+    assert state.get_task(started.id).status is TaskStatus.KILLED
+    assert outcome.task_id != started.id
+
+
+def test_kill_task_drops_the_handle_and_marks_it_killed(manager, state) -> None:
+
+    task = manager.create_task_state(TaskType.LOCAL_BASH, "pending")
+    task.status = TaskStatus.RUNNING
+    killed: list[bool] = []
+
+    class FakeHandle:
+        async def kill(self):
+            killed.append(True)
+
+    manager._handles[task.id] = FakeHandle()  # type: ignore[assignment]
+
+    async def scenario():
+        manager.kill_task(task.id)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(scenario())
+
+    assert task.id not in manager._handles
+    assert state.get_task(task.id).status is TaskStatus.KILLED
+    assert killed == [True]
+
+
+def test_an_unreadable_log_falls_back_to_the_in_memory_output(manager, tmp_path) -> None:
+    task = manager.create_task_state(TaskType.LOCAL_BASH, "log")
+    task.output = "in memory"
+    task.output_file = str(tmp_path / "missing.log")
+
+    assert manager.read_output(task) == "in memory"
+
+    log = tmp_path / "log.txt"
+    log.write_text("on disk", encoding="utf-8")
+    task.output_file = str(log)
+
+    assert manager.read_output(task, limit=3) == "on "
+
+    import builtins
+
+    real_open = builtins.open
+
+    def guarded(path, *args, **kwargs):
+        if str(path) == str(log):
+            raise OSError("gone")
+        return real_open(path, *args, **kwargs)
+
+    builtins_original = builtins.open
+    builtins.open = guarded
+    try:
+        assert manager.read_output(task) == "in memory"
+    finally:
+        builtins.open = builtins_original
+
+
+@pytest.mark.asyncio
+async def test_cancel_marks_a_task_with_no_process_killed(manager, state) -> None:
+    task = manager.create_task_state(TaskType.LOCAL_BASH, "orphan")
+    task.status = TaskStatus.RUNNING
+
+    assert await manager.cancel(task.id) is True
+    assert state.get_task(task.id).status is TaskStatus.KILLED
+
+
+@pytest.mark.asyncio
+async def test_a_handle_kill_cancels_its_task_and_runs_its_cleanup() -> None:
+    from openlaoke.core.task import TaskHandle
+
+    order: list[str] = []
+
+    async def long_running():
+        try:
+            await asyncio.sleep(3600)
+        finally:
+            order.append("task finished")
+
+    task = asyncio.create_task(long_running())
+    await asyncio.sleep(0)
+    handle = TaskHandle(task_id="t1", task=task, cleanup=lambda: order.append("cleanup"))
+
+    await handle.kill()
+
+    assert order == ["task finished", "cleanup"]
+    assert task.cancelled()
