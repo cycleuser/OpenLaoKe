@@ -164,7 +164,6 @@ def make_repl(
     r._hook_system = FakeHooks()
     r._world_sensor = None
     r._cache_guard = FakeCacheGuard()
-    r._cache_split = None
     r._cache_monitor = CacheMonitor()
     r._mcp_runtime = None
     r._scheduler_task = None
