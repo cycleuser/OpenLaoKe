@@ -8,11 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - **`/history` and `/restore`** (`commands/base.py`, `utils/file_history.py`):
-  every `Write`/`Edit` already records the pre-edit content of the file it is
   about to touch, but nothing could read those snapshots back. `/history` lists
   the files that have them and `/history <path>` shows one file's versions;
   `/restore <path> [version]` writes a version back (latest by default). `/tree`
   still covers undo inside a session, this covers undo across sessions.
+- **`core/file_state.py`**: a per-session record of which files the model has
+  actually read. `Read` fills it and `Write` consults it; both sides looked for a
+  `ToolContext.file_state` that no caller ever created, so the read-before-write
+  note below never fired.
+
+### Changed
+- **Overwriting a file the model has not read now warns instead of failing**
+  (`tools/write_tool.py`): the write completes and the result adds "the file
+  already existed and had not been read this session". Refusing the write was
+  measured against LFM3-1.7B, which accepted the refusal, never retried and told
+  the user the file had been overwritten, leaving it untouched. A warning on the
+  successful result cannot contradict what the filesystem says.
+- **Line counts read like a person counts them** (`utils/text_lines.py`): the
+  Write result and the preview said "3 lines" for a two-line file that ends with
+  a newline.
 
 ### Fixed
 - **Version numbers collapsed after the snapshot ring wrapped**

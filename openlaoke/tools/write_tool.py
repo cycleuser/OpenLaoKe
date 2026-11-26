@@ -2,8 +2,9 @@
 
 Includes:
 - Preview (dry-run diff) for permission prompts
-- Read-before-write guard: first attempt to write a file that hasn't been
-  read this session is refused with a hint; second attempt is allowed.
+- Read-before-write note: writing over a file the model has not read this
+  session still works, but the result says so. The write is never silently
+  dropped: a refusal made small models report success while nothing changed.
 """
 
 from __future__ import annotations
@@ -18,8 +19,7 @@ from openlaoke.types.core_types import ToolResultBlock
 from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
 from openlaoke.utils.text_escapes import normalize_model_escapes
-
-_WRITE_GUARD_ATTEMPTS: dict[str, int] = {}
+from openlaoke.utils.text_lines import count_lines
 
 
 class WriteInput(BaseModel):
@@ -49,12 +49,12 @@ class WriteTool(Tool):
         if not file_path:
             return PreviewResult(summary="Error: missing file_path")
         abs_path = os.path.abspath(file_path)
-        new_lines = content.count("\n") + 1 if content else 0
+        new_lines = count_lines(content)
         if os.path.exists(abs_path):
             try:
                 with open(abs_path, encoding="utf-8", errors="replace") as f:
                     old = f.read()
-                old_lines = old.count("\n") + 1 if old else 0
+                old_lines = count_lines(old)
                 return PreviewResult(
                     summary=f"Update {abs_path} ({old_lines}→{new_lines} lines)",
                     path=abs_path,
@@ -96,28 +96,18 @@ class WriteTool(Tool):
                 is_error=True,
             )
 
-        # --- read-before-write guard ---
-        if (
+        # --- read-before-write note ---
+        # The model is told when it overwrites a file it has not looked at, but
+        # the write still happens. Refusing it (the previous design) was
+        # measurably worse: LFM3-1.7B hit the refusal, never retried, and
+        # answered "Done, note.txt now contains ..." with the file untouched.
+        # A warning on the successful result cannot lie about what happened.
+        unread_overwrite = (
             ctx.file_state is not None
             and hasattr(ctx.file_state, "was_read")
+            and os.path.exists(abs_path)
             and not ctx.file_state.was_read(abs_path)
-        ):
-            key = f"{ctx.app_state.session_id}:{abs_path}"
-            attempts = _WRITE_GUARD_ATTEMPTS.get(key, 0)
-            if attempts < 1:
-                _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
-                return ToolResultBlock(
-                    tool_use_id=ctx.tool_use_id,
-                    content=(
-                        f"Guard: '{abs_path}' has not been read this session. "
-                        "Small models often overwrite files with incorrect content "
-                        "when they haven't seen what's already there. "
-                        "Read the file first, then write again. "
-                        "(This guard will be bypassed on your next write attempt.)"
-                    ),
-                    is_error=False,
-                )
-            _WRITE_GUARD_ATTEMPTS[key] = attempts + 1
+        )
 
         try:
             os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
@@ -146,10 +136,16 @@ class WriteTool(Tool):
             diff_text = diff_lines(abs_path, old_content, content, not was_new)
 
             action = "Created" if was_new else "Updated"
-            lines = content.count("\n") + 1
+            lines = count_lines(content)
             chars = len(content)
 
             result_content = f"{action} {abs_path} ({lines} lines, {chars} chars)"
+            if unread_overwrite:
+                result_content += (
+                    "\nNote: the file already existed and had not been read this session, "
+                    "so its previous contents were replaced unseen. Read a file before "
+                    "writing over it when the old contents matter."
+                )
             if diff_text and diff_text not in ("(no changes)", "(empty new file)"):
                 result_content += f"\n{diff_text}"
 

@@ -1575,6 +1575,7 @@ class REPL:
         ctx = ToolContext(
             app_state=self.app_state,
             tool_use_id=tool_use.id,
+            file_state=self.app_state.get_file_state(),
         )
 
         validation = tool.validate_input(tool_input)

@@ -12,6 +12,7 @@ from openlaoke.types.core_types import ToolResultBlock
 from openlaoke.utils.diff import diff_lines
 from openlaoke.utils.file_history import track_file_edit
 from openlaoke.utils.text_escapes import normalize_model_escapes
+from openlaoke.utils.text_lines import count_lines
 
 
 class EditInput(BaseModel):
@@ -64,8 +65,8 @@ class EditTool(Tool):
             return PreviewResult(
                 summary=f"Warning: old_text not found in {abs_path}", path=abs_path, action="noop"
             )
-        old_lines = old_text.count("\n") + 1
-        new_lines = new_text.count("\n") + 1
+        old_lines = count_lines(old_text)
+        new_lines = count_lines(new_text)
         return PreviewResult(
             summary=f"Replace {count} occurrence(s) in {abs_path} ({old_lines}→{new_lines} lines)",
             path=abs_path,

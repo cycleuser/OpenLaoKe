@@ -106,6 +106,7 @@ class AppState:
     _task_manager: Any = None
     _tool_registry: Any = None
     _memory_store: Any = None
+    _file_state: Any = None
     _mcp_runtime: Any = None
     _scheduler: Any = None
     _swarm: Any = None
@@ -122,6 +123,19 @@ class AppState:
     def get_cwd(self) -> str:
         """Get current working directory."""
         return self.cwd
+
+    def get_file_state(self) -> Any:
+        """Per-session record of which files the model has read.
+
+        Created on first use so the Write tool's read-before-write guard has
+        something to consult. Without it the guard is skipped and a model can
+        overwrite a file it never opened.
+        """
+        if self._file_state is None:
+            from openlaoke.core.file_state import FileState
+
+            self._file_state = FileState()
+        return self._file_state
 
     def set_cwd(self, path: str) -> None:
         """Set current working directory and sync working_directory."""

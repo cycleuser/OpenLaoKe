@@ -162,7 +162,11 @@ async def execute_tool(
     if not validation.result:
         return _error(tool_use.id, f"Validation error: {validation.message}")
 
-    ctx = ToolContext(app_state=app_state, tool_use_id=tool_use.id)
+    ctx = ToolContext(
+        app_state=app_state,
+        tool_use_id=tool_use.id,
+        file_state=app_state.get_file_state(),
+    )
     if policy.on_tool_start is not None:
         policy.on_tool_start(tool_use)
     result = await tool.safe_call(ctx, **input_data)
