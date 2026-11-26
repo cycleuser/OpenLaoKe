@@ -63,6 +63,7 @@ class GlobTool(Tool):
         gitignore = self._load_gitignore(abs_path)
         matches = []
         max_results = 1000
+        capped = False
 
         for root, dirs, files in os.walk(abs_path):
             rel_root = os.path.relpath(root, abs_path)
@@ -85,6 +86,7 @@ class GlobTool(Tool):
                 if self._match_pattern(rel_path, pattern):
                     matches.append(rel_path)
                     if len(matches) >= max_results:
+                        capped = True
                         break
 
             if len(matches) >= max_results:
@@ -99,11 +101,15 @@ class GlobTool(Tool):
                 is_error=False,
             )
 
-        truncated = len(matches) > max_results
         display = matches[:max_results]
         content = "\n".join(display)
-        if truncated:
-            content += f"\n\n... ({len(matches) - max_results} more results)"
+        if capped:
+            # The walk stopped at the cap, so how many files are left is not
+            # known; say that rather than implying the list is complete.
+            content += (
+                f"\n\n... (capped at {max_results} results; narrow the pattern "
+                "or search a subdirectory to see the rest)"
+            )
 
         return ToolResultBlock(
             tool_use_id=ctx.tool_use_id,
@@ -115,7 +121,16 @@ class GlobTool(Tool):
         if "**" in pattern:
             import pathlib
 
-            return bool(pathlib.PurePosixPath(path).match(pattern))
+            candidate = pathlib.PurePosixPath(path)
+            if candidate.match(pattern):
+                return True
+            # In shell globstar and gitignore, a leading ``**/`` also matches
+            # zero directories, so ``**/*.py`` has to include ``app.py``.
+            # ``PurePath.match('**/*.py')`` does not, which used to hide every
+            # file at the root of the search path.
+            if pattern.startswith("**/"):
+                return bool(candidate.match(pattern[3:]))
+            return False
         from fnmatch import fnmatch
 
         return fnmatch(path, pattern) or fnmatch(os.path.basename(path), pattern)

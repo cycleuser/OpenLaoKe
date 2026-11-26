@@ -160,6 +160,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the notice printed after a scheduled job was interpolated straight into Rich
   markup, so a reply like `[bot said: nothing to report]` rendered as an empty
   line. The text is escaped now.
+- **`Glob` skipped files at the root of the search path** (`tools/glob_tool.py`):
+  `**/*.py` went through `PurePath.match()`, where a leading `**/` needs at
+  least one directory, so `app.py` was invisible while `src/app.py` was found.
+  A leading `**/` now also matches zero directories, as it does in every shell.
+- **A capped `Glob` result looked complete** (`tools/glob_tool.py`): the walk
+  stopped at 1000 matches and the reply said "Found 1000 file(s)" with no hint
+  that more files existed, so the model would conclude the listing was the whole
+  tree. It now says the list was capped and how to narrow it.
 
 ## [0.1.46] - 2026-11-21
 
