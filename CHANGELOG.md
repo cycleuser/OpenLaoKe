@@ -43,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ABC with its own chunk types, cache-marker bookkeeping and retry helper, which
   `MultiProviderClient` had already replaced. Only `enforce_role_alternation` was
   ever imported from it; that function now lives in `core/messages.py`.
+- **The bundled-skills lookup** (`core/skill_system.py`): it appended
+  `openlaoke/skills` when that directory existed, but the directory was deleted
+  as package-data noise (see `docs/jcode-alignment-refactor.md`), so the branch
+  could never run.
 - **Three stubbed helpers in `tools/register.py`**: `register_deferred_tools()`
   and `get_tool_loader()` returned `None` while being exported as if they did
   something, and `register_essential_tools()` was an alias of
@@ -110,6 +114,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`core/config_wizard.py`), and `quick_setup()` returned an untouched config
   for a misspelled provider name instead of reporting it. Both now say what
   happened.
+- **`Browser(action="open")` failed on every successful navigation**
+  (`tools/browser_tool.py`): it passed `driver.title` to `asyncio.to_thread`,
+  but `title` is a property, so the callable it handed the thread raised
+  `TypeError: 'str' object is not callable`.
 - **`async` and `extern "C"` Rust functions were invisible to the symbol index**
   (`utils/symbols.py`): the declaration regex accepted `pub`, `unsafe` and
   `const` but not `async`, so a `grep` hit inside an async Rust function was

@@ -113,12 +113,9 @@ class Skill:
         name = metadata.get("name", "")
         if not name or name == "SKILL":
             # Use parent directory name as fallback
-            if path and path.parent:
-                name = path.parent.name
-            elif path:
-                name = path.stem
-            else:
-                name = "unknown"
+            # ``Path`` objects are always truthy and ``.parent`` is never falsy,
+            # so the parent-directory name is the only real fallback.
+            name = path.parent.name if path else "unknown"
 
         description = metadata.get("description", "")
         if isinstance(description, str):
@@ -259,10 +256,6 @@ def get_default_skill_dirs() -> list[Path]:
     opencode_skills = home / ".opencode" / "skills"
     if opencode_skills.exists():
         dirs.append(opencode_skills)
-
-    bundled_skills = Path(__file__).parent.parent / "skills"
-    if bundled_skills.exists():
-        dirs.append(bundled_skills)
 
     return dirs
 

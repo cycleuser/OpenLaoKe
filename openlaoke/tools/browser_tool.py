@@ -84,9 +84,10 @@ class BrowserTool(Tool):
                 await asyncio.to_thread(driver.get, url)
             except Exception as exc:  # noqa: BLE001
                 return self._error(ctx, f"Error: could not open {url}: {exc}")
-            return self._result(
-                ctx, f"Opened {url}\nTitle: {await asyncio.to_thread(driver.title)}"
-            )
+            # ``title`` is a property, not a method: calling it through to_thread
+            # raised TypeError on every successful navigation.
+            title = await asyncio.to_thread(lambda: driver.title)
+            return self._result(ctx, f"Opened {url}\nTitle: {title}")
 
         if action == "text":
             body = await asyncio.to_thread(lambda: driver.find_element("tag name", "body").text)
