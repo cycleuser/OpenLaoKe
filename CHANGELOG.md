@@ -110,6 +110,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`core/config_wizard.py`), and `quick_setup()` returned an untouched config
   for a misspelled provider name instead of reporting it. Both now say what
   happened.
+- **`async` and `extern "C"` Rust functions were invisible to the symbol index**
+  (`utils/symbols.py`): the declaration regex accepted `pub`, `unsafe` and
+  `const` but not `async`, so a `grep` hit inside an async Rust function was
+  reported without the function it belongs to.
 - **A skill repository listing could write outside the skills directory**
   (`core/skill_installer.py`): skill and file names come from the repository being
   installed, and `install_dir / name` followed a `../` straight out of it. Names

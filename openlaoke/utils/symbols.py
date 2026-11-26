@@ -20,7 +20,8 @@ KIND_CLASS = "class"
 
 RE_PY_DECLS = re.compile(r"^(?P<indent>\s*)(?:async\s+)?(?P<kind>def|class)\s+(?P<name>\w+)")
 RE_RUST_FN = re.compile(
-    r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?(?:const\s+)?fn\s+(?P<name>\w+)"
+    r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:default\s+)?(?:async\s+)?(?:unsafe\s+)?"
+    r"(?:const\s+)?(?:extern\s+\"C\"\s+)?fn\s+(?P<name>\w+)"
 )
 RE_RUST_TY = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?P<kind>struct|enum|trait|impl|mod)\s+(?P<name>\w+)"
