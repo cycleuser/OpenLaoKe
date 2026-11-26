@@ -88,6 +88,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`set_theme` could not see new theme files** (`utils/theme.py`) because it
   reloaded through a stale module cache, and `ThemeManager("ghost")` reported a
   name that disagreed with the theme it served.
+- **"Reconfigure" in the setup wizard kept the old key** (`core/config_wizard.py`):
+  every provider branch asks for a key only when the field is empty, so choosing
+  *Reconfigure* and then the stored source reused the key the user was trying to
+  replace. The field is now cleared before the prompts.
+- **A configured model was replaced by the literal string `default`**
+  (`core/config_wizard.py`): `a or b if c else d` parses as `(a or b) if c else d`,
+  so an OpenAI-compatible provider with an empty model list lost its configured
+  model whenever the wizard was re-run.
+- **Skipping the setup wizard still marked the config as first-run**
+  (`core/config_wizard.py`), and `quick_setup()` returned an untouched config
+  for a misspelled provider name instead of reporting it. Both now say what
+  happened.
 
 ## [0.1.46] - 2026-11-21
 

@@ -99,6 +99,9 @@ def run_config_wizard(config: AppConfig | None = None) -> AppConfig:
             console.print("\n[yellow]You can configure later by running:[/yellow]")
             console.print("  openlaoke --config")
             console.print()
+            # The wizard has run either way; leaving first_run set would send the
+            # next launch straight back into it even though the user chose to skip.
+            config.first_run = False
             return config
 
         if choice == str(custom_opt):
@@ -325,8 +328,14 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
                 console.print("[dim]Continue with model selection...[/dim]\n")
             elif choice == options[-1]:
                 # Reconfigure - will ask for new API key below
+                provider.api_key = ""
                 console.print("\n[yellow]Reconfiguring...[/yellow]")
         elif choice == options[-1]:
+            # Clearing the stored key is what makes the "Enter new API key"
+            # prompt below appear at all: every branch asks for a key only
+            # when `provider.api_key` is empty, so keeping the old one made
+            # "Reconfigure" silently reuse it.
+            provider.api_key = ""
             console.print("\n[yellow]Reconfiguring...[/yellow]")
 
     console.print("[dim]Press Enter to use default value[/dim]\n")
@@ -377,9 +386,13 @@ def _configure_provider(config: MultiProviderConfig, key: str) -> MultiProviderC
         if not provider.api_key:
             console.print("[bold red]Warning: No API key provided. API calls may fail.[/bold red]")
 
+        # Parenthesised on purpose: `a or b if c else d` parses as
+        # `(a or b) if c else d`, which threw away a configured default model
+        # whenever the model list was empty.
+        fallback_model = provider.models[0] if provider.models else "default"
         default_model = Prompt.ask(
             "Model name",
-            default=provider.default_model or provider.models[0] if provider.models else "default",
+            default=provider.default_model or fallback_model,
         )
         provider.default_model = default_model
 
@@ -652,17 +665,22 @@ def show_current_config(config: AppConfig) -> None:
 
 
 def quick_setup(provider: str, api_key: str, model: str = "") -> AppConfig:
-    """Quick setup for a single provider (non-interactive)."""
+    """Non-interactive setup for a single known provider.
+
+    Raises ``KeyError`` for a name the defaults do not know: returning an
+    untouched config made a typo look like a successful setup.
+    """
     config = AppConfig()
+    if provider not in config.providers.providers:
+        known = ", ".join(sorted(config.providers.providers))
+        raise KeyError(f"Unknown provider {provider!r}. Known providers: {known}")
 
-    if provider in config.providers.providers:
-        config.providers.providers[provider].api_key = api_key
-        if model:
-            config.providers.providers[provider].default_model = model
-        config.providers.active_provider = provider
-        config.providers.active_model = ""
-        config.first_run = False
-
+    config.providers.providers[provider].api_key = api_key
+    if model:
+        config.providers.providers[provider].default_model = model
+    config.providers.active_provider = provider
+    config.providers.active_model = ""
+    config.first_run = False
     return config
 
 
