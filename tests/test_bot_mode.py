@@ -914,3 +914,350 @@ def test_room_log_accepts_a_limit(runner) -> None:
     run(call("room new dev Alice Bob"))
 
     assert "#dev" in run(call("room show dev 5")).message
+
+
+# --------------------------------------------------------------------------- #
+# edge paths: trimming, empty turns, room limits, provider errors
+# --------------------------------------------------------------------------- #
+def test_trim_keeps_whole_turns_and_never_cuts_a_tool_result() -> None:
+    from openlaoke.core.bot_mode import _trim
+
+    messages = [{"role": "user", "content": f"u{i}"} for i in range(30)]
+    trimmed = _trim(messages, limit=5)
+
+    # The cut lands on a user turn, so a tool result is never left orphaned.
+    assert trimmed == messages[25:]
+    assert trimmed[0]["role"] == "user"
+    # A short history comes back untouched.
+    short = messages[:3]
+    assert _trim(short, limit=5) is short
+
+
+def test_trim_falls_back_to_the_tail_when_no_user_turn_is_left() -> None:
+    from openlaoke.core.bot_mode import _trim
+
+    messages = [{"role": "assistant", "content": str(i)} for i in range(10)]
+    trimmed = _trim(messages, limit=3)
+
+    assert trimmed == messages[-3:]
+
+
+def test_a_corrupt_roster_entry_is_skipped(env, monkeypatch) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    import openlaoke.core.bot_mode as bm
+
+    monkeypatch.setattr(
+        bm, "_read_json", lambda _path, default=None: {"bots": [None, "junk", {"name": "Alice"}]}
+    )
+
+    reloaded = BotMode(mode.app_state, root=mode.root)
+
+    assert "alice" in reloaded._bots
+
+
+def test_an_active_bot_that_vanished_is_cleared(env, monkeypatch) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    import openlaoke.core.bot_mode as bm
+
+    monkeypatch.setattr(bm, "_read_json", lambda _path, default=None: {"bots": []})
+    mode.active_bot = "alice"
+
+    reloaded = BotMode(mode.app_state, root=mode.root)
+
+    assert reloaded.active_bot == ""
+
+
+def test_speaking_an_empty_message_returns_nothing(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+
+    assert run(mode.ask("alice", "   ")) == ""
+    assert factory.calls == {}
+
+
+def test_a_turn_from_another_bot_is_attributed(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+
+    run(mode.ask("alice", "status?", sender="bob"))
+
+    sent = factory.messages("alice")[0][-1]["content"]
+    assert "Message from" in sent
+    assert "@bob" in sent
+
+
+def test_a_provider_failure_becomes_the_bots_reply(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+    factory.scripts["alice"] = [RuntimeError("provider down")]
+
+    reply = run(mode.ask("alice", "hello"))
+
+    assert "provider down" in reply
+    assert reply.startswith("[bot @alice error:")
+
+
+def test_enqueue_rejects_an_empty_message(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+
+    with pytest.raises(ValueError, match="needs some text"):
+        mode.enqueue("bob", "alice", "  ")
+
+
+def test_a_room_needs_a_name(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+
+    mode.create_bot("Bob")
+
+    with pytest.raises(ValueError, match="needs a name"):
+        mode.create_room("  ", ["Alice", "Bob"])
+
+
+def test_rooms_text_explains_an_empty_roster(env) -> None:
+    mode, _state, _factory, _tmp = env
+
+    assert "No rooms yet" in mode.rooms_text()
+
+
+def test_a_room_lookup_ignores_case(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    room = mode.create_room("Dev", ["Alice", "Bob"])
+
+    assert mode.get_room("DEV").name == room.name
+    assert mode.get_room("nope") is None
+
+
+def test_a_room_turn_with_no_members_or_text_does_nothing(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    room = mode.create_room("Dev", ["Alice", "Bob"])
+    room.needs_user = True
+    mode.save_room(room)
+
+    assert run(mode.room_send("dev", "  ")) == []
+
+
+def test_a_bot_that_is_mentioned_twice_speaks_once(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    mode.create_room("Dev", ["Alice", "Bob"])
+    factory.scripts["alice"] = ["first", "second"]
+    factory.scripts["bob"] = ["bob here"]
+
+    turns = run(mode.room_send("dev", "@alice @alice what now?"))
+
+    assert [slug(turn.member) for turn in turns].count("alice") == 1
+
+
+def test_the_roster_message_lists_teammates_and_skills(env, monkeypatch) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice", description="plans", section="core")
+    mode.create_bot("Bob", description="codes", section="core")
+
+    prompt = mode.system_prompt(mode.require_bot("alice"))
+
+    assert "@bob" in prompt
+    assert "plans" in prompt
+
+
+def test_a_bot_that_asks_for_an_unknown_provider_is_refused(env) -> None:
+    mode, state, _factory, _tmp = env
+    mode._client_factory = None
+    mode.create_bot("Alice", provider="ghost")
+    from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
+
+    state.multi_provider_config = MultiProviderConfig(
+        providers={"main": ProviderConfig(provider_type=ProviderType.OPENAI, api_key="k")},
+        active_provider="main",
+        active_model="m",
+    )
+
+    reply = run(mode.ask("alice", "hello"))
+
+    assert "not configured" in reply
+    assert reply.startswith("[bot @alice error:")
+
+
+def test_a_turn_without_a_configured_provider_says_so(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode._client_factory = None
+    mode.create_bot("Alice")
+
+    reply = run(mode.ask("alice", "hello"))
+
+    assert "no provider is configured" in reply
+
+
+def test_an_empty_name_is_refused(env) -> None:
+    mode, _state, _factory, _tmp = env
+
+    with pytest.raises(ValueError, match="needs a name"):
+        mode.create_bot("   ")
+
+
+def test_an_empty_roster_explains_how_to_start(env) -> None:
+    mode, _state, _factory, _tmp = env
+
+    assert "No bots yet" in mode.roster_text()
+
+
+def test_removing_the_active_bot_clears_the_selection(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.activate_bot("alice")
+
+    mode.remove_bot("alice")
+
+    assert mode.active_bot == ""
+
+
+def test_an_active_bot_that_vanished_from_disk_is_cleared(env, monkeypatch) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    import openlaoke.core.bot_mode as bm
+
+    monkeypatch.setattr(bm, "_read_json", lambda _path, default=None: {"bots": []})
+
+    reloaded = BotMode(mode.app_state, root=mode.root)
+    reloaded.active_bot = "alice"
+    reloaded.load()
+
+    assert reloaded.active_bot == ""
+
+
+def test_history_text_hides_tool_rows(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.save_history(
+        "alice",
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "tool", "content": "raw output"},
+            {"role": "assistant", "content": "   "},
+            {"role": "assistant", "content": "hi there"},
+        ],
+    )
+
+    text = mode.history_text("alice")
+
+    assert "hello" in text
+    assert "hi there" in text
+    assert "raw output" not in text
+
+
+def test_a_bot_with_skills_gets_them_in_its_prompt(env, monkeypatch) -> None:
+    mode, _state, _factory, _tmp = env
+    monkeypatch.setattr(
+        "openlaoke.core.skill_system.get_skill_system_prompt", lambda _skills: "\n- be terse"
+    )
+    profile = mode.create_bot("Alice")
+    mode.update_bot("alice", skills=["writer"])
+
+    prompt = mode.system_prompt(mode.require_bot("alice"))
+
+    assert "Your skills" in prompt
+    assert "be terse" in prompt
+    assert profile.name == "Alice"
+
+
+def test_a_bot_without_a_model_uses_the_active_one(env) -> None:
+    mode, state, factory, _tmp = env
+    mode.create_bot("Alice")
+    from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
+
+    state.multi_provider_config = MultiProviderConfig(
+        providers={"main": ProviderConfig(provider_type=ProviderType.OPENAI, api_key="k")},
+        active_provider="main",
+        active_model="chosen-model",
+    )
+
+    run(mode.ask("alice", "hello"))
+
+    assert factory.calls["alice"][0]["model"] == "chosen-model"
+
+
+def test_cancelling_a_turn_propagates(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+    profile = mode.require_bot("alice")
+
+    class Cancelling:
+        async def send_message(self, **_kwargs):
+            raise asyncio.CancelledError()
+
+        async def close(self):
+            return None
+
+    mode._client_factory = lambda _profile: Cancelling()
+
+    with pytest.raises(asyncio.CancelledError):
+        run(mode._run_turn(profile, [{"role": "user", "content": "hi"}]))
+
+
+def test_a_room_lookup_falls_back_to_a_slug_match(env) -> None:
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    mode.create_room("Dev Team", ["Alice", "Bob"])
+    # A differently-spelled path does not exist, so the slug search answers.
+    assert mode.get_room("Dev-Team").name == "Dev Team"
+
+
+def test_a_room_lookup_falls_back_when_the_directory_name_disagrees(env) -> None:
+    mode, _state, _factory, _tmp = env
+    room_dir = mode._rooms_dir()
+    import json
+    import os
+
+    os.makedirs(os.path.join(room_dir, "custom"), exist_ok=True)
+    with open(os.path.join(room_dir, "custom", "room.json"), "w", encoding="utf-8") as handle:
+        json.dump({"name": "Custom Name", "members": ["Alice", "Bob"]}, handle)
+
+    assert mode.get_room("custom name").name == "Custom Name"
+
+
+def test_a_member_who_is_no_longer_a_bot_is_skipped(env) -> None:
+    mode, _state, factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    room = mode.create_room("Dev", ["Alice", "Bob"])
+    room.members.append("Ghost")
+    mode.save_room(room)
+    factory.scripts["alice"] = ["alice here"]
+    factory.scripts["bob"] = ["bob here"]
+
+    turns = run(mode.room_send("dev", "hello"))
+
+    assert [slug(t.member) for t in turns] == ["alice", "bob"]
+
+
+def test_a_room_stops_at_the_message_cap(env) -> None:
+    # create_room caps membership at 6, but a hand-edited room.json can list
+    # more, so the per-round loop has its own message cap.
+    mode, _state, factory, _tmp = env
+    import json
+    import os
+
+    names = [f"Bot{i}" for i in range(12)]
+    for name in names:
+        mode.create_bot(name)
+        factory.scripts[slug(name)] = [f"{name} speaking"]
+
+    room_dir = mode._rooms_dir()
+    os.makedirs(os.path.join(room_dir, "big"), exist_ok=True)
+    with open(os.path.join(room_dir, "big", "room.json"), "w", encoding="utf-8") as handle:
+        json.dump({"name": "Big", "members": names}, handle)
+
+    turns = run(mode.room_send("big", "everyone report"))
+
+    from openlaoke.core.bot_mode import MAX_GROUP_MESSAGES
+
+    assert len(turns) == MAX_GROUP_MESSAGES
