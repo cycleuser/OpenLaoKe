@@ -55,6 +55,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`core/multi_provider_api.py`): retryable statuses were already handled before
   `raise_for_status()` ran, so by the time that handler could see one the budget
   was spent or the status was final. The error now propagates straight out.
+- **A second denied-subject check in `_execute_tool`** (`core/repl.py`): it
+  re-ran the same `check_tool_subject()` call the block above had just made, so
+  whenever it was reached the answer had already been applied and the branch
+  could not fire. Its helper `_is_denied_subject()` went with it; the permission
+  tests now assert on the stored rules directly.
 
 ### Fixed
 - **The model picker started on the wrong row** (`core/prompt_input.py`):
@@ -151,6 +156,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   truncation result was written to a local string while `result.content`, which
   is what enters the history, was left intact, so a 1 MB tool output reached the
   model whole.
+- **A bot's scheduled reply lost anything in square brackets** (`core/repl.py`):
+  the notice printed after a scheduled job was interpolated straight into Rich
+  markup, so a reply like `[bot said: nothing to report]` rendered as an empty
+  line. The text is escaped now.
 
 ## [0.1.46] - 2026-11-21
 

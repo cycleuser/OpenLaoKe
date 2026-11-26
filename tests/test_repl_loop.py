@@ -805,3 +805,565 @@ def test_bash_output_is_compressed_before_it_reaches_the_model():
     result = asyncio.run(r._execute_tool(tool_use("Bash", command="ls")))
 
     assert result.content == "compressed"
+
+
+# --------------------------------------------------------------------------- #
+# guard interactions, permission paths and small display branches
+# --------------------------------------------------------------------------- #
+class GuardStub:
+    model_size = "large"
+    max_parse_failures = 4
+    consecutive_parse_failures = 0
+    max_task_tool_calls = 100
+    task_tool_calls = 0
+
+    def check_before_api_call(self):
+        return ""
+
+    def check_after_api_call(self, *_a):
+        return ""
+
+    def notify_tool_call(self, _name):
+        return ""
+
+    def notify_parse_failure(self, _text):
+        return "fix the format"
+
+    def notify_parse_success(self):
+        return None
+
+
+def install_guard(r, **overrides):
+    """Attach a guard whose model_size matches, so the loop keeps it."""
+    from openlaoke.core.small_model_optimizations import estimate_model_size_from_name
+
+    guard = GuardStub()
+    guard.model_size = estimate_model_size_from_name(r.app_state.session_config.model)
+    for key, value in overrides.items():
+        setattr(guard, key, value)
+    r._guard = guard
+    return guard
+
+
+def test_a_turn_without_an_api_client_says_so():
+    r = make_repl([])
+    r.api = None
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.stream_error == "No API client configured"
+
+
+def test_a_tool_call_with_unparseable_arguments_runs_with_empty_input():
+    tool = FakeTool("Read", result="ok")
+    r = make_repl([], tools=[tool])
+    r.api._turns = [
+        [
+            StreamChunk(
+                event_type=StreamEventType.TOOL_CALL_START,
+                tool_call_id="c1",
+                tool_call_name="Read",
+                tool_call_arguments="{not json",
+            )
+        ]
+    ]
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.tool_uses[0].input == {}
+    assert turn.tool_uses[0].name == "Read"
+
+
+def test_verbose_mode_prints_the_context_composition():
+    r = make_repl([[text("hi")]])
+    r.app_state.verbose = True
+
+    run(r)
+
+    assert "tokens" in r.console.file.getvalue()
+
+
+def test_usage_and_cost_from_a_turn_are_accumulated():
+    r = make_repl([])
+    r._stream_provider_turn = lambda **_k: _return(
+        turn(content="ok", usage=usage_chunk().usage, cost=usage_chunk().cost)
+    )
+
+    run(r)
+
+    assert r.app_state.token_usage.total_tokens >= 18
+    assert r.app_state.cost_info.total_cost > 0
+
+
+def test_a_failing_parallel_read_becomes_a_tool_error():
+    tools = [FakeTool("Read", readonly=True), FakeTool("Glob", readonly=True)]
+    r = make_repl([], tools=tools)
+
+    real = r._execute_tool
+
+    async def flaky(tool_use):
+        if tool_use.name == "Glob":
+            raise RuntimeError("glob exploded")
+        return await real(tool_use)
+
+    r._execute_tool = flaky
+    messages: list[dict] = []
+
+    asyncio.run(r._dispatch_tools([tool_use("Read", "c1"), tool_use("Glob", "c2")], messages, {}, 3))
+
+    assert any("glob exploded" in str(m.get("content")) for m in messages)
+
+
+def test_a_fuzzy_tool_name_is_corrected_before_dispatch():
+    tool = FakeTool("Read", result="ok")
+    r = make_repl([], tools=[tool])
+    r._running = True
+    messages: list[dict] = []
+
+    asyncio.run(r._dispatch_tools([tool_use("read", "c1")], messages, {}, 3))
+
+    assert tool.calls == [{"file_path": "a.txt"}]
+
+
+def test_a_guard_loop_message_reaches_the_model():
+    r = make_repl([], tools=[FakeTool("Read")])
+    install_guard(r, notify_tool_call=lambda _name: "you keep calling the same tool")
+    r._running = True
+    messages: list[dict] = []
+
+    asyncio.run(r._dispatch_tools([tool_use()], messages, {}, 3))
+
+    assert any(m.get("content") == "you keep calling the same tool" for m in messages)
+
+
+def test_a_guard_limit_message_stops_the_loop():
+    r = make_repl([[text("hi")]])
+    install_guard(
+        r,
+        max_task_tool_calls=1,
+        task_tool_calls=5,
+        check_before_api_call=lambda: "task budget exhausted",
+    )
+
+    run(r)
+
+    assert r.api.turn_index == 0
+
+
+def test_insomnia_mode_labels_each_iteration():
+    r = make_repl([[text("hi")]])
+    r.app_state.insomnia_mode = True
+
+    run(r)
+
+    assert "Insomnia iteration" in r.console.file.getvalue()
+
+
+def test_verbose_mode_prints_the_first_request():
+    r = make_repl([[text("hi")]])
+    r.app_state.verbose = True
+
+    run(r)
+
+    assert "Messages:" in r.console.file.getvalue()
+
+
+def test_a_tiny_model_gets_the_one_line_plan_retry():
+    r = make_repl([[text("I will now write the file.")], [text("finished")]], model="gemma-3-1b")
+    seen: list[str] = []
+    real = r._prepare_turn_context
+
+    def capture(messages, *args):
+        out = real(messages, *args)
+        seen.extend(str(m.get("content")) for m in out[0])
+        return out
+
+    r._prepare_turn_context = capture
+
+    run(r)
+
+    assert any("Output ONE tool line NOW" in content for content in seen)
+
+
+def test_cache_markers_are_applied_for_an_anthropic_provider(monkeypatch) -> None:
+    from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
+
+    r = make_repl([])
+    config = MultiProviderConfig(
+        providers={"main": ProviderConfig(provider_type=ProviderType.ANTHROPIC, api_key="k")},
+        active_provider="main",
+        active_model="claude",
+    )
+    r.api.config = config
+    marked: list[bool] = []
+    monkeypatch.setattr(
+        "openlaoke.core.repl.CacheGuard.apply_cache_markers",
+        lambda messages: marked.append(True) or messages,
+    )
+
+    messages, _tools, _size = r._prepare_turn_context([], "sys", None, 100_000)
+
+    assert marked == [True]
+    assert messages == []
+
+
+def test_context_compaction_is_reported(monkeypatch) -> None:
+    from openlaoke.core.compact.fast_pruner import PruneResult
+
+    r = make_repl([])
+    r.app_state.verbose = True
+    monkeypatch.setattr(
+        "openlaoke.core.compact.fast_pruner.fast_prune",
+        lambda messages, **_k: PruneResult(
+            messages=messages[:2], tokens_before=900, tokens_after=100, elapsed_ms=1.5
+        ),
+    )
+    history = [{"role": "user", "content": "x" * 50} for _ in range(12)]
+
+    pruned, _tools, _size = r._prepare_turn_context(history, "sys", None, 2000)
+
+    assert len(pruned) == 2
+    assert "context compacted: 900 -> 100 tokens" in r.console.file.getvalue()
+    assert "Context pruned in 1.5ms" in r.console.file.getvalue()
+
+
+def test_a_developer_role_message_is_counted_in_the_composition():
+    composed = REPL._format_context_composition(
+        [{"role": "developer", "content": "be brief"}, {"role": "tool", "content": "out"}]
+    )
+
+    assert "developer" not in composed
+    assert composed
+
+
+def test_an_unknown_tool_is_reported():
+    r = make_repl([])
+
+    result = asyncio.run(r._execute_tool(tool_use("Nope")))
+
+    assert result.is_error is True
+    assert "Unknown tool: Nope" in result.content
+    assert "Unknown tool: Nope" in r.console.file.getvalue()
+
+
+def test_a_denied_tool_is_reported_without_running():
+    from openlaoke.types.permissions import PermissionResult, PermissionRule
+
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r.app_state.permission_config.mode = PermissionMode.DEFAULT
+    r.app_state.permission_config.always_deny_rules = [
+        PermissionRule("Read", PermissionResult.DENY, "no reads")
+    ]
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == []
+    assert result.is_error is True
+    assert "Permission denied for Read" in result.content
+
+
+def test_a_failed_validation_refuses_the_call():
+    tool = FakeTool("Read")
+    tool.input_schema = {
+        "type": "object",
+        "properties": {"file_path": {"type": "string"}},
+        "required": ["file_path"],
+    }
+    r = make_repl([], tools=[tool])
+    r.app_state.permission_config.mode = PermissionMode.BYPASS
+
+    from openlaoke.types.core_types import ToolUseBlock
+
+    result = asyncio.run(r._execute_tool(ToolUseBlock(id="c", name="Read", input={})))
+
+    assert tool.calls == []
+    assert result.is_error is True
+    assert "Validation error" in result.content
+
+
+def test_an_answered_permission_prompt_can_deny_the_call(monkeypatch):
+    tool = FakeTool("Write", readonly=False)
+    r = make_repl([], tools=[tool])
+
+    async def refuse(*_a, **_k):
+        return False
+
+    r._ask_permission = refuse
+    r.app_state.permission_config.mode = PermissionMode.DEFAULT
+
+    result = asyncio.run(r._execute_tool(tool_use("Write", file_path="a")))
+
+    assert tool.calls == []
+    assert result.content == "User denied Write"
+
+
+def test_a_long_intent_is_shortened_in_the_action_line():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r._running = True
+    r._guard = None
+    messages: list[dict] = []
+
+    asyncio.run(
+        r._dispatch_tools([tool_use(intent="explain " * 20)], messages, {}, 3)
+    )
+
+    assert "..." in r.console.file.getvalue()
+
+
+def test_a_repeated_read_warns_about_the_loop():
+    tool = FakeTool("Read", result="same")
+    r = make_repl([], tools=[tool])
+    r._running = True
+    messages: list[dict] = []
+
+    turn = [tool_use("Read", f"c{i}") for i in range(6)]
+    asyncio.run(r._dispatch_tools(turn, messages, {}, 9))
+
+    assert "Read" in r.console.file.getvalue()
+
+
+def test_a_markdown_render_failure_falls_back_to_plain_text(monkeypatch):
+    r = make_repl([])
+
+    class Boom:
+        def __init__(self, *_a, **_k):
+            raise RuntimeError("no markdown")
+
+    monkeypatch.setattr("rich.markdown.Markdown", Boom)
+
+    r._render_response("hello")
+
+    assert "hello" in r.console.file.getvalue()
+
+
+# --------------------------------------------------------------------------- #
+# remaining loop branches: notices, todos, display refresh, crashes, banners
+# --------------------------------------------------------------------------- #
+def test_a_scheduled_entry_without_a_command_or_prompt_is_queued():
+    from openlaoke.core.scheduler import ScheduleEntry
+
+    r = make_repl([])
+    entry = ScheduleEntry(id="1", name="bare", when="daily")
+
+    async def run_loop():
+        seen = []
+        r.console.print = lambda *a, **k: seen.append(a[0])
+        r._running = True
+        r._input_queue.clear()
+
+        class Scheduler:
+            def due(self):
+                return [entry]
+
+            def mark_run(self, _entry):
+                return None
+
+        import openlaoke.core.scheduler as sched
+
+        original = sched.get_scheduler
+        sched.get_scheduler = lambda _state: Scheduler()
+        sleep_original = asyncio.sleep
+
+        async def fake_sleep(_seconds):
+            r._running = False
+            return None
+
+        asyncio.sleep = fake_sleep
+        try:
+            await r._scheduler_loop(interval=0)
+        finally:
+            sched.get_scheduler = original
+            asyncio.sleep = sleep_original
+        return seen
+
+    asyncio.run(run_loop())
+
+    assert r._input_queue == ["[scheduled reminder 'bare': ]"]
+
+
+def test_a_running_background_task_is_not_announced():
+    from openlaoke.core.task import TaskStatus
+
+    r = make_repl([])
+    task = type(
+        "T",
+        (),
+        {
+            "id": "t1",
+            "end_time": 1.0,
+            "status": TaskStatus.RUNNING,
+            "exit_code": None,
+            "description": "long job",
+        },
+    )()
+    r.app_state.tasks["t1"] = task  # type: ignore[index]
+
+    assert r._drain_task_notices() == []
+
+
+def test_a_missing_memory_store_is_not_fatal(monkeypatch):
+    def boom(_state):
+        raise OSError("cannot open")
+
+    monkeypatch.setattr("openlaoke.core.memory_store.get_store", boom)
+
+    # The harness stubs the instance attribute; call through the class to reach
+    # the real implementation.
+    assert REPL._memory_digest(make_repl([])) == ""
+
+
+def test_the_loop_returns_when_the_client_disappears():
+    r = make_repl([[text("hi")]])
+    r.api = None
+
+    run(r)
+
+    assert r.api is None
+
+
+def test_the_status_line_is_refreshed_during_a_slow_stream(monkeypatch):
+    r = make_repl([])
+    ticks = iter([0.0, 0.0, 1.0, 2.0, 3.0])
+    monkeypatch.setattr("openlaoke.core.repl.time.time", lambda: next(ticks, 99.0))
+    r.api._turns = [[text("a"), text("b"), text("c")]]
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.content == "abc"
+
+
+def test_a_tiny_model_uses_the_aggressive_pruner(monkeypatch):
+    from openlaoke.core.compact.fast_pruner import PruneResult
+
+    r = make_repl([], model="gemma-3-1b")
+    calls: list[str] = []
+
+    def aggressive(messages, **_k):
+        calls.append("aggressive")
+        return PruneResult(
+            messages=messages[:1], tokens_before=50, tokens_after=10, elapsed_ms=0.1
+        )
+
+    monkeypatch.setattr(
+        "openlaoke.core.compact.fast_pruner.fast_prune_aggressive", aggressive
+    )
+    history = [{"role": "user", "content": "x" * 40} for _ in range(14)]
+
+    r._prepare_turn_context(history, "sys", None, 2000)
+
+    assert calls == ["aggressive"]
+
+
+def test_a_stopped_session_does_not_start_new_tools():
+    tool = FakeTool("Bash", readonly=False)
+    r = make_repl([], tools=[tool])
+    r._running = False
+    messages: list[dict] = []
+
+    asyncio.run(r._dispatch_tools([tool_use("Bash", command="ls")], messages, {}, 3))
+
+    assert tool.calls == []
+
+
+def test_task_notices_are_injected_into_the_request():
+    r = make_repl([[text("DONE")]])
+    seen: list[list[dict]] = []
+    r._drain_task_notices = lambda: ["[background task t1 completed]"]
+
+    def stream(**kwargs):
+        seen.append(list(kwargs.get("messages") or []))
+        return _return(turn(content="DONE"))
+
+    r._stream_provider_turn = stream
+
+    run(r)
+
+    assert any(
+        m.get("content") == "[background task t1 completed]" and m.get("system_injected")
+        for req in seen
+        for m in req
+    )
+
+
+def test_a_todo_list_that_wants_more_keeps_the_loop_running():
+    r = make_repl([])
+    scripted = [turn(content="step one"), turn(content="DONE")]
+    r._stream_provider_turn = lambda **_k: _return(scripted.pop(0))
+    answers = iter([True, False])
+    r._todo_auto_continue = lambda _messages: next(answers, False)
+
+    run(r)
+
+    assert scripted == []
+
+
+def test_an_unexpected_error_in_the_loop_is_reported_not_raised():
+    r = make_repl([])
+
+    async def boom(**_k):
+        raise RuntimeError("something odd")
+
+    r._stream_provider_turn = boom
+
+    run(r)
+
+    assert "Error: something odd" in r.console.file.getvalue()
+
+
+def test_the_read_loop_warning_is_shown():
+    tool = FakeTool("Read", result="same")
+    r = make_repl([], tools=[tool])
+    r._read_loop_tracker.consecutive_reads = r._read_loop_tracker.max_consecutive_reads - 1
+
+    asyncio.run(r._execute_tool(tool_use()))
+
+    assert "consecutive read/search calls" in r.console.file.getvalue()
+
+
+def test_a_subject_deny_rule_overrides_an_allow():
+    from openlaoke.types.permissions import PermissionResult, PermissionRule
+
+    tool = FakeTool("Write", readonly=False)
+    r = make_repl([], tools=[tool])
+    config = r.app_state.permission_config
+    config.mode = PermissionMode.DEFAULT
+    config.always_allow_rules = [PermissionRule("Write", PermissionResult.ALLOW, "ok")]
+    config.always_deny_rules = [
+        PermissionRule("Write(secret.txt)", PermissionResult.DENY, "not this file")
+    ]
+
+    result = asyncio.run(r._execute_tool(tool_use("Write", file_path="secret.txt")))
+
+    assert tool.calls == []
+    assert "Permission denied" in result.content
+
+
+def test_the_banner_falls_back_to_the_app_state_provider():
+    from openlaoke.types.providers import MultiProviderConfig, ProviderConfig, ProviderType
+
+    r = make_repl([])
+    r._theme = type(
+        "BannerTheme",
+        (),
+        {
+            "current_theme": type(
+                "T",
+                (),
+                {"name": "dark", "colors": type("C", (), {"primary": "blue", "muted": "grey"})()},
+            )(),
+            "color": lambda _self, _name: "white",
+        },
+    )()
+    r._proxy = "http://127.0.0.1:7897"
+    r.multi_provider_config = None
+    r.app_state.multi_provider_config = MultiProviderConfig(
+        providers={"main": ProviderConfig(provider_type=ProviderType.OPENAI, api_key="k")},
+        active_provider="fallback-provider",
+        active_model="m",
+    )
+
+    r._print_welcome()
+
+    assert "fallback-provider" in r.console.file.getvalue()

@@ -1138,18 +1138,28 @@ def test_permission_no_returns_false(tmp_path, monkeypatch) -> None:
 
 
 def test_permission_always_remembers_the_subject(tmp_path, monkeypatch) -> None:
+    from openlaoke.types.core_types import PermissionResult
+
     r = make_repl(tmp_path, ScriptedPrompt([]))
 
     assert answer_permission(monkeypatch, r, "a") is True
-    assert r._is_denied_subject("Write", {"file_path": "note.txt"}) is False
+    assert (
+        r.app_state.permission_config.check_tool_subject("Write", "note.txt")
+        == PermissionResult.ALLOW
+    )
     assert r._approval_subject("Write", {"file_path": "note.txt"}) == "note.txt"
 
 
 def test_permission_never_stores_a_deny_rule(tmp_path, monkeypatch) -> None:
+    from openlaoke.types.core_types import PermissionResult
+
     r = make_repl(tmp_path, ScriptedPrompt([]))
 
     assert answer_permission(monkeypatch, r, "v") is False
-    assert r._is_denied_subject("Write", {"file_path": "note.txt"}) is True
+    assert (
+        r.app_state.permission_config.check_tool_subject("Write", "note.txt")
+        == PermissionResult.DENY
+    )
     assert "Saved permanent deny" in output(r)
 
 
@@ -1182,12 +1192,6 @@ def test_approval_subjects_are_narrow_per_tool(tmp_path) -> None:
     assert r._approval_subject("Read", {"file_path": "a.py"}) == ""
     long_command = "x" * 400
     assert len(r._approval_subject("Bash", {"command": long_command})) == 200
-
-
-def test_denied_subject_without_a_subject_is_false(tmp_path) -> None:
-    r = make_repl(tmp_path, ScriptedPrompt([]))
-
-    assert r._is_denied_subject("Read", {"file_path": "a.py"}) is False
 
 
 # --------------------------------------------------------------------------- #
@@ -1701,3 +1705,235 @@ def test_verify_file_written_survives_an_unreadable_file(tmp_path, monkeypatch) 
 
     assert "Verified" in output(r)
     assert "0 lines" in output(r)
+
+
+# --------------------------------------------------------------------------- #
+# scheduler entries, skill descriptions, submit_text, model switch details
+# --------------------------------------------------------------------------- #
+def test_a_scheduled_prompt_with_a_bot_reply_uses_the_reply(tmp_path, monkeypatch) -> None:
+    from openlaoke.core.scheduler import ScheduleEntry
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    entry = ScheduleEntry(id="1", name="standup", when="daily", prompt="summarise")
+
+    class Scheduler:
+        def due(self):
+            return [entry]
+
+        def mark_run(self, _entry):
+            return None
+
+    async def sleep(_seconds):
+        r._running = False
+
+    async def bot_routine(self, _entry):
+        return "[bot said: nothing to report]"
+
+    monkeypatch.setattr("openlaoke.core.scheduler.get_scheduler", lambda _state: Scheduler())
+    monkeypatch.setattr("asyncio.sleep", sleep)
+    monkeypatch.setattr(REPL, "_run_bot_routine", bot_routine)
+    r._running = True
+
+    run(r._scheduler_loop(interval=0))
+
+    assert "bot said: nothing to report" in output(r)
+    assert r._input_queue == []
+
+
+def test_a_scheduled_prompt_without_a_bot_is_queued(tmp_path, monkeypatch) -> None:
+    from openlaoke.core.scheduler import ScheduleEntry
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    entry = ScheduleEntry(id="1", name="standup", when="daily", prompt="summarise")
+
+    class Scheduler:
+        def due(self):
+            return [entry]
+
+        def mark_run(self, _entry):
+            return None
+
+    async def sleep(_seconds):
+        r._running = False
+
+    async def no_bot(self, _entry):
+        return None
+
+    monkeypatch.setattr("openlaoke.core.scheduler.get_scheduler", lambda _state: Scheduler())
+    monkeypatch.setattr("asyncio.sleep", sleep)
+    monkeypatch.setattr(REPL, "_run_bot_routine", no_bot)
+    r._running = True
+
+    run(r._scheduler_loop(interval=0))
+
+    assert r._input_queue == ["[scheduled reminder 'standup': summarise]"]
+
+
+def test_a_long_skill_description_is_shortened(tmp_path) -> None:
+    skills = Path.home() / ".openlaoke" / "skills" / "verbose"
+    skills.mkdir(parents=True)
+    (skills / "SKILL.md").write_text(
+        f"---\nname: verbose\ndescription: {'d' * 150}\n---\n\nBody.\n", encoding="utf-8"
+    )
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    feed(r, PromptResult(action=PromptAction.TEXT, text="/verbose"))
+    run(r._handle_input())
+
+    assert "..." in output(r)
+
+
+def test_a_command_can_submit_text(tmp_path, monkeypatch) -> None:
+    from openlaoke.commands.base import CommandResult
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    chatted: list[str] = []
+
+    async def chat(self, text):
+        chatted.append(text)
+
+    monkeypatch.setattr(REPL, "_handle_chat", chat)
+
+    class SubmitCommand:
+        async def execute(self, _ctx):
+            return CommandResult(message="expanded", submit_text="do it")
+
+    monkeypatch.setattr("openlaoke.core.repl.get_command", lambda _name: SubmitCommand())
+
+    asyncio.run(r._handle_command("prompt", "x"))
+
+    assert chatted == ["do it"]
+
+
+def test_a_model_switch_without_any_config_is_ignored(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]), with_config=False)
+
+    r._handle_model_switch("main/gpt-4o")
+
+    assert output(r) == ""
+
+
+def test_a_model_switch_with_an_api_client_updates_it(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    api = FakeAPI()
+    r.api = api
+    cfg = MultiProviderConfig(
+        providers={
+            "main": ProviderConfig(
+                provider_type=ProviderType.OPENAI,
+                api_key="k",
+                base_url="https://api.example.com/v1",
+                models=["a", "b"],
+                default_model="a",
+            )
+        },
+        active_provider="main",
+        active_model="a",
+    )
+    r.app_state.multi_provider_config = cfg
+    r.multi_provider_config = cfg
+
+    r._handle_model_switch("main/b")
+
+    assert api.config is cfg
+    assert cfg.active_model == "b"
+
+
+# --------------------------------------------------------------------------- #
+# shutdown: signal handling and task cleanup
+# --------------------------------------------------------------------------- #
+def test_the_signal_handler_runs_cleanup_and_exits(tmp_path, monkeypatch) -> None:
+    import signal
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    handlers: dict[int, Any] = {}
+    exits: list[int] = []
+    collected: list[bool] = []
+
+    monkeypatch.setattr("signal.signal", lambda sig, fn: handlers.__setitem__(sig, fn))
+    monkeypatch.setattr("os._exit", lambda code: exits.append(code))
+    monkeypatch.setattr("gc.collect", lambda: collected.append(True) or 0)
+
+    r._register_cleanup()
+
+    assert set(handlers) == {signal.SIGTERM, signal.SIGINT}
+    handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    assert exits == [0]
+    assert collected == [True]
+
+
+def test_ctrl_c_during_a_turn_interrupts_it_and_keeps_the_repl(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import signal
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    handlers: dict[int, Any] = {}
+    exits: list[int] = []
+    monkeypatch.setattr("signal.signal", lambda sig, fn: handlers.__setitem__(sig, fn))
+    monkeypatch.setattr("os._exit", lambda code: exits.append(code))
+
+    async def scenario() -> None:
+        agent = asyncio.create_task(asyncio.sleep(3600))
+        r._agent_task = agent
+        r._register_cleanup()
+
+        handlers[signal.SIGINT](signal.SIGINT, None)
+
+        assert r._interrupt_requested is True
+        assert agent.cancelled() or agent.cancelling()
+        agent.cancel()
+        with __import__("contextlib").suppress(asyncio.CancelledError):
+            await agent
+
+    run(scenario())
+
+    assert exits == []
+
+
+def test_ctrl_c_without_a_running_turn_exits(tmp_path, monkeypatch) -> None:
+    import signal
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    handlers: dict[int, Any] = {}
+    exits: list[int] = []
+    monkeypatch.setattr("signal.signal", lambda sig, fn: handlers.__setitem__(sig, fn))
+    monkeypatch.setattr("os._exit", lambda code: exits.append(code))
+    r._agent_task = None
+    r._register_cleanup()
+
+    handlers[signal.SIGINT](signal.SIGINT, None)
+
+    assert exits == [0]
+
+
+def test_leaving_the_repl_cancels_the_background_tasks(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    r = make_repl(tmp_path, ScriptedPrompt([PromptResult(action=PromptAction.EXIT)]))
+    cancelled: list[bool] = []
+
+    async def scenario() -> None:
+        task = asyncio.create_task(asyncio.sleep(3600))
+        r._active_tasks.add(task)
+        try:
+            await r.run()
+        finally:
+            cancelled.append(task.cancelled() or task.cancelling())
+            task.cancel()
+            with __import__("contextlib").suppress(asyncio.CancelledError):
+                await task
+
+    run(scenario())
+
+    assert cancelled == [True]
+
+
+def test_mcp_start_is_skipped_without_servers(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.app_config.enable_mcp = True
+    r.app_config.mcp_servers = {}
+
+    run(r._start_mcp())
+
+    assert r._mcp_runtime.clients == {}

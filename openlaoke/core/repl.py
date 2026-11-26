@@ -330,7 +330,12 @@ class REPL:
                     notice = f"[scheduled reminder '{entry.name}': {entry.prompt}]"
                     self._input_queue.append(notice)
                 scheduler.mark_run(entry)
-                self.console.print(f"  [{self._c('muted')}]{notice}[/]")
+                # The notice can carry a bot's own words, brackets included, so
+                # it is escaped: unescaped, Rich reads "[...]" as markup and the
+                # reply silently disappears from the line.
+                from rich.markup import escape
+
+                self.console.print(f"  [{self._c('muted')}]{escape(notice)}[/]")
 
     async def _stop_mcp(self) -> None:
         with contextlib.suppress(Exception):
@@ -1550,15 +1555,6 @@ class REPL:
                 is_error=True,
             )
 
-        if perm_result == PermissionResult.ASK and self._is_denied_subject(
-            tool_use.name, tool_input
-        ):
-            return ToolResultBlock(
-                tool_use_id=tool_use.id,
-                content=f"Permission denied for {tool_use.name} (subject deny rule)",
-                is_error=True,
-            )
-
         if perm_result == PermissionResult.ASK and not self.app_state.auto_accept:
             approved = await self._ask_permission(tool_use.name, tool_input, tool)
             if not approved:
@@ -1821,18 +1817,6 @@ class REPL:
             path = str(tool_input.get("file_path", ""))
             return path[:200]
         return ""
-
-    def _is_denied_subject(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
-        """True when a deny_subject rule stored via 'never' matches this call."""
-        subject = self._approval_subject(tool_name, tool_input)
-        if not subject:
-            return False
-        from openlaoke.types.core_types import PermissionResult
-
-        return (
-            self.app_state.permission_config.check_tool_subject(tool_name, subject)
-            == PermissionResult.DENY
-        )
 
     def _tool_action_line(self, tu: ToolUseBlock) -> str:
         """One compact, informative line for a tool call about to run.
