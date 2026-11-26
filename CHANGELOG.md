@@ -39,6 +39,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `register_all_tools()`.
 
 ### Fixed
+- **The model picker started on the wrong row** (`core/prompt_input.py`):
+  `selected[0] = 0` meant Ctrl+P then Enter relied on the list having been sorted
+  active-first. It now starts on the model in use.
+- **A provider's default model could be missing from the picker**
+  (`core/prompt_input.py`): the condition that was meant to add it could not be
+  true unless the model list was empty, so a stale list hid the model the provider
+  would actually use.
 - **`/share` left a plaintext copy of the conversation behind**
   (`commands/pi_commands.py`): the transcript uploaded to the gist stayed in
   `~/.openlaoke/`. It is deleted after the upload attempt, on both paths.
