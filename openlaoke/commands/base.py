@@ -421,7 +421,11 @@ class ModelCommand(SlashCommand):
             provider_name = cur_provider
         if not provider_name:
             return CommandResult(
-                success=False, message="No provider selected. Use /model add or /model <provider>."
+                success=False,
+                message=(
+                    f"No provider selected for '{args}'. "
+                    "Use /model add or /model <provider>/<model>."
+                ),
             )
 
         models = await self._refresh(config, provider_name)
@@ -593,8 +597,12 @@ class CompactCommand(SlashCommand):
         result = fast_prune(ctx.app_state.messages)
         pruned = getattr(result, "messages", None)
         if pruned is not None:
+            # Copy first: when nothing needed pruning the pruner returns the
+            # live history list itself, and clear()-then-extend() on that same
+            # object would leave the conversation empty.
+            replacement = list(pruned)
             ctx.app_state.messages.clear()
-            ctx.app_state.messages.extend(pruned)
+            ctx.app_state.messages.extend(replacement)
         after = len(ctx.app_state.messages)
         return CommandResult(message=f"Compacted context: {before} -> {after} message(s).")
 
