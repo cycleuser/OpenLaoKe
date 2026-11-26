@@ -134,7 +134,9 @@ class SessionManager:
                 model=model,
                 persist_path=path,
             )
-            app_state.session_id = data.get("session_id", "")
+            app_state.session_id = data.get("session_id") or os.path.splitext(
+                os.path.basename(path)
+            )[0]
 
             for msg_data in data.get("messages", []):
                 msg = _message_from_dict(msg_data)
