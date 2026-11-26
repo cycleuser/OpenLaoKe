@@ -1,8 +1,14 @@
-"""System prompt builder for the AI model.
+"""System prompt builder for the headless and bot paths.
 
-Preferred path: use ``CacheGuard`` from ``openlaoke.core.cache_guard`` for
-cache-friendly (byte-stable) prompt management.  The functions below are kept
-for backward compatibility and for paths that don't have a session-scoped guard.
+Two builders live here:
+
+* :func:`build_system_prompt` — a full prompt assembled from the static rules,
+  the harness mode, the environment and any session extras. The interactive REPL
+  does not use it: it freezes a prompt through ``CacheGuard`` so the prefix stays
+  byte-stable. The non-interactive run (``entrypoints/cli.py``) and bot mode do
+  use it, once per run, which is why it is not dead code.
+* :func:`build_compact_system_prompt` — a thin delegation to CacheGuard's small
+  model prompt.
 """
 
 from __future__ import annotations
@@ -22,9 +28,9 @@ def build_system_prompt(
 ) -> str:
     """Build the system prompt sent to the model.
 
-    .. deprecated::
-        Prefer ``CacheGuard.system_prompt`` for cache-stable builds.
-        This function rebuilds every call, breaking prefix cache.
+    Rebuilt on every call, which breaks a cached prefix: the interactive REPL
+    therefore goes through ``CacheGuard.system_prompt`` instead, and this is used
+    by the one-shot paths that build a prompt once per run.
     """
     from openlaoke.core.cache_guard import SYSTEM_PROMPT_STATIC
 
@@ -59,15 +65,6 @@ def build_system_prompt(
     suffix = app_state.session_config.system_prompt_suffix
     if suffix:
         parts.append(f"\n## Additional Instructions\n{suffix}")
-
-    if hasattr(app_state, "knowledge_loader"):
-        try:
-            query = world_context or app_state.session_config.model
-            knowledge = app_state.knowledge_loader.format_for_prompt(query)
-            if knowledge:
-                parts.append(f"\n{knowledge}")
-        except Exception:
-            pass
 
     if hasattr(app_state, "language") and app_state.language != "en":
         from openlaoke.core.i18n import get_language_instruction
