@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -65,11 +66,14 @@ def isolated_home(tmp_path, monkeypatch):
     skill_system._global_registry = None
 
 
-def make_repl(tmp_path: Path, prompt: ScriptedPrompt, *, with_config: bool = True) -> REPL:
+def make_repl(
+    tmp_path: Path, prompt: ScriptedPrompt, *, with_config: bool = True, model: str = "gpt-4o"
+) -> REPL:
     state = create_app_state(cwd=str(tmp_path))
     r = REPL(state)
     r.console = Console(file=StringIO(), force_terminal=False, width=120, color_system=None)
     r._prompt_manager = prompt  # type: ignore[assignment]
+    state.session_config.model = model
     r.app_config = AppConfig()
     r.app_config.enable_mcp = False
     r.app_config.enable_scheduler = False
@@ -80,12 +84,12 @@ def make_repl(tmp_path: Path, prompt: ScriptedPrompt, *, with_config: bool = Tru
                     provider_type=ProviderType.OPENAI,
                     api_key="sk-test",
                     base_url="https://api.example.com/v1",
-                    models=["gpt-4o"],
-                    default_model="gpt-4o",
+                    models=[model],
+                    default_model=model,
                 )
             },
             active_provider="main",
-            active_model="gpt-4o",
+            active_model=model,
         )
         r.multi_provider_config = config
         state.multi_provider_config = config
@@ -1395,3 +1399,305 @@ def test_scheduler_loop_runs_due_entries(tmp_path, monkeypatch) -> None:
 
 async def _fast_sleep(_seconds: float) -> None:
     return None
+
+
+# --------------------------------------------------------------------------- #
+# runtime context injection
+# --------------------------------------------------------------------------- #
+
+
+def patch_context_limit(monkeypatch, limit: int | None = 128000):
+    import openlaoke.core.model_discovery as discovery
+
+    async def fake(provider, model):
+        return limit
+
+    monkeypatch.setattr(discovery, "get_effective_context_limit", fake)
+
+
+def test_runtime_context_bundles_every_block(tmp_path, monkeypatch) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r._cache_guard.ensure_session_context = lambda model="": "SESSION CONTEXT"
+    r._world_sensor = SimpleNamespace(to_context_block=lambda: "world state")
+    r._memory_digest = lambda: "<memory-index>\n- m1 note\n</memory-index>"
+    r.api = FakeAPI(r.multi_provider_config)  # the context limit needs a live client
+    patch_context_limit(monkeypatch, 64000)
+    messages: list[dict] = [{"role": "user", "content": "hello"}]
+
+    limit, size = run(r._inject_runtime_context(messages))
+
+    assert limit == 64000
+    assert size in ("tiny", "small", "medium", "large", "unknown")
+    injected = [m for m in messages if m.get("system_injected")]
+    assert injected
+    body = injected[0]["content"]
+    assert "SESSION CONTEXT" in body
+    assert "<sc:context>world state</sc:context>" in body
+    assert "memory-index" in body
+
+
+def test_runtime_context_is_skipped_when_nothing_to_add(tmp_path, monkeypatch) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r._cache_guard.ensure_session_context = lambda model="": ""
+    r._memory_digest = lambda: ""
+    patch_context_limit(monkeypatch, None)
+    messages: list[dict] = [{"role": "user", "content": "hi"}]
+
+    limit, _size = run(r._inject_runtime_context(messages))
+
+    assert limit is None
+    # A generic small-model guidance block may still be added; the session and
+    # memory blocks must not be.
+    injected = " ".join(m.get("content", "") for m in messages if m.get("system_injected"))
+    assert "SESSION CONTEXT" not in injected
+    assert "memory-index" not in injected
+
+
+def ollama_repl(tmp_path, model: str) -> REPL:
+    r = make_repl(tmp_path, ScriptedPrompt([]), model=model)
+    local = MultiProviderConfig(
+        providers={
+            "local": ProviderConfig(
+                provider_type=ProviderType.OLLAMA, base_url="http://localhost:11434/v1"
+            )
+        },
+        active_provider="local",
+        active_model=model,
+    )
+    r.app_state.multi_provider_config = local
+    return r
+
+
+def test_runtime_context_adds_an_ollama_tool_hint_for_a_large_model(tmp_path, monkeypatch) -> None:
+    r = ollama_repl(tmp_path, "qwen3.5:7b")
+    r._cache_guard.ensure_session_context = lambda model="": ""
+    r._memory_digest = lambda: ""
+    patch_context_limit(monkeypatch, None)
+    messages: list[dict] = [{"role": "user", "content": "please refactor the parser module"}]
+
+    run(r._inject_runtime_context(messages))
+
+    hints = [m for m in messages if "tool_call" in m.get("content", "")]
+    assert hints
+
+
+def test_runtime_context_adds_a_one_line_hint_for_a_tiny_model(tmp_path, monkeypatch) -> None:
+    r = ollama_repl(tmp_path, "lfm3-1.7b")
+    r._cache_guard.ensure_session_context = lambda model="": ""
+    r._memory_digest = lambda: ""
+    patch_context_limit(monkeypatch, None)
+    messages: list[dict] = [{"role": "user", "content": "write a python file that prints hi"}]
+
+    run(r._inject_runtime_context(messages))
+
+    hints = [m["content"] for m in messages if m.get("system_injected")]
+    assert any("Use ONE tool now" in hint for hint in hints)
+
+
+def test_a_short_conversational_turn_gets_no_tool_hint(tmp_path, monkeypatch) -> None:
+    r = ollama_repl(tmp_path, "qwen3.5:7b")
+    r._cache_guard.ensure_session_context = lambda model="": ""
+    r._memory_digest = lambda: ""
+    patch_context_limit(monkeypatch, None)
+    messages: list[dict] = [{"role": "user", "content": "thanks"}]
+
+    run(r._inject_runtime_context(messages))
+
+    assert not [m for m in messages if "tool_call" in m.get("content", "")]
+
+
+# --------------------------------------------------------------------------- #
+# streaming display and thinking
+# --------------------------------------------------------------------------- #
+
+
+def test_streaming_display_shows_a_spinner_and_meta(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    status = r._build_streaming_display("hello world", tokens=12, tps=34.0, elapsed=1.0)
+
+    text = status.plain
+    assert "hello world" in text
+    assert "12 tok" in text
+    assert "34 t/s" in text
+
+
+def test_streaming_display_without_a_measured_rate(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    text = r._build_streaming_display("partial", tokens=0, tps=0.0, elapsed=0.5).plain
+
+    assert "tok" not in text
+    assert "t/s" not in text
+    assert "partial" in text
+
+
+def test_empty_stream_falls_back_to_a_placeholder(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    assert "streaming…" in r._build_streaming_display("", 0, 0.0, 0.0).plain
+    assert "thinking…" in r._build_streaming_display("", 0, 0.0, 0.0, reasoning=True).plain
+
+
+def test_long_streams_are_tailed_to_the_width(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.console.width = 60
+
+    text = r._build_streaming_display("x" * 5000, tokens=1, tps=1.0, elapsed=2.0).plain
+
+    assert len(text) < 120
+    assert text.strip().startswith("⠋") or "…" in text
+
+
+def test_inline_thinking_hides_the_body_when_disabled(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.app_state.thinking_enabled = False
+    r._thinking_duration = 1200.0
+
+    r._display_thinking_inline("line one\nline two")
+
+    assert "Thought: 1200ms" in output(r)
+
+
+def test_inline_thinking_shows_at_most_five_lines(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.app_state.thinking_enabled = True
+
+    r._display_thinking_inline("\n".join(f"line {i}" for i in range(8)))
+
+    text = output(r)
+    assert "line 4" in text
+    assert "line 7" not in text
+    assert "3 more lines" in text
+
+
+def test_full_thinking_view(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r._last_thinking = "first\nsecond"
+    r._thinking_duration = 30.0
+
+    r._show_thinking_full()
+
+    text = output(r)
+    assert "Thought (2 lines" in text
+    assert "second" in text
+    assert "── end ──" in text
+
+
+def test_full_thinking_view_without_content(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r._last_thinking = ""
+
+    r._show_thinking_full()
+
+    assert "No thinking content" in output(r)
+
+
+def test_render_response_prints_markdown(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    r._render_response("## Heading\n\nSome **bold** text.")
+
+    assert "Heading" in output(r)
+
+
+def test_render_response_ignores_blank_content(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    r._render_response("   \n  ")
+
+    assert output(r) == ""
+
+
+# --------------------------------------------------------------------------- #
+# welcome banner variants
+# --------------------------------------------------------------------------- #
+
+
+def test_welcome_lists_installed_skills(tmp_path) -> None:
+    skills = Path.home() / ".openlaoke" / "skills"
+    for index in range(7):
+        folder = skills / f"skill{index}"
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(f"---\nname: skill{index}\n---\nBody", encoding="utf-8")
+    from openlaoke.core.skill_system import rescan_skills
+
+    rescan_skills()
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    r._print_welcome()
+
+    text = output(r)
+    assert "7" in text
+    assert "(2 more)" in text
+
+
+def test_welcome_marks_local_and_insomnia_modes(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.app_state.local_mode = True
+    r.app_state.insomnia_mode = True
+    r._proxy = "http://127.0.0.1:7897"
+
+    r._print_welcome()
+
+    text = output(r)
+    assert "Proxy: http://127.0.0.1:7897" in text
+    assert "Insomnia" in text
+
+
+def test_welcome_without_a_config_says_unknown(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.multi_provider_config = None
+    r.app_state.multi_provider_config = None
+
+    r._print_welcome()
+
+    assert "unknown" in output(r)
+
+
+# --------------------------------------------------------------------------- #
+# small helper edges
+# --------------------------------------------------------------------------- #
+
+
+def test_brace_parser_ignores_a_call_without_pairs(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    assert r._parse_brace_tool_calls("Write{no pairs here}") == []
+
+
+def test_ollama_detection_without_an_active_provider(tmp_path) -> None:
+    from openlaoke.types.providers import MultiProviderConfig
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    r.app_state.multi_provider_config = MultiProviderConfig(providers={}, active_provider="")
+
+    assert r._is_ollama_provider() is False
+
+
+def test_a_tool_call_payload_is_not_a_plan(tmp_path) -> None:
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+
+    assert r._is_plan_response("I will now <tool_call>{}</tool_call>") is False
+
+
+def test_verify_file_written_survives_an_unreadable_file(tmp_path, monkeypatch) -> None:
+    from openlaoke.types.core_types import ToolResultBlock
+
+    r = make_repl(tmp_path, ScriptedPrompt([]))
+    (tmp_path / "a.txt").write_text("x\n", encoding="utf-8")
+    import builtins
+
+    real_open = builtins.open
+
+    def guarded(file, *args, **kwargs):
+        if str(file).endswith("a.txt"):
+            raise OSError("cannot read")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", guarded)
+
+    r._verify_file_written({"file_path": "a.txt"}, ToolResultBlock(tool_use_id="c", content="ok"))
+
+    assert "Verified" in output(r)
+    assert "0 lines" in output(r)
