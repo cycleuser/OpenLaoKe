@@ -319,7 +319,9 @@ class ShareCommand(SlashCommand):
             "model": ctx.app_state.session_config.model,
             "messages": [m.to_dict() for m in ctx.app_state.messages],
         }
-        tmp = Path(os.path.expanduser("~/.openlaoke")) / f"share_{ctx.app_state.session_id}.json"
+        # Keep the upload scratch file beside the rest of the session data
+        # (_OPENLAOKE_DIR) rather than rebuilding the path from $HOME.
+        tmp = _OPENLAOKE_DIR / f"share_{ctx.app_state.session_id}.json"
         _write_json(tmp, data)
         try:
             result = await asyncio.to_thread(
@@ -338,6 +340,11 @@ class ShareCommand(SlashCommand):
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return CommandResult(success=False, message=f"Share failed: {exc}")
+        finally:
+            # The uploaded copy is the whole conversation; leaving it behind in
+            # ~/.openlaoke would keep a plaintext transcript around for good.
+            with suppress(OSError):
+                tmp.unlink()
         if result.returncode != 0:
             return CommandResult(success=False, message=f"Share failed: {result.stderr.strip()}")
         return CommandResult(message=f"Shared as secret gist: {result.stdout.strip()}")
@@ -451,7 +458,11 @@ class LoginCommand(SlashCommand):
             return CommandResult(success=False, message=f"Unknown provider: {key}")
         if len(parts) < 2 or not parts[1].strip():
             return CommandResult(
-                message=f"Provider {key} configured. Usage: /login {key} <api-key>"
+                success=False,
+                message=(
+                    f"No API key given, so nothing was saved for {key}. "
+                    f"Usage: /login {key} <api-key>"
+                ),
             )
         target.api_key = parts[1].strip()
         config.providers.active_provider = key
