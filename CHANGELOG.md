@@ -118,6 +118,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`tools/browser_tool.py`): it passed `driver.title` to `asyncio.to_thread`,
   but `title` is a property, so the callable it handed the thread raised
   `TypeError: 'str' object is not callable`.
+- **A hung MCP server broke the turn instead of returning an error**
+  (`core/mcp_client.py`): the read timeout escaped `_request` as a bare
+  `TimeoutError`, which `MCPTool.call` does not catch (it catches `MCPError`), so
+  a server that accepted the request and never answered produced an unhandled
+  exception mid-turn rather than an `is_error` result.
 - **`async` and `extern "C"` Rust functions were invisible to the symbol index**
   (`utils/symbols.py`): the declaration regex accepted `pub`, `unsafe` and
   `const` but not `async`, so a `grep` hit inside an async Rust function was

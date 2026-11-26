@@ -173,7 +173,16 @@ class MCPStdioClient:
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     raise MCPError(f"{self.config.name}: '{method}' timed out")
-                line = await asyncio.wait_for(self._read_line(), timeout=remaining)
+                try:
+                    line = await asyncio.wait_for(self._read_line(), timeout=remaining)
+                except TimeoutError as exc:
+                    # A server that hangs must look like any other protocol
+                    # failure: callers catch MCPError, and an escaping
+                    # TimeoutError turned a stuck server into a broken turn.
+                    raise MCPError(
+                        f"{self.config.name}: '{method}' timed out after "
+                        f"{self.config.timeout:g}s"
+                    ) from exc
                 if line is None:
                     raise MCPError(f"{self.config.name}: connection closed during '{method}'")
                 try:
