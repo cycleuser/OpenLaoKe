@@ -317,6 +317,17 @@ def test_anthropic_body_carries_thinking_and_omits_default_temperature() -> None
     assert body["tools"] == TOOLS
 
 
+def test_anthropic_body_forwards_a_non_default_temperature() -> None:
+    client = client_for(provider(ProviderType.ANTHROPIC))
+    body = client._build_anthropic_body(
+        "model-x", [{"role": "user", "content": "hi"}], None, 512, 0.2, 0
+    )
+
+    assert body["temperature"] == 0.2
+    assert "tools" not in body
+    assert "thinking" not in body
+
+
 def test_openai_body_maps_thinking_budget_to_reasoning_effort() -> None:
     client = client_for(provider(ProviderType.OPENAI))
     messages = [{"role": "user", "content": "hi"}]
@@ -645,19 +656,28 @@ def test_cache_markers_are_skipped_for_a_named_non_anthropic_family() -> None:
     assert isinstance(marked[0]["content"], list)
 
 
-def test_detect_provider_type_from_a_base_url() -> None:
-    assert MultiProviderClient.detect_provider_type("https://api.deepseek.com/v1") == (
-        ProviderType.OPENAI_COMPATIBLE
-    )
-    assert MultiProviderClient.detect_provider_type("https://api.anthropic.com") == (
-        ProviderType.ANTHROPIC
-    )
-    assert MultiProviderClient.detect_provider_type("http://localhost:11434/v1") == (
-        ProviderType.OLLAMA
-    )
-    assert MultiProviderClient.detect_provider_type("http://unknown.example.com/v1") == (
-        ProviderType.OPENAI_COMPATIBLE
-    )
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://api.deepseek.com/v1", ProviderType.OPENAI_COMPATIBLE),
+        ("https://api.anthropic.com", ProviderType.ANTHROPIC),
+        ("https://claude-proxy.example.com/v1", ProviderType.ANTHROPIC),
+        ("https://api.openai.com/v1", ProviderType.OPENAI),
+        ("https://openrouter.ai/api/v1", ProviderType.OPENAI),
+        ("http://localhost:11434/v1", ProviderType.OLLAMA),
+        ("http://127.0.0.1:1234/v1", ProviderType.LM_STUDIO),
+        ("http://lm-studio.local/v1", ProviderType.LM_STUDIO),
+        ("https://api.mistral.ai/v1", ProviderType.MISTRAL),
+        ("https://api.groq.com/openai/v1", ProviderType.GROQ),
+        ("https://generativelanguage.googleapis.com/v1beta", ProviderType.GOOGLE),
+        ("https://api.x.ai/v1", ProviderType.XAI),
+        ("http://unknown.example.com/v1", ProviderType.OPENAI_COMPATIBLE),
+        # Matching is case-insensitive because the URL is lowercased first.
+        ("HTTPS://API.OPENAI.COM/v1", ProviderType.OPENAI),
+    ],
+)
+def test_detect_provider_type_from_a_base_url(url: str, expected: ProviderType) -> None:
+    assert MultiProviderClient.detect_provider_type(url) == expected
 
 
 def test_is_local_url_is_exported_consistently() -> None:
@@ -775,3 +795,255 @@ def test_base_url_uses_the_provider_env_override(
         client._get_base_url(provider(provider_type, base_url="https://explicit/v1"))
         == "https://explicit/v1"
     )
+
+
+# --------------------------------------------------------------------------- #
+# per-provider defaults, headers and client plumbing
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "provider_type,expected",
+    [
+        (ProviderType.OPENAI, "https://api.openai.com/v1"),
+        (ProviderType.DEEPSEEK, "https://api.deepseek.com/v1"),
+        (ProviderType.OLLAMA_CLOUD, "https://ollama.com/v1"),
+        (ProviderType.MINIMAX, "https://api.minimaxi.com/v1"),
+        (ProviderType.ALIYUN_CODING_PLAN, "https://coding.dashscope.aliyuncs.com/v1"),
+        (ProviderType.GOOGLE, "https://generativelanguage.googleapis.com/v1beta"),
+        (ProviderType.XAI, "https://api.x.ai/v1"),
+        (ProviderType.MISTRAL, "https://api.mistral.ai/v1"),
+        (ProviderType.GROQ, "https://api.groq.com/openai/v1"),
+        (ProviderType.CEREBRAS, "https://api.cerebras.ai/v1"),
+        (ProviderType.COHERE, "https://api.cohere.ai/v2"),
+        (ProviderType.DEEPINFRA, "https://api.deepinfra.com/v1/openai"),
+        (ProviderType.TOGETHERAI, "https://api.together.xyz/v1"),
+        (ProviderType.PERPLEXITY, "https://api.perplexity.ai"),
+        (ProviderType.OPENROUTER, "https://openrouter.ai/api/v1"),
+        (ProviderType.GITHUB_COPILOT, "https://api.githubcopilot.com"),
+        (ProviderType.OPENCODE, "https://opencode.ai/zen/v1"),
+        (ProviderType.OPENAI_COMPATIBLE, "https://api.openai.com/v1"),
+    ],
+)
+def test_each_provider_falls_back_to_its_own_default_url(
+    provider_type: ProviderType, expected: str
+) -> None:
+    client = client_for()
+    bare = provider(provider_type, base_url="")
+
+    assert client._get_base_url(bare) == expected
+
+
+def test_a_bare_base_url_env_var_overrides_the_default(monkeypatch) -> None:
+    monkeypatch.setenv("GROQ_BASE_URL", "https://proxy.internal/groq")
+    client = client_for()
+
+    assert client._get_base_url(provider(ProviderType.GROQ, base_url="")) == (
+        "https://proxy.internal/groq"
+    )
+
+
+def test_an_explicit_base_url_beats_every_default(monkeypatch) -> None:
+    monkeypatch.setenv("GROQ_BASE_URL", "https://proxy.internal/groq")
+    client = client_for()
+
+    assert client._get_base_url(provider(ProviderType.GROQ)) == "https://api.example.com/v1"
+
+
+def test_headers_carry_the_key(monkeypatch) -> None:
+    client = client_for()
+
+    headers = client._build_headers(provider(ProviderType.OPENAI))
+
+    assert headers["Authorization"] == "Bearer sk-test"
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_the_user_agent_can_be_overridden_by_env(monkeypatch) -> None:
+    from openlaoke.core.multi_provider_api import _default_http_headers
+
+    monkeypatch.setenv("OPENLAOKE_HTTP_USER_AGENT", "openlaoke-test/1")
+
+    assert _default_http_headers()["User-Agent"] == "openlaoke-test/1"
+
+
+def test_a_required_api_key_is_enforced() -> None:
+    client = client_for()
+
+    with pytest.raises(ValueError, match="API key required"):
+        client._build_headers(provider(ProviderType.COHERE, api_key=""))
+
+
+def test_the_http_client_is_built_once_and_closed(monkeypatch) -> None:
+    client = client_for()
+    created: list[Any] = []
+
+    import httpx
+
+    real_client = httpx.AsyncClient
+
+    class Recorder(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, **kwargs: Any) -> None:
+            created.append(kwargs)
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr("openlaoke.core.multi_provider_api.httpx.AsyncClient", Recorder)
+
+    first = client._get_client()
+    second = client._get_client()
+
+    assert first is second
+    assert len(created) == 1
+    assert created[0]["trust_env"] is False
+
+    import asyncio
+
+    asyncio.run(client.close())
+    assert client._client is None
+
+
+def test_an_empty_proxy_setting_means_no_proxy(monkeypatch) -> None:
+    client = MultiProviderClient(
+        MultiProviderConfig(providers={"main": provider()}, active_provider="main"),
+        proxy="",
+    )
+    seen: list[Any] = []
+
+    import httpx
+
+    real_client = httpx.AsyncClient
+
+    class Recorder(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, **kwargs: Any) -> None:
+            seen.append(kwargs.get("proxy"))
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr("openlaoke.core.multi_provider_api.httpx.AsyncClient", Recorder)
+
+    client._get_client()
+
+    assert seen == [None]
+
+
+def test_retry_backoff_only_covers_retryable_statuses() -> None:
+    client = client_for()
+
+    assert client._retry_with_backoff(404, 0) == (False, 0)
+    assert client._retry_with_backoff(200, 0) == (False, 0)
+
+    retry, delay = client._retry_with_backoff(429, 0)
+    assert retry is True
+    assert delay > 0
+
+    _retry, capped = client._retry_with_backoff(429, 9)
+    # The base delay is capped at 30s; the jitter added on top can push the
+    # actual sleep slightly past it.
+    assert 30.0 <= capped <= 30.0 * 1.3
+    assert capped >= delay
+
+
+def test_health_check_reports_each_provider_state(monkeypatch) -> None:
+    import asyncio
+
+    import httpx
+
+    config = MultiProviderConfig(
+        providers={
+            "local": provider(ProviderType.OLLAMA, is_local=True),
+            "unconfigured": provider(ProviderType.OPENAI, api_key=""),
+            "good": provider(ProviderType.OPENAI, base_url="https://ok.example.com/v1"),
+            "broken": provider(ProviderType.OPENAI, base_url="https://bad.example.com/v1"),
+        },
+        active_provider="good",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "bad.example.com" in str(request.url):
+            raise httpx.ConnectError("refused")
+        return httpx.Response(200, json={"data": []})
+
+    real_client = httpx.AsyncClient
+
+    def factory(**kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(**kwargs)
+
+    monkeypatch.setattr("openlaoke.core.multi_provider_api.httpx.AsyncClient", factory)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    results = asyncio.run(MultiProviderClient.health_check(config))
+
+    assert results["local"]["ok"] is True
+    assert results["local"]["note"] == "local"
+    assert results["unconfigured"]["note"] == "not configured"
+    assert results["good"]["ok"] is True
+    assert results["good"]["status"] == 200
+    assert results["broken"]["ok"] is False
+    assert "refused" in results["broken"]["error"]
+
+
+def test_health_check_treats_a_keyless_opencode_provider_as_healthy(monkeypatch) -> None:
+    import asyncio
+
+    import httpx
+
+    config = MultiProviderConfig(
+        providers={
+            "opencode": provider(
+                ProviderType.OPENCODE, api_key="", base_url="https://oc.example.com/v1"
+            )
+        },
+        active_provider="opencode",
+    )
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": [{"id": "m"}]})
+
+    real_client = httpx.AsyncClient
+
+    def factory(**kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(**kwargs)
+
+    monkeypatch.setattr("openlaoke.core.multi_provider_api.httpx.AsyncClient", factory)
+
+    results = asyncio.run(MultiProviderClient.health_check(config))
+
+    # OpenCode needs no key, so it must be probed rather than written off.
+    assert results["opencode"]["ok"] is True
+    assert results["opencode"]["status"] == 200
+    assert len(seen) == 1
+    assert "authorization" not in {k.lower() for k in seen[0].headers}
+    assert seen[0].headers["content-type"] == "application/json"
+
+
+def test_google_and_cohere_bodies_drop_system_turns() -> None:
+    client = client_for()
+
+    conversation = [
+        {"role": "system", "content": "ignored"},
+        {"role": "user", "content": "first"},
+        {"role": "user", "content": "hi"},
+    ]
+    google = client._build_google_body("system prompt", conversation, None, 64, 1.0)
+    cohere = client._build_cohere_body("m", "system prompt", conversation, None, 64, 1.0)
+
+    assert [c["role"] for c in google["contents"]] == ["user", "user"]
+    # Cohere sends the last turn as "message" and the rest as chat_history.
+    assert [c["role"] for c in cohere["chat_history"]] == ["USER"]
+    assert cohere["message"] == "hi"
+
+
+def test_cohere_tool_conversion_accepts_both_shapes() -> None:
+    client = client_for()
+
+    converted = client._convert_tools_to_cohere_format(
+        [
+            {"type": "function", "function": {"name": "a", "description": "d", "parameters": {}}},
+            {"name": "b", "description": "e", "input_schema": {"type": "object"}},
+        ]
+    )
+
+    assert [tool["function"]["name"] for tool in converted] == ["a", "b"]

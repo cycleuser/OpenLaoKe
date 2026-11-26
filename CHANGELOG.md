@@ -51,6 +51,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `get_tool_loader()` returned `None` while being exported as if they did
   something, and `register_essential_tools()` was an alias of
   `register_all_tools()`.
+- **The retry branch in `stream_message`'s `HTTPStatusError` handler**
+  (`core/multi_provider_api.py`): retryable statuses were already handled before
+  `raise_for_status()` ran, so by the time that handler could see one the budget
+  was spent or the status was final. The error now propagates straight out.
 
 ### Fixed
 - **The model picker started on the wrong row** (`core/prompt_input.py`):
@@ -132,6 +136,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   installed, and `install_dir / name` followed a `../` straight out of it. Names
   are now checked to be a single plain path component, and a failed install
   reports why instead of returning `None`.
+- **A keyless provider was reported unhealthy by `health_check()`**
+  (`core/multi_provider_api.py`): OpenCode is configured *by* having no API key,
+  so `is_configured()` let it through and a `if not api_key` guard then answered
+  "no api key" with `ok: False`. The probe now runs and simply omits the
+  `Authorization` header when there is no key.
 
 ## [0.1.46] - 2026-11-21
 

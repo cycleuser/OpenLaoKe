@@ -203,13 +203,12 @@ class MultiProviderClient:
                 continue
             start = _time.time()
             try:
-                headers: dict[str, str] = {}
-                api_key = provider.api_key
-                if not api_key:
-                    results[name] = {"ok": False, "latency_ms": 0, "note": "no api key"}
-                    continue
-                headers["Authorization"] = f"Bearer {api_key}"
-                headers["Content-Type"] = "application/json"
+                # ``is_configured()`` above already rejected keyless providers that
+                # need a key; OpenCode is keyless by design, so a missing key is
+                # not an error here and simply means no Authorization header.
+                headers: dict[str, str] = {"Content-Type": "application/json"}
+                if provider.api_key:
+                    headers["Authorization"] = f"Bearer {provider.api_key}"
                 url = provider.base_url or "https://api.openai.com/v1"
                 url = url.rstrip("/") + "/models"
                 async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
@@ -1017,6 +1016,8 @@ class MultiProviderClient:
                             # drop tool calls accumulated by the failed attempt.
                             pending_tool_calls.clear()
                             continue
+                    # Anything left that raises here is either non-retryable or
+                    # has already burned the retry budget, so the error is final.
                     response.raise_for_status()
                     # Success: stream loop below
                     async for line in response.aiter_lines():
@@ -1049,16 +1050,6 @@ class MultiProviderClient:
                                         final_cost = chunk.cost
                                     yield chunk
                     break  # successful stream, exit retry loop
-            except httpx.HTTPStatusError as exc:
-                if attempt < _MAX_RETRIES:
-                    retry, delay = self._retry_with_backoff(exc.response.status_code, attempt)
-                    if retry:
-                        logger.warning(
-                            "Retry %d/%d after %.1fs: %s", attempt + 1, _MAX_RETRIES, delay, exc
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                raise
             except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
                 if attempt < _MAX_RETRIES:
                     delay = min(_BASE_DELAY * (2**attempt), _MAX_DELAY)
