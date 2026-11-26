@@ -28,7 +28,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Write result and the preview said "3 lines" for a two-line file that ends with
   a newline.
 
+### Removed
+- **The unused second provider layer** (`openlaoke/provider.py`): an `LLMProvider`
+  ABC with its own chunk types, cache-marker bookkeeping and retry helper, which
+  `MultiProviderClient` had already replaced. Only `enforce_role_alternation` was
+  ever imported from it; that function now lives in `core/messages.py`.
+- **Three stubbed helpers in `tools/register.py`**: `register_deferred_tools()`
+  and `get_tool_loader()` returned `None` while being exported as if they did
+  something, and `register_essential_tools()` was an alias of
+  `register_all_tools()`.
+
 ### Fixed
+- **`/share` left a plaintext copy of the conversation behind**
+  (`commands/pi_commands.py`): the transcript uploaded to the gist stayed in
+  `~/.openlaoke/`. It is deleted after the upload attempt, on both paths.
+- **`/login <provider>` reported success while saving nothing**
+  (`commands/pi_commands.py`): with no key on the command line it answered
+  "Provider configured" and returned success.
 - **Version numbers collapsed after the snapshot ring wrapped**
   (`utils/file_history.py`): the next version came from `len(snapshots) + 1`, so
   once a file reached the 100-entry cap every later snapshot was stamped with
