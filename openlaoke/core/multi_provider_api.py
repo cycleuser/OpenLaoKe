@@ -684,11 +684,8 @@ class MultiProviderClient:
                     )
                 )
 
-        usage_data = data.get("usage", {})
-        usage = TokenUsage(
-            input_tokens=usage_data.get("prompt_tokens", 0),
-            output_tokens=usage_data.get("completion_tokens", 0),
-        )
+        usage_data = data.get("usage", {}) or {}
+        usage = self._parse_openai_usage(usage_data)
         cost = self._calculate_cost(usage_data, data.get("model", ""))
 
         return (
@@ -709,6 +706,25 @@ class MultiProviderClient:
             output_tokens=usage.get("output_tokens", 0),
             cache_read_tokens=usage.get("cache_read_input_tokens", 0),
             cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
+        )
+
+    def _parse_openai_usage(self, usage: dict[str, Any]) -> TokenUsage:
+        """Build a TokenUsage from an OpenAI-shaped ``usage`` object.
+
+        Cached prompt tokens arrive as ``prompt_tokens_details.cached_tokens``
+        (OpenAI, DeepSeek, llama.cpp) or as a top-level
+        ``cache_read_input_tokens`` on gateways that mirror Anthropic's names.
+        Losing them makes the prompt-cache accounting and the compaction budget
+        blind to a warm prefix.
+        """
+        details = usage.get("prompt_tokens_details") or {}
+        return TokenUsage(
+            input_tokens=int(usage.get("prompt_tokens", 0) or 0),
+            output_tokens=int(usage.get("completion_tokens", 0) or 0),
+            cache_read_tokens=int(
+                details.get("cached_tokens", 0) or usage.get("cache_read_input_tokens", 0) or 0
+            ),
+            cache_creation_tokens=int(usage.get("cache_creation_input_tokens", 0) or 0),
         )
 
     def _calculate_cost(self, usage: dict[str, int], model: str) -> CostInfo:
@@ -868,6 +884,12 @@ class MultiProviderClient:
                                 *fb_body["messages"],
                             ]
                         response = await client.post(fb_endpoint, headers=fb_headers, json=fb_body)
+                        # The answering provider may be a different family: parse
+                        # with the provider that actually replied, otherwise an
+                        # OpenAI failure answered by Anthropic came back through
+                        # the OpenAI parser and vice versa.
+                        provider = fallback_provider
+                        model = fb_model
 
         response.raise_for_status()
         data = response.json()
@@ -927,7 +949,13 @@ class MultiProviderClient:
                 {"role": "system", "content": system_prompt},
                 *body["messages"],
             ]
+            # Ask for a final usage chunk. Without it an OpenAI-compatible
+            # server sends no token counts at all in a stream (verified against
+            # llama.cpp), so every streaming turn would report zero tokens and
+            # zero cost. Servers that do not know the field answer 400; the
+            # stream loop below drops it and retries.
             body["stream"] = True
+            body["stream_options"] = {"include_usage": True}
 
         pending_tool_calls: dict[int, dict[str, Any]] = {}
         final_usage: TokenUsage | None = None
@@ -936,6 +964,18 @@ class MultiProviderClient:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 async with client.stream("POST", endpoint, headers=headers, json=body) as response:
+                    if response.status_code == 400 and "stream_options" in body:
+                        # Some OpenAI-compatible servers reject the unknown
+                        # field instead of ignoring it. Read the body to confirm
+                        # that is the complaint, then retry without it.
+                        await response.aread()
+                        if "stream_options" in response.text.lower():
+                            logger.info(
+                                "Server rejected stream_options; retrying without it (%s)",
+                                endpoint,
+                            )
+                            body.pop("stream_options", None)
+                            continue
                     if response.status_code >= 400 and attempt < _MAX_RETRIES:
                         retry, delay = self._retry_with_backoff(response.status_code, attempt)
                         if retry:
@@ -947,6 +987,9 @@ class MultiProviderClient:
                                 response.status_code,
                             )
                             await asyncio.sleep(delay)
+                            # A retried stream restarts from its first event, so
+                            # drop tool calls accumulated by the failed attempt.
+                            pending_tool_calls.clear()
                             continue
                     response.raise_for_status()
                     # Success: stream loop below
@@ -1002,6 +1045,7 @@ class MultiProviderClient:
                         exc,
                     )
                     await asyncio.sleep(delay)
+                    pending_tool_calls.clear()
                     continue
                 raise
 
@@ -1126,10 +1170,7 @@ class MultiProviderClient:
 
         usage_data = event.get("usage", {})
         if usage_data:
-            usage = TokenUsage(
-                input_tokens=usage_data.get("prompt_tokens", 0),
-                output_tokens=usage_data.get("completion_tokens", 0),
-            )
+            usage = self._parse_openai_usage(usage_data)
             cost = self._calculate_cost(
                 {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
                 model,

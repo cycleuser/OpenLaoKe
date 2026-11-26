@@ -171,7 +171,7 @@ class HookSystem:
         if hook_type not in self._hooks:
             raise ValueError(f"Unknown hook type: {hook_type}. Valid types: {self.HOOK_TYPES}")
 
-        is_async = asyncio.iscoroutinefunction(fn)
+        is_async = inspect.iscoroutinefunction(fn)
         reg = HookRegistration(
             name=name,
             hook_type=hook_type,
