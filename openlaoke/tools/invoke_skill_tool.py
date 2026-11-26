@@ -58,8 +58,29 @@ class InvokeSkillTool(Tool):
     # ---- skill search paths -----------------------------------------------
 
     @staticmethod
+    def _registry_skill(skill_name: str):
+        """Look the skill up in the shared registry that `/skill` uses.
+
+        The registry is the single source of truth for where skills live
+        (~/.claude/skills, ~/.openlaoke/skills, the opencode dirs, and the
+        skills bundled inside the package). Searching a private list here made
+        the tool blind to bundled skills that the session context advertises,
+        so the model was told about a skill and then got "not found".
+        """
+        try:
+            from openlaoke.core.skill_system import get_skill_registry
+
+            return get_skill_registry().get_skill(skill_name)
+        except Exception:
+            return None
+
+    @staticmethod
     def _find_skill_file(skill_name: str) -> Path | None:
         """Search for a SKILL.md file by name."""
+        skill = InvokeSkillTool._registry_skill(skill_name)
+        if skill is not None and skill.path is not None and Path(skill.path).exists():
+            return Path(skill.path)
+
         search_dirs = [
             Path.home() / ".openlaoke" / "skills",
             Path.cwd() / ".openlaoke" / "skills",
@@ -76,8 +97,15 @@ class InvokeSkillTool(Tool):
 
     @staticmethod
     def _list_available_skills() -> list[str]:
-        """List all installed skill names."""
-        skills: list[str] = []
+        """List all installed skill names (registry first, then local paths)."""
+        skills: set[str] = set()
+        try:
+            from openlaoke.core.skill_system import list_available_skills
+
+            skills.update(list_available_skills())
+        except Exception:
+            pass
+
         search_dirs = [
             Path.home() / ".openlaoke" / "skills",
             Path.cwd() / ".openlaoke" / "skills",
@@ -88,10 +116,10 @@ class InvokeSkillTool(Tool):
                 continue
             for entry in base.iterdir():
                 if entry.is_dir() and (entry / "SKILL.md").exists():
-                    skills.append(entry.name)
+                    skills.add(entry.name)
                 elif entry.suffix == ".md":
-                    skills.append(entry.stem)
-        return sorted(set(skills))
+                    skills.add(entry.stem)
+        return sorted(skills)
 
     # ---- main handler -----------------------------------------------------
 
