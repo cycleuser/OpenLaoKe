@@ -86,7 +86,7 @@ def test_full_registration_includes_the_coding_tools(registry, monkeypatch) -> N
     monkeypatch.setattr(register_module, "_has_powershell", lambda: False)
     register_all_tools(registry)
 
-    assert CORE <= names(registry)
+    assert names(registry) >= CORE
     assert "Bash" in names(registry)
     assert "PowerShell" not in names(registry)
 
@@ -154,7 +154,7 @@ def test_a_broken_config_still_registers_the_essential_tools(registry, monkeypat
     monkeypatch.setattr("openlaoke.utils.config.load_config", boom)
     register_all_tools(registry)
 
-    assert CORE <= names(registry)
+    assert names(registry) >= CORE
     assert "Batch" not in names(registry)
 
 
@@ -169,7 +169,7 @@ def test_core_profile_keeps_the_coding_tools_and_drops_the_rest(monkeypatch) -> 
     register_core_tools(registry)
 
     registered = names(registry)
-    assert CORE <= registered
+    assert registered >= CORE
     assert "Bash" in registered
     for heavy in ("Panel", "Swarm", "Schedule", "Memory", "WebSearch", "Open", "Todo"):
         assert heavy not in registered
