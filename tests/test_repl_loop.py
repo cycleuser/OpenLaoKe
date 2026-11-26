@@ -372,3 +372,436 @@ def test_runtime_context_injected_for_small_model():
     run(r)
     assert r.api.requests
     assert any(m.get("system_injected") for m in r.api.requests[0])
+
+
+# --------------------------------------------------------------------------- #
+# streamed turns: usage, display refresh, transport errors
+# --------------------------------------------------------------------------- #
+def usage_chunk(prompt=11, completion=7):
+    from openlaoke.types.core_types import CostInfo, StreamChunk, StreamEventType, TokenUsage
+
+    return StreamChunk(
+        event_type=StreamEventType.USAGE,
+        usage=TokenUsage(input_tokens=prompt, output_tokens=completion),
+        cost=CostInfo(input_cost=0.5, output_cost=0.25),
+    )
+
+
+def test_stream_provider_turn_records_usage_and_cost():
+    r = make_repl([[text("hi"), usage_chunk()]])
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.content == "hi"
+    assert turn.usage.input_tokens == 11
+    assert turn.usage.output_tokens == 7
+    assert turn.cost.total_cost == 0.75
+
+
+def test_stream_provider_turn_reports_an_http_error_with_its_body():
+    import httpx
+
+    r = make_repl([])
+    request = httpx.Request("POST", "https://api.example.com/v1/chat")
+    response = httpx.Response(429, text="  rate limited  ", request=request)
+    r.api._turns = [[httpx.HTTPStatusError("boom", request=request, response=response)]]
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.stream_error == "API 429: rate limited"
+    assert turn.content == ""
+
+
+def test_stream_provider_turn_reports_an_http_error_without_a_body():
+    import httpx
+
+    r = make_repl([])
+    request = httpx.Request("POST", "https://api.example.com/v1/chat")
+    response = httpx.Response(503, content=b"", request=request)
+    r.api._turns = [[httpx.HTTPStatusError("boom", request=request, response=response)]]
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.stream_error == "API 503"
+
+
+def test_stream_provider_turn_reports_a_generic_failure():
+    r = make_repl([])
+    r.api._turns = [[RuntimeError("socket vanished")]]
+
+    turn = asyncio.run(r._stream_provider_turn(system_prompt="s", messages=[], tools=None))
+
+    assert turn.stream_error == "socket vanished"
+
+
+# --------------------------------------------------------------------------- #
+# loop: empty replies, inline tool calls, reasoning, API errors, cancellation
+# --------------------------------------------------------------------------- #
+def turn(**fields):
+    from openlaoke.core.repl import StreamedTurn
+
+    base = StreamedTurn()
+    for key, value in fields.items():
+        setattr(base, key, value)
+    return base
+
+
+def test_a_silent_model_is_called_out_instead_of_hanging():
+    r = make_repl([])
+    r._stream_provider_turn = lambda **_k: _return(turn(elapsed=6.0))
+
+    run(r)
+
+    assert "Model returned no output" in r.console.file.getvalue()
+    assert r.api.turn_index == 0
+
+
+def _return(value):
+    async def _coro():
+        return value
+
+    return _coro()
+
+
+def test_inline_tool_calls_in_prose_are_recovered():
+    from openlaoke.types.core_types import ToolUseBlock
+
+    tool = FakeTool("Read", readonly=True, result="contents")
+    r = make_repl([], tools=[tool])
+    scripted = [
+        turn(
+            content='let me look <tool_call>{"name": "Read", "args": {"file_path": "a"}}</tool_call>'
+        ),
+        turn(content="DONE"),
+    ]
+    r._stream_provider_turn = lambda **_k: _return(scripted.pop(0))
+    r._parse_inline_tool_calls = lambda _t: [
+        ToolUseBlock(id="c1", name="Read", input={"file_path": "a"})
+    ]
+    r._strip_tool_calls = lambda _t: "let me look"
+
+    run(r)
+
+    assert tool.calls == [{"file_path": "a"}]
+
+
+def test_a_failed_inline_parse_asks_the_model_to_try_again():
+    r = make_repl([])
+    scripted = [turn(content="<tool_call>not json</tool_call>"), turn(content="DONE")]
+    seen: list[list[dict]] = []
+
+    def stream(**_k):
+        seen.append(list(_k.get("messages") or []))
+        return _return(scripted.pop(0) if scripted else turn(content="DONE"))
+
+    r._stream_provider_turn = stream
+    r._parse_inline_tool_calls = lambda _t: []
+
+    class Guard:
+        model_size = "large"
+        max_parse_failures = 3
+        consecutive_parse_failures = 0
+
+        def check_after_api_call(self, *_a):
+            return ""
+
+        def notify_parse_failure(self, _text):
+            Guard.consecutive_parse_failures += 1
+            return "use the tool_call format"
+
+        def notify_parse_success(self):
+            return None
+
+    r._guard = Guard()
+
+    run(r)
+
+    # The loop builds its own guard from the model size on the next iteration,
+    # so match the text that guard produces rather than the stub's.
+    assert any(
+        "tool call format was incorrect" in str(m.get("content")) for req in seen for m in req
+    )
+    # The nudge is only useful if the model gets another turn to act on it.
+    assert len(seen) == 2
+    assert "(auto-retry: that tool call could not be parsed)" in r.console.file.getvalue()
+
+
+def test_a_model_that_keeps_malforming_tool_calls_is_not_retried_forever():
+    r = make_repl([])
+    scripted = [turn(content="<tool_call>not json</tool_call>") for _ in range(20)]
+    seen: list[list[dict]] = []
+
+    def stream(**_k):
+        seen.append(list(_k.get("messages") or []))
+        return _return(scripted.pop(0) if scripted else turn(content="DONE"))
+
+    r._stream_provider_turn = stream
+    r._parse_inline_tool_calls = lambda _t: []
+
+    run(r)
+
+    # The real guard gives up after ``max_parse_failures`` attempts, so the loop
+    # must stop rather than burn the whole scripted budget.
+    assert len(seen) == r._guard.max_parse_failures
+    assert r.console.file.getvalue().count("could not be parsed") == r._guard.max_parse_failures - 1
+
+
+def test_reasoning_is_remembered_for_the_next_turn():
+    r = make_repl([])
+    r._stream_provider_turn = lambda **_k: _return(turn(content="answer", reasoning="why"))
+    shown = []
+    r._display_thinking_inline = lambda text: shown.append(text)
+
+    run(r)
+
+    assert r._last_thinking == "why"
+    assert r.app_state.last_thinking == "why"
+    assert shown == ["why"]
+
+
+def test_an_api_error_prints_the_json_message_and_stops():
+    import httpx
+
+    r = make_repl([])
+    request = httpx.Request("POST", "https://api.example.com/v1/chat")
+    response = httpx.Response(
+        400, json={"error": {"message": "bad model"}}, request=request
+    )
+    error = httpx.HTTPStatusError("boom", request=request, response=response)
+    r._stream_provider_turn = lambda **_k: _raise(error)
+
+    run(r)
+
+    text_out = r.console.file.getvalue()
+    assert "API Error:" in text_out
+    assert "bad model" in text_out
+
+
+def test_an_api_error_with_a_non_json_body_prints_the_body():
+    import httpx
+
+    r = make_repl([])
+    request = httpx.Request("POST", "https://api.example.com/v1/chat")
+    response = httpx.Response(500, text="upstream exploded", request=request)
+    error = httpx.HTTPStatusError("boom", request=request, response=response)
+    r._stream_provider_turn = lambda **_k: _raise(error)
+
+    run(r)
+
+    assert "upstream exploded" in r.console.file.getvalue()
+
+
+def test_a_cancelled_turn_preserves_the_context():
+    r = make_repl([])
+    patched = []
+    r._patch_dangling_tool_calls = lambda: patched.append(True)
+    r.api._turns = [[asyncio.CancelledError()]]
+
+    run(r)
+
+    assert patched == [True]
+    assert r._interrupt_requested is True
+    assert "Interrupted" in r.console.file.getvalue()
+
+
+def _raise(error):
+    async def _coro():
+        raise error
+
+    return _coro()
+
+
+# --------------------------------------------------------------------------- #
+# _execute_tool: hooks, gating, truncation, output compression
+# --------------------------------------------------------------------------- #
+class ScriptedHooks:
+    """A hook system whose per-type behaviour is set by the test."""
+
+    def __init__(self, **outputs):
+        from openlaoke.core.hook_system import HookOutput
+
+        self._outputs = {name: value for name, value in outputs.items() if value is not None}
+        self._empty = HookOutput()
+        self.seen: list[tuple[str, object]] = []
+
+    def has_hooks(self, name):
+        return name in self._outputs
+
+    def execute_hooks(self, name, hook_input, hook_output=None):
+        value = self._outputs.get(name)
+        self.seen.append((name, hook_input))
+        if isinstance(value, Exception):
+            raise value
+        if hook_output is not None and value is not None:
+            for field_name in (
+                "tool_args",
+                "tool_result",
+                "tool_error",
+                "feedback",
+                "skip_execution",
+                "handled",
+                "metadata",
+            ):
+                setattr(hook_output, field_name, getattr(value, field_name))
+        return value
+
+    def gate(self, hook_input):
+        from openlaoke.core.hook_system import HookOutput
+
+        self.seen.append(("tool_gate", hook_input))
+        return self._outputs.get("tool_gate") or HookOutput()
+
+
+def hook_output(**fields):
+    from openlaoke.core.hook_system import HookOutput
+
+    return HookOutput(**fields)
+
+
+def tool_use(name="Read", cid="c1", **inputs):
+    from openlaoke.types.core_types import ToolUseBlock
+
+    return ToolUseBlock(id=cid, name=name, input=inputs or {"file_path": "a.txt"})
+
+
+def test_a_before_hook_can_skip_the_call():
+    tool = FakeTool("Read", result="real output")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(
+        tool_execute_before=hook_output(skip_execution=True, tool_result="from the hook")
+    )
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == []
+    assert result.content == "from the hook"
+    assert result.is_error is False
+
+
+def test_a_before_hook_skips_the_call_with_a_default_message():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_execute_before=hook_output(skip_execution=True))
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == []
+    assert "skipped by hook" in result.content
+
+
+def test_a_before_hook_can_rewrite_the_arguments():
+    tool = FakeTool("Read", result="ok")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(
+        tool_execute_before=hook_output(tool_args={"file_path": "rewritten.txt"})
+    )
+
+    asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == [{"file_path": "rewritten.txt"}]
+
+
+def test_a_tool_gate_can_block_a_call():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    hooks = ScriptedHooks(tool_gate=hook_output(handled=True, tool_result="not allowed by policy"))
+    r._hook_system = hooks
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == []
+    assert result.is_error is True
+    assert result.content == "not allowed by policy"
+    assert "Blocked:" in r.console.file.getvalue()
+    # The gate sees the final arguments, after any before-hook rewrite.
+    gate_input = next(payload for name, payload in hooks.seen if name == "tool_gate")
+    assert gate_input.tool_args == {"file_path": "a.txt"}
+
+
+def test_a_tool_gate_block_without_a_reason_says_so():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_gate=hook_output(handled=True))
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert result.content == "Blocked by a tool_gate hook."
+
+
+def test_a_tool_gate_block_can_carry_a_metadata_reason():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_gate=hook_output(handled=True, metadata={"reason": "nope"}))
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert result.content == "nope"
+
+
+def test_a_tool_gate_can_rewrite_the_arguments():
+    tool = FakeTool("Read")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_gate=hook_output(tool_args={"file_path": "gated.txt"}))
+
+    asyncio.run(r._execute_tool(tool_use()))
+
+    assert tool.calls == [{"file_path": "gated.txt"}]
+
+
+def test_an_after_hook_replaces_the_result():
+    tool = FakeTool("Read", result="raw")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_execute_after=hook_output(tool_result="rewritten"))
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert result.content == "rewritten"
+    assert result.is_error is False
+
+
+def test_a_feedback_hook_is_queued_for_the_next_turn():
+    tool = FakeTool("Read", result="ok")
+    r = make_repl([], tools=[tool])
+    r._hook_system = ScriptedHooks(tool_feedback=hook_output(feedback="use paging next time"))
+
+    asyncio.run(r._execute_tool(tool_use()))
+
+    assert r._input_queue == ["[hook feedback on Read] use paging next time"]
+    assert "hook feedback queued" in r.console.file.getvalue()
+
+
+def test_oversized_tool_output_is_truncated_for_history():
+    tool = FakeTool("Read", result="x" * 1000)
+    r = make_repl([], tools=[tool])
+    r.app_state.max_tool_history = 200
+
+    result = asyncio.run(r._execute_tool(tool_use()))
+
+    assert "tool output compacted" in result.content
+    assert len(result.content.encode()) < 1000
+
+
+def test_an_accepted_large_result_keeps_four_times_the_cap():
+    tool = FakeTool("Read", result="y" * 1000)
+    r = make_repl([], tools=[tool])
+    r.app_state.max_tool_history = 200
+
+    plain = asyncio.run(r._execute_tool(tool_use(cid="c1")))
+    accepted = asyncio.run(r._execute_tool(tool_use(cid="c2", accept_large_output=True)))
+
+    assert "tool output compacted" in plain.content
+    assert "tool output compacted" in accepted.content
+    assert accepted.content.count("y") > plain.content.count("y")
+
+
+def test_bash_output_is_compressed_before_it_reaches_the_model():
+    class Compressor:
+        def compress(self, output):
+            return "compressed"
+
+    tool = FakeTool("Bash", result="line\n" * 100)
+    r = make_repl([], tools=[tool])
+    r._output_compressor = Compressor()
+
+    result = asyncio.run(r._execute_tool(tool_use("Bash", command="ls")))
+
+    assert result.content == "compressed"

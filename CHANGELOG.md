@@ -141,6 +141,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   so `is_configured()` let it through and a `if not api_key` guard then answered
   "no api key" with `ok: False`. The probe now runs and simply omits the
   `Authorization` header when there is no key.
+- **A malformed tool call ended the turn instead of being retried**
+  (`core/repl.py`): when the model wrote a `<tool_call>` block that could not be
+  parsed, the corrective message was appended to the history and the loop then
+  broke out of the turn anyway, so the model never got a chance to act on it.
+  The loop now re-asks once per failure, and still stops when the guard's
+  failure budget is spent.
+- **The tool-output cap was computed and then discarded** (`core/repl.py`): the
+  truncation result was written to a local string while `result.content`, which
+  is what enters the history, was left intact, so a 1 MB tool output reached the
+  model whole.
 
 ## [0.1.46] - 2026-11-21
 

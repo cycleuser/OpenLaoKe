@@ -202,19 +202,10 @@ class REPL:
     def _c(self, name: str) -> str:
         return self._theme.color(name)
 
-    def _s(self, text: str, style_name: str) -> Text:
-        return self._theme.format_text(text, style_name)
-
     def _t(self, key: str) -> str:
         from openlaoke.core.i18n import get_tui_text
 
         return get_tui_text(key, getattr(self.app_state, "language", "en"))
-
-    def _register_memory_hooks(self) -> None:
-        return None
-
-    def _sense_world(self) -> None:
-        return None
 
     async def run(self) -> None:
         self._running = True
@@ -1283,6 +1274,7 @@ class REPL:
                 reasoning_text = ""
                 tool_uses: list[ToolUseBlock] = []
                 plan_retry_count = 0
+                retry_after_parse_failure = False
 
                 if streaming_supported:
                     turn = await self._stream_provider_turn(
@@ -1328,6 +1320,14 @@ class REPL:
                         elif self._guard:
                             parse_msg = self._guard.notify_parse_failure(content_text)
                             messages.append({"role": "user", "content": parse_msg})
+                            # The correction only helps if the model gets another
+                            # turn to act on it; once it has failed too often the
+                            # guard asks it to stop using tools instead, and that
+                            # reply is the one to keep.
+                            retry_after_parse_failure = (
+                                self._guard.consecutive_parse_failures
+                                < self._guard.max_parse_failures
+                            )
 
                     if reasoning_text:
                         self._last_thinking = reasoning_text
@@ -1389,6 +1389,12 @@ class REPL:
                         messages.append(assistant_turn(content_text, tool_uses))
 
                     if not tool_uses:
+                        if retry_after_parse_failure:
+                            self.console.print(
+                                f"  [{self._c('muted')}]"
+                                "(auto-retry: that tool call could not be parsed)[/]"
+                            )
+                            continue
                         if (
                             content_text.strip().upper().startswith("DONE")
                             or "\nDONE" in content_text.upper()
@@ -1612,6 +1618,13 @@ class REPL:
             from openlaoke.core.tool import truncate_tool_history
 
             result_content = truncate_tool_history(result_content, _max_tool_out)
+            # Rebuild the block: it is ``result.content`` that goes into the
+            # history, so truncating the local copy alone capped nothing.
+            result = ToolResultBlock(
+                tool_use_id=result.tool_use_id,
+                content=result_content,
+                is_error=result.is_error,
+            )
 
         if tool_use.name == "Bash":
             compressed = self._output_compressor.compress(result_content)
