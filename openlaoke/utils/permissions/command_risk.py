@@ -260,10 +260,11 @@ def _is_interpreter(base: str) -> bool:
 
 
 def _is_local_script(tokens: list[str], workdir: str) -> bool:
+    """True when an interpreter is asked to run a file inside ``workdir``.
+
+    The caller has already established that ``tokens[0]`` is an interpreter.
+    """
     if not tokens:
-        return False
-    base = os.path.basename(tokens[0])
-    if not _is_interpreter(base):
         return False
     args = tokens[1:]
     if not args or any(arg in INLINE_CODE_FLAGS for arg in args):
