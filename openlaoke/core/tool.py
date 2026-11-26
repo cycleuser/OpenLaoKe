@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -80,12 +81,18 @@ def with_common_fields(schema: dict[str, Any]) -> dict[str, Any]:
         INTENT_FIELD,
     )
 
-    properties = schema.setdefault("properties", {})
+    # Copy before editing: input_schema may be a dict shared by every instance
+    # of the tool class, and the additions below must not leak into the raw
+    # schema that validate_input() walks.
+    schema = dict(schema)
+    properties = dict(schema.get("properties") or {})
     properties.setdefault(INTENT_FIELD, {"type": "string", "description": INTENT_DESCRIPTION})
     properties.setdefault(ACCEPT_FIELD, {"type": "boolean", "description": ACCEPT_DESCRIPTION})
-    required = schema.setdefault("required", [])
+    schema["properties"] = properties
+    required = list(schema.get("required") or [])
     if INTENT_FIELD not in required:
         required.insert(0, INTENT_FIELD)
+    schema["required"] = required
     return schema
 
 
@@ -177,6 +184,10 @@ class Tool(ABC):
             "object": dict,
         }
         for field_name in required:
+            # Soft-required fields are advertised in the schema but never
+            # enforced: a missing label must not cost a retry on a weak model.
+            if field_name in SOFT_REQUIRED_FIELDS:
+                continue
             if field_name not in input_data or input_data.get(field_name) is None:
                 return ValidationResult(
                     result=False,
@@ -292,7 +303,7 @@ class ToolRegistry:
             return self._tools[name]
         if name in self._deferred_loaders:
             loader = self._deferred_loaders[name]
-            if asyncio.iscoroutinefunction(loader):
+            if inspect.iscoroutinefunction(loader):
                 return None
             sync_loader = cast(Callable[[], Tool], loader)
             tool = sync_loader()
@@ -315,7 +326,7 @@ class ToolRegistry:
                 if loader is None:
                     return None
                 tool: Tool
-                if asyncio.iscoroutinefunction(loader):
+                if inspect.iscoroutinefunction(loader):
                     async_loader = cast(Callable[[], Awaitable[Tool]], loader)
                     tool = await async_loader()
                 else:
@@ -348,7 +359,7 @@ class ToolRegistry:
     def get_all(self) -> list[Tool]:
         for loader_name in list(self._deferred_loaders.keys()):
             loader = self._deferred_loaders[loader_name]
-            if not asyncio.iscoroutinefunction(loader):
+            if not inspect.iscoroutinefunction(loader):
                 sync_loader = cast(Callable[[], Tool], loader)
                 tool = sync_loader()
                 self._tools[loader_name] = tool
