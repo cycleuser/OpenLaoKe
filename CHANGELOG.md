@@ -4,6 +4,54 @@ All notable changes to OpenLaoKe will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **`/history` and `/restore`** (`commands/base.py`, `utils/file_history.py`):
+  every `Write`/`Edit` already records the pre-edit content of the file it is
+  about to touch, but nothing could read those snapshots back. `/history` lists
+  the files that have them and `/history <path>` shows one file's versions;
+  `/restore <path> [version]` writes a version back (latest by default). `/tree`
+  still covers undo inside a session, this covers undo across sessions.
+
+### Fixed
+- **Version numbers collapsed after the snapshot ring wrapped**
+  (`utils/file_history.py`): the next version came from `len(snapshots) + 1`, so
+  once a file reached the 100-entry cap every later snapshot was stamped with
+  the same number and `restore(version=N)` could return the wrong content. The
+  counter now continues from the highest stored version.
+- **Unchanged content is no longer re-snapshotted** (`utils/file_history.py`):
+  rewriting a file with identical bytes appended a duplicate version and
+  rewrote the whole store.
+- **A soft field could break every tool call** (`core/tool.py`):
+  `with_common_fields()` mutated the class-level `input_schema` dict, leaking
+  `intent` into the required list that `validate_input()` walks, so every call
+  that did not label its intent failed validation and cost a retry.
+  `SOFT_REQUIRED_FIELDS` existed but was never read; it is honoured now.
+- **Liquid AI tool calls were dropped** (`core/tool_call_parser.py`): their
+  payload format is bracketed (`<|tool_call_start|>[Read(...)]<|tool_call_end|>`)
+  and the function regex only matched at the start of the payload, so every
+  LFM3 tool call was silently discarded.
+- **`/compact` could erase the conversation** (`commands/base.py`): the pruner
+  returns the caller's own list when nothing needs pruning, and the command did
+  `clear()` then `extend()` from that same list, which is a no-op by
+  construction.
+- **A session file without an id resumed as `""`** (`core/sessions.py`) and the
+  next save wrote a file literally named `.json`; the id now falls back to the
+  file stem.
+- **Compaction on small windows** (`core/compact/compactor.py`): fixed
+  10k + 5k reserves meant any context window below 15k reported zero available
+  tokens, so compaction fired on every turn with a keep-target of 0.
+- **`AutoCompactStrategy` kept the wrong half** (`core/compact/strategies.py`):
+  it unpacked `split_messages()` backwards, so with summarisation on it dropped
+  the recent messages and kept the ones the summary covered.
+- **`FastPruner` duplicated recent messages** (`core/compact/fast_pruner.py`):
+  the "a digest would not save space" guard restored the full list and then
+  appended the tail again.
+- **`set_theme` could not see new theme files** (`utils/theme.py`) because it
+  reloaded through a stale module cache, and `ThemeManager("ghost")` reported a
+  name that disagreed with the theme it served.
+
 ## [0.1.46] - 2026-11-21
 
 ### Added

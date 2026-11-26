@@ -126,9 +126,18 @@ def save_snapshot(
         except Exception:
             pass
 
-    version = len(history.snapshots) + 1
+    # Derive the next version from the highest existing one, not from the list
+    # length: the ring below drops the oldest entries, so a length-based counter
+    # would hand out the same version number forever once it wraps.
+    version = max((s.version for s in history.snapshots), default=0) + 1
     timestamp = time.time()
     checksum = compute_checksum(content)
+
+    # Identical content means there is nothing to roll back to. Re-snapshotting
+    # it would burn a ring slot and force a full rewrite of the store, so reuse
+    # the existing entry instead of appending a duplicate.
+    if history.snapshots and history.snapshots[-1].checksum == checksum:
+        return history.snapshots[-1]
 
     snapshot = FileSnapshot(
         path=abs_path,
@@ -260,6 +269,37 @@ def clear_all_histories() -> bool:
         return True
     except Exception:
         return False
+
+
+def list_histories() -> list[FileHistory]:
+    """Return every stored file history, newest activity first.
+
+    Unreadable or malformed store files are skipped rather than raising: one
+    corrupt file must not hide the rest.
+    """
+    history_dir = get_history_dir()
+    if not os.path.isdir(history_dir):
+        return []
+
+    results: list[FileHistory] = []
+    try:
+        names = sorted(os.listdir(history_dir))
+    except OSError:
+        return []
+
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(history_dir, name), encoding="utf-8") as f:
+                history = FileHistory.from_dict(json.load(f))
+        except Exception:
+            continue
+        if history.snapshots:
+            results.append(history)
+
+    results.sort(key=lambda h: h.snapshots[-1].timestamp, reverse=True)
+    return results
 
 
 def file_history_enabled() -> bool:

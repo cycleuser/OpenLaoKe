@@ -779,6 +779,99 @@ class EditsCommand(SlashCommand):
         return CommandResult(message=stats.render())
 
 
+class HistoryCommand(SlashCommand):
+    """Reader for the persistent per-file snapshot store.
+
+    Every ``edit``/``write`` records the pre-edit content of the file it is
+    about to touch, so a bad change can be rolled back after the session (and
+    the process) is long gone. ``/tree`` covers undo within a session; this
+    covers undo across sessions.
+    """
+
+    name = "history"
+    description = "List files with saved snapshots, or show one file's versions"
+    aliases = ["versions"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.utils.file_history import (
+            format_history_list,
+            format_timestamp,
+            list_histories,
+        )
+
+        target = ctx.args.strip()
+        if target:
+            return CommandResult(message=format_history_list(target))
+
+        histories = list_histories()
+        if not histories:
+            return CommandResult(
+                message="No file snapshots yet. They are recorded automatically when "
+                "the edit or write tool modifies a file."
+            )
+
+        lines = [f"{len(histories)} file(s) with snapshots:", ""]
+        for history in histories:
+            latest = history.snapshots[-1]
+            lines.append(
+                f"  {history.path}  ({len(history.snapshots)} versions, "
+                f"last {format_timestamp(latest.timestamp)}, "
+                f"latest v{latest.version})"
+            )
+        lines.append("")
+        lines.append("Use /history <path> to see versions, or /restore <path> [version].")
+        return CommandResult(message="\n".join(lines))
+
+
+class RestoreCommand(SlashCommand):
+    name = "restore"
+    description = "Restore a file from a saved snapshot: /restore <path> [version]"
+    aliases = ["rollback"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        from openlaoke.utils.file_history import (
+            get_latest_snapshot,
+            get_snapshot_by_version,
+            restore_snapshot,
+        )
+
+        parts = ctx.args.split()
+        if not parts:
+            return CommandResult(
+                success=False, message="Usage: /restore <path> [version]"
+            )
+
+        path = parts[0]
+        version: int | None = None
+        if len(parts) > 1:
+            try:
+                version = int(parts[1].lstrip("vV"))
+            except ValueError:
+                return CommandResult(
+                    success=False,
+                    message=f"Not a version number: {parts[1]}. Use /history {path} to list versions.",
+                )
+
+        # Look the snapshot up before touching the file so the message can name
+        # exactly what was written back.
+        snapshot = (
+            get_latest_snapshot(path) if version is None else get_snapshot_by_version(path, version)
+        )
+        if snapshot is None:
+            wanted = "a saved snapshot" if version is None else f"saved version {version}"
+            return CommandResult(
+                success=False,
+                message=f"No {wanted} for {path}. Run /history without arguments to see what is saved.",
+            )
+
+        if not restore_snapshot(path, version):
+            return CommandResult(success=False, message=f"Could not write {path}.")
+
+        return CommandResult(
+            message=f"Restored {path} to v{snapshot.version} ({len(snapshot.content)} bytes)."
+        )
+
+
 class StatsCommand(SlashCommand):
     name = "stats"
     description = "Session dashboard: tokens, tools, edits, tasks, memory"

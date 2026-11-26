@@ -24,10 +24,12 @@ from openlaoke.commands.base import (
     ExitCommand,
     ExportCommand,
     HelpCommand,
+    HistoryCommand,
     McpCommand,
     MemoryCommand,
     ModeCommand,
     ResumeCommand,
+    RestoreCommand,
     ScheduleCommand,
     SearchCommand,
     SessionsCommand,
@@ -49,6 +51,14 @@ def state(tmp_path):
 
 def ctx(state, args: str = "") -> CommandContext:
     return CommandContext(app_state=state, args=args)
+
+
+@pytest.fixture(autouse=True)
+def isolated_file_history(tmp_path, monkeypatch):
+    """Keep the snapshot store out of ~/.openlaoke."""
+    monkeypatch.setattr(
+        "openlaoke.utils.file_history.HISTORY_DIR", str(tmp_path / "file_history")
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -784,3 +794,142 @@ async def test_context_survives_a_failing_discovery(state, monkeypatch) -> None:
     # Unknown window: conservative default and the explicit note.
     assert "unknown" in message
     assert "conservative default" in message
+
+
+# --------------------------------------------------------------------------- #
+# /history, /restore
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_history_without_snapshots_explains_how_they_appear(state) -> None:
+    result = await HistoryCommand().execute(ctx(state))
+    assert result.success is True
+    assert "No file snapshots yet" in result.message
+    assert "edit or write tool" in result.message
+
+
+@pytest.mark.asyncio
+async def test_history_lists_tracked_files(state, tmp_path) -> None:
+    from openlaoke.utils.file_history import track_file_edit
+
+    target = tmp_path / "tracked.py"
+    target.write_text("keep me\n", encoding="utf-8")
+    track_file_edit(str(target))
+
+    message = (await HistoryCommand().execute(ctx(state))).message
+
+    assert "1 file(s) with snapshots:" in message
+    assert str(target) in message
+    assert "1 versions" in message
+    assert "latest v1" in message
+    assert "/restore <path> [version]" in message
+
+
+@pytest.mark.asyncio
+async def test_history_with_a_path_shows_the_versions(state, tmp_path) -> None:
+    from openlaoke.utils.file_history import save_snapshot
+
+    target = tmp_path / "versions.py"
+    target.write_text("x", encoding="utf-8")
+    save_snapshot(str(target), "one")
+
+    message = (await HistoryCommand().execute(ctx(state, str(target)))).message
+
+    assert message.startswith(f"History for {target}:")
+    assert "v1:" in message
+    assert "size: 3 bytes" in message
+
+
+@pytest.mark.asyncio
+async def test_history_with_a_path_that_was_never_touched(state, tmp_path) -> None:
+    missing = str(tmp_path / "never.py")
+    assert (
+        await HistoryCommand().execute(ctx(state, missing))
+    ).message == f"No history found for {missing}"
+
+
+@pytest.mark.asyncio
+async def test_restore_without_arguments_shows_the_usage(state) -> None:
+    result = await RestoreCommand().execute(ctx(state))
+    assert result.success is False
+    assert result.message == "Usage: /restore <path> [version]"
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_a_non_numeric_version(state, tmp_path) -> None:
+    target = tmp_path / "f.py"
+    target.write_text("x", encoding="utf-8")
+    result = await RestoreCommand().execute(ctx(state, f"{target} latest"))
+    assert result.success is False
+    assert "Not a version number: latest" in result.message
+
+
+@pytest.mark.asyncio
+async def test_restore_without_a_snapshot_fails_clearly(state, tmp_path) -> None:
+    target = str(tmp_path / "unknown.py")
+    result = await RestoreCommand().execute(ctx(state, target))
+    assert result.success is False
+    assert result.message.startswith(f"No a saved snapshot for {target}.")
+    assert "/history" in result.message
+
+
+@pytest.mark.asyncio
+async def test_restore_writes_the_latest_snapshot(state, tmp_path) -> None:
+    from openlaoke.utils.file_history import save_snapshot
+
+    target = tmp_path / "restored.py"
+    target.write_text("broken\n", encoding="utf-8")
+    save_snapshot(str(target), "good\n")
+    target.write_text("really broken\n", encoding="utf-8")
+
+    result = await RestoreCommand().execute(ctx(state, str(target)))
+
+    assert result.success is True
+    assert result.message == f"Restored {target} to v1 (5 bytes)."
+    assert target.read_text(encoding="utf-8") == "good\n"
+
+
+@pytest.mark.asyncio
+async def test_restore_accepts_a_v_prefixed_version(state, tmp_path) -> None:
+    from openlaoke.utils.file_history import save_snapshot
+
+    target = tmp_path / "pick.py"
+    target.write_text("c", encoding="utf-8")
+    save_snapshot(str(target), "first\n")
+    save_snapshot(str(target), "second\n")
+
+    result = await RestoreCommand().execute(ctx(state, f"{target} v1"))
+
+    assert result.success is True
+    assert "to v1 (6 bytes)" in result.message
+    assert target.read_text(encoding="utf-8") == "first\n"
+
+
+@pytest.mark.asyncio
+async def test_restore_reports_an_unknown_version(state, tmp_path) -> None:
+    from openlaoke.utils.file_history import save_snapshot
+
+    target = tmp_path / "only-one.py"
+    target.write_text("c", encoding="utf-8")
+    save_snapshot(str(target), "only")
+
+    result = await RestoreCommand().execute(ctx(state, f"{target} 7"))
+
+    assert result.success is False
+    assert result.message.startswith(f"No saved version 7 for {target}.")
+
+
+@pytest.mark.asyncio
+async def test_restore_reports_a_write_failure(state, tmp_path, monkeypatch) -> None:
+    from openlaoke.utils import file_history
+
+    target = tmp_path / "locked.py"
+    target.write_text("c", encoding="utf-8")
+    file_history.save_snapshot(str(target), "old")
+
+    monkeypatch.setattr(file_history, "restore_snapshot", lambda *_a, **_k: False)
+    result = await RestoreCommand().execute(ctx(state, str(target)))
+
+    assert result.success is False
+    assert result.message == f"Could not write {target}."
