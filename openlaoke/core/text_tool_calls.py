@@ -97,8 +97,6 @@ def _parse_json_block(body: str) -> ToolUseBlock | None:
 
 def _parse_xml_block(body: str) -> list[ToolUseBlock]:
     matches = _FUNCTION.findall(body)
-    if not matches and "<function=" in body:
-        matches = _BARE_FUNCTION.findall(body)
     calls: list[ToolUseBlock] = []
     for name, inner in matches:
         arguments: dict[str, Any] = {}
@@ -118,15 +116,10 @@ def _parse_argtag_block(body: str) -> list[ToolUseBlock]:
     """Parse ``Name<arg_key>k</arg_key><arg_value>v</arg_value>`` calls."""
     if "<arg_key>" not in body or "<arg_value>" not in body:
         return []
-    head = _ARG_KEY.search(body)
-    if head is None:
-        return []
     match = _ARGTAG_WHOLE.match(body)
     if match is None:
         return []
     name, rest = match.group(1), match.group(2)
-    if "<arg_key>" not in rest:
-        return []
     keys = _ARG_KEY.findall(rest)
     values = _ARG_VALUE.findall(rest)
     if not keys or len(keys) != len(values):

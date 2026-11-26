@@ -480,13 +480,6 @@ def classify_bash_command(command: str) -> BashClassificationResult:
                 CommandSafetyLevel.DANGEROUS,
             ):
                 return seg_result
-            if (
-                seg_result.safety_level == CommandSafetyLevel.SAFE
-                and worst.safety_level == CommandSafetyLevel.SAFE
-                and seg_result.confidence == ConfidenceLevel.HIGH
-                and worst.confidence == ConfidenceLevel.LOW
-            ):
-                worst = seg_result
 
     # Redirect target check applies to the whole line (target is a sibling
     # node of the command, not an argument of it).
