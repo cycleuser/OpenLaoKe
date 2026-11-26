@@ -80,7 +80,12 @@ def _extract_liquid_markers(content: str) -> list[dict[str, Any]]:
 
 
 def _parse_liquid_function_call(text: str) -> dict[str, Any] | None:
-    match = re.match(r"([\w.]+)\s*\((.*)\)\s*$", text.strip(), re.DOTALL)
+    # Liquid AI wraps the call in square brackets:
+    # ``<|tool_call_start|>[get_weather(city="Paris")]<|tool_call_end|>``
+    cleaned = text.strip()
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        cleaned = cleaned[1:-1].strip()
+    match = re.match(r"([\w.]+)\s*\((.*)\)\s*$", cleaned, re.DOTALL)
     if not match:
         return None
     func_name = match.group(1).strip()
