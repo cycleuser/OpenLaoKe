@@ -50,7 +50,7 @@ def make_client(
     config = MultiProviderConfig(
         providers=providers,
         active_provider="main",
-        active_model="test-model",
+        active_model=providers["main"].default_model,
         fallback_models=fallbacks or [],
     )
     client = MultiProviderClient(config)
@@ -631,3 +631,247 @@ async def test_stream_without_an_active_provider_raises() -> None:
     client = MultiProviderClient(MultiProviderConfig(providers={}))
     with pytest.raises(ValueError, match="No active provider"):
         await collect(client)
+
+
+# --------------------------------------------------------------------------- #
+# send_message: per-provider endpoints and payloads
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_azure_uses_a_deployment_url_and_inline_system_message(monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_API_VERSION", "2024-06-01")
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        seen["api_key"] = request.headers.get("api-key")
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "azure says hi"}}], "usage": {}}
+        )
+
+    azure = make_provider(
+        ProviderType.AZURE_OPENAI,
+        base_url="https://my-resource.openai.azure.com",
+        default_model="gpt-4o",
+    )
+    client = make_client(handler, provider=azure)
+    message, _usage, _cost = await client.send_message("be brief", MESSAGES)
+    await client.close()
+
+    assert seen["url"] == (
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions"
+        "?api-version=2024-06-01"
+    )
+    assert seen["body"]["messages"][0] == {"role": "system", "content": "be brief"}
+    assert seen["api_key"] == "sk-test"
+    assert message.content == "azure says hi"
+
+
+@pytest.mark.asyncio
+async def test_google_posts_to_generate_content_with_a_system_instruction(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        seen["key_header"] = request.headers.get("x-goog-api-key")
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {"content": {"parts": [{"text": "gemini says hi"}]}, "finishReason": "STOP"}
+                ],
+                "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 2},
+            },
+        )
+
+    google = make_provider(ProviderType.GOOGLE, default_model="gemini-test")
+    client = make_client(handler, provider=google)
+    message, usage, _cost = await client.send_message("be brief", MESSAGES)
+    await client.close()
+
+    assert seen["url"].endswith("/models/gemini-test:generateContent")
+    assert seen["body"]["systemInstruction"] == {"parts": [{"text": "be brief"}]}
+    assert "messages" not in seen["body"]
+    assert seen["key_header"] == "sk-test"
+    assert message.content == "gemini says hi"
+    assert usage.input_tokens == 5
+
+
+@pytest.mark.asyncio
+async def test_bedrock_posts_to_the_regional_runtime_endpoint(monkeypatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "output": {"message": {"content": [{"text": "bedrock says hi"}]}},
+                "stopReason": "end_turn",
+                "usage": {"inputTokens": 3, "outputTokens": 2},
+            },
+        )
+
+    bedrock = make_provider(ProviderType.AWS_BEDROCK, default_model="anthropic.claude-test")
+    client = make_client(handler, provider=bedrock)
+    message, _usage, _cost = await client.send_message("be brief", MESSAGES)
+    await client.close()
+
+    assert seen["url"] == (
+        "https://bedrock-runtime.eu-west-1.amazonaws.com/model/anthropic.claude-test/invoke"
+    )
+    assert seen["body"]["system"] == "be brief"
+    assert message.content == "bedrock says hi"
+
+
+@pytest.mark.asyncio
+async def test_vertex_uses_the_publishers_url(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_VERTEX_PROJECT", "proj-1")
+    monkeypatch.setenv("GOOGLE_VERTEX_LOCATION", "europe-west4")
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "ok"}]}}]})
+
+    vertex = make_provider(ProviderType.GOOGLE_VERTEX, default_model="gemini-vertex")
+    client = make_client(handler, provider=vertex)
+    message, _usage, _cost = await client.send_message("sys", MESSAGES)
+    await client.close()
+
+    assert seen["url"] == (
+        "https://europe-west4-aiplatform.googleapis.com/v1/projects/proj-1"
+        "/locations/europe-west4/publishers/google/models/gemini-vertex:generateContent"
+    )
+    assert message.content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_cohere_posts_to_chat_with_a_preamble() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "text": "cohere says hi",
+                "finish_reason": "COMPLETE",
+                "meta": {"tokens": {"input_tokens": 4, "output_tokens": 3}},
+            },
+        )
+
+    cohere = make_provider(
+        ProviderType.COHERE, base_url="https://api.cohere.ai/v2", default_model="command-r"
+    )
+    client = make_client(handler, provider=cohere)
+    message, usage, _cost = await client.send_message("be brief", MESSAGES)
+    await client.close()
+
+    assert seen["url"] == "https://api.cohere.ai/v2/chat"
+    assert seen["body"]["preamble"] == "be brief"
+    assert seen["body"]["message"] == "hi"
+    assert message.content == "cohere says hi"
+    assert usage.output_tokens == 3
+
+
+@pytest.mark.asyncio
+async def test_anthropic_send_puts_the_system_prompt_in_the_body() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        seen["version"] = request.headers.get("anthropic-version")
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "claude says hi"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 6, "output_tokens": 2},
+            },
+        )
+
+    anthropic = make_provider(ProviderType.ANTHROPIC, base_url="https://api.anthropic.com")
+    client = make_client(handler, provider=anthropic)
+    message, _usage, _cost = await client.send_message("be brief", MESSAGES)
+    await client.close()
+
+    assert seen["url"] == "https://api.anthropic.com/v1/messages"
+    assert seen["body"]["system"] == "be brief"
+    assert seen["body"]["messages"] == [{"role": "user", "content": "hi"}]
+    assert seen["version"] == "2023-06-01"
+    assert message.content == "claude says hi"
+
+
+# --------------------------------------------------------------------------- #
+# Anthropic stream edge cases
+# --------------------------------------------------------------------------- #
+
+
+def test_anthropic_stream_ping_and_message_stop_emit_nothing() -> None:
+    client = MultiProviderClient(MultiProviderConfig(providers={}))
+    pending: dict[int, dict[str, Any]] = {}
+
+    assert client._parse_anthropic_stream_events({"type": "ping"}, pending, "m") == []
+    assert client._parse_anthropic_stream_events({"type": "message_stop"}, pending, "m") == []
+    assert pending == {}
+
+
+def test_anthropic_stream_ignores_text_delta_on_an_unopened_tool_block() -> None:
+    client = MultiProviderClient(MultiProviderConfig(providers={}))
+    pending: dict[int, dict[str, Any]] = {}
+
+    # A partial JSON delta for an index that never saw content_block_start.
+    chunks = client._parse_anthropic_stream_events(
+        {"type": "content_block_delta", "index": 5, "delta": {"type": "input_json_delta"}},
+        pending,
+        "m",
+    )
+    assert chunks == []
+    assert pending == {}
+
+
+@pytest.mark.asyncio
+async def test_stream_retries_a_dropped_connection(monkeypatch) -> None:
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+    attempts: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise httpx.ConnectError("connection reset")
+        return httpx.Response(200, content=sse(text_chunk("recovered")))
+
+    client = make_client(handler)
+    chunks = await collect(client)
+    await client.close()
+
+    assert len(attempts) == 3
+    assert "".join(c.text for c in chunks if c.event_type == StreamEventType.TEXT) == "recovered"
+
+
+@pytest.mark.asyncio
+async def test_stream_raises_when_the_connection_never_recovers(monkeypatch) -> None:
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("socket closed")
+
+    client = make_client(handler)
+    with pytest.raises(httpx.ReadError):
+        await collect(client)
+    await client.close()

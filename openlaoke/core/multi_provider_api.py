@@ -117,6 +117,32 @@ MODEL_PRICES: dict[str, ModelPricing] = {
 }
 
 
+def _flatten_content(content: Any) -> str:
+    """Collapse message content to plain text for providers that only take text.
+
+    Gemini, Bedrock and Cohere wrap each turn as a single text part, but the
+    conversation carries Anthropic-style content blocks once cache markers are
+    applied. Without this the request body would contain
+    ``{"text": [{"type": "text", ...}]}``, which those APIs reject.
+    """
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if "text" in block:
+                    parts.append(str(block.get("text", "")))
+                elif "content" in block:
+                    parts.append(str(block.get("content", "")))
+        return "\n".join(part for part in parts if part)
+    return str(content)
+
+
 def _is_local_url(url: str) -> bool:
     """True when the endpoint points at a local server (no API key expected)."""
     host = (urlparse(url).hostname or "").lower()
@@ -1200,7 +1226,7 @@ class MultiProviderClient:
             if role == "system":
                 continue
             gemini_role = "user" if role in ["user", "tool", "tool_result"] else "model"
-            contents.append({"role": gemini_role, "parts": [{"text": content}]})
+            contents.append({"role": gemini_role, "parts": [{"text": _flatten_content(content)}]})
         body: dict[str, Any] = {
             "contents": contents,
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
@@ -1291,7 +1317,9 @@ class MultiProviderClient:
             if role == "system":
                 continue
             bedrock_role = "user" if role in ["user", "tool", "tool_result"] else "assistant"
-            bedrock_messages.append({"role": bedrock_role, "content": [{"text": content}]})
+            bedrock_messages.append(
+                {"role": bedrock_role, "content": [{"text": _flatten_content(content)}]}
+            )
         body: dict[str, Any] = {
             "messages": bedrock_messages,
             "max_tokens": max_tokens,
@@ -1358,10 +1386,10 @@ class MultiProviderClient:
             if role == "system":
                 continue
             cohere_role = "USER" if role in ["user", "tool", "tool_result"] else "CHATBOT"
-            chat_history.append({"role": cohere_role, "message": content})
+            chat_history.append({"role": cohere_role, "message": _flatten_content(content)})
         body: dict[str, Any] = {
             "model": model,
-            "message": messages[-1].get("content", "") if messages else "",
+            "message": _flatten_content(messages[-1].get("content", "")) if messages else "",
             "chat_history": chat_history[:-1] if chat_history else [],
             "max_tokens": max_tokens,
             "temperature": temperature,

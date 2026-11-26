@@ -389,9 +389,17 @@ class CacheGuard:
           marking them would waste a cache write.
 
         Only adds markers for Anthropic providers; OpenAI/DeepSeek use
-        automatic prefix caching which works differently.
+        automatic prefix caching which works differently. Pass
+        ``provider_type`` to say which family this is: an explicit
+        non-Anthropic family returns the messages untouched, because sending
+        Anthropic-only ``cache_control`` blocks to an OpenAI-compatible server
+        is a protocol error. Leaving it empty keeps the old behaviour of
+        trusting the caller's decision.
         """
         if not messages:
+            return messages
+
+        if provider_type and provider_type != "anthropic":
             return messages
 
         # Find the last two non-system_injected messages
