@@ -181,12 +181,10 @@ def test_mode_command_is_registered() -> None:
 def test_cli_keeps_mode_value_out_of_the_prompt() -> None:
     from openlaoke.entrypoints.cli import split_argv
 
-    flags, prompt, subcommand = split_argv(
-        ["-c", "/tmp", "--mode", "pi", "--max-steps", "12", "write", "it"]
-    )
+    flags, prompt = split_argv(["-c", "/tmp", "--mode", "pi", "--max-steps", "12", "write", "it"])
+
     assert flags == ["-c", "/tmp", "--mode", "pi", "--max-steps", "12"]
     assert prompt == ["write", "it"]
-    assert subcommand is None
 
 
 def test_non_interactive_honours_cli_max_steps() -> None:

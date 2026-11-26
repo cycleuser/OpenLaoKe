@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   be loaded is reported instead of being called a success.
 
 ### Changed
+- **`split_argv()` returns two values, not three** (`entrypoints/cli.py`): the
+  third was a subcommand that no caller ever read and no token could ever match
+  because the set it was compared against was empty.
 - **Overwriting a file the model has not read now warns instead of failing**
   (`tools/write_tool.py`): the write completes and the result adds "the file
   already existed and had not been read this session". Refusing the write was

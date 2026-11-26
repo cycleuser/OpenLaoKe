@@ -46,38 +46,31 @@ _VALUE_FLAGS = frozenset(
 )
 
 
-def split_argv(argv: list[str]) -> tuple[list[str], list[str], str | None]:
-    """Split argv into flags, prompt text, and an optional subcommand.
+def split_argv(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Split argv into flags and prompt text.
 
     Flags that take a value must be listed in ``_VALUE_FLAGS``; otherwise the
     value is mistaken for prompt text and argparse reports "expected one
     argument". Keep this list in sync when adding a value-taking flag.
     """
-    known_subcommands: set[str] = set()
     prompt_parts: list[str] = []
     filtered_argv: list[str] = []
     args_iter = iter(argv)
-    subcommand: str | None = None
 
     for tok in args_iter:
-        if tok in known_subcommands and subcommand is None:
-            subcommand = tok
-            filtered_argv.append(tok)
-        elif tok.startswith("-"):
+        if tok.startswith("-"):
             filtered_argv.append(tok)
             if tok in _VALUE_FLAGS:
                 val = next(args_iter, "")
                 if val:
                     filtered_argv.append(val)
-        elif subcommand is None:
-            prompt_parts.append(tok)
         else:
-            filtered_argv.append(tok)
-    return filtered_argv, prompt_parts, subcommand
+            prompt_parts.append(tok)
+    return filtered_argv, prompt_parts
 
 
 def main() -> None:
-    filtered_argv, prompt_parts, subcommand = split_argv(sys.argv[1:])
+    filtered_argv, prompt_parts = split_argv(sys.argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="openlaoke",
