@@ -496,7 +496,7 @@ class MultiProviderClient:
         messages: list[dict[str, Any]],
         provider_type: ProviderType,
     ) -> list[dict[str, Any]]:
-        from openlaoke.provider import enforce_role_alternation
+        from openlaoke.core.messages import enforce_role_alternation
 
         converted = (
             self._convert_to_anthropic_format(messages)
