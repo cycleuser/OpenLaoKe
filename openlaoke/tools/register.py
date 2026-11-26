@@ -81,15 +81,17 @@ def register_all_tools(registry: ToolRegistry) -> None:
     from openlaoke.utils.config import load_config
 
     try:
-        batch_enabled = bool(load_config().enable_batch)
+        config = load_config()
     except Exception:
-        batch_enabled = False
-    if batch_enabled:
+        # A broken config must not cost the session every optional tool.
+        config = None
+
+    if config is not None and config.enable_batch:
         from openlaoke.tools.batch_tool import BatchTool
 
         tools.append(BatchTool())
 
-    if getattr(load_config(), "enable_browser", False):
+    if config is not None and getattr(config, "enable_browser", False):
         from openlaoke.tools.browser_tool import BrowserTool, selenium_available
 
         if selenium_available():
@@ -107,10 +109,6 @@ def register_all_tools(registry: ToolRegistry) -> None:
 
     for tool in tools:
         registry.register(tool)
-
-
-def register_essential_tools(registry: ToolRegistry) -> None:
-    register_all_tools(registry)
 
 
 def register_core_tools(registry: ToolRegistry) -> None:
@@ -152,11 +150,3 @@ def register_core_tools(registry: ToolRegistry) -> None:
 
     for tool in tools:
         registry.register(tool)
-
-
-def register_deferred_tools(registry: ToolRegistry) -> None:
-    return None
-
-
-def get_tool_loader(tool_name: str):
-    return None
