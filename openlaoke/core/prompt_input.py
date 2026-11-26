@@ -259,11 +259,14 @@ def _build_model_picker_app(
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame, TextArea
 
-    selected = [0]
-    active_display = next(
-        (entry["display"] for entry in entries if entry["active"]),
-        entries[0]["display"] if entries else "",
+    # Start on the model in use rather than on whatever happens to be first:
+    # the list is normally sorted active-first, but the picker should not depend
+    # on that. Pressing Enter straight after Ctrl+P is the common case.
+    active_index = next(
+        (index for index, entry in enumerate(entries) if entry["active"]), 0
     )
+    selected = [active_index]
+    active_display = entries[active_index]["display"] if entries else ""
 
     filter_field = TextArea(
         height=1,
