@@ -40,7 +40,7 @@
 | memory | `Memory` + `/memory` | P9 | **已实现**（remember/recall/search/list/forget/tag/link/related/stats；`core/memory_store.py` 每项目一个 JSON，BM25 检索、中文按字二元切分；系统提示里只注入 id 与摘要，正文靠 recall 取） |
 | session_search | `SessionSearch` | P10 | **已实现**（BM25 扫描 ~/.openlaoke/sessions，可按 days/cwd/role 过滤，回 session id + 消息序号 + 时间 + 摘要） |
 | conversation_search | `ConversationSearch` | P10 | **已实现**（检索当前会话全部消息，压缩掉的内容也能找回来） |
-| skill_manage | `InvokeSkill` + `/skill` | P16 | **已实现**（list / reload / activate / `info <name>` / `off <name>` / clear） |
+| skill_manage | `InvokeSkill` + `/skill` | P16 | **已实现**（list / install <github-url> [name] / remove / reload / activate / `info <name>` / `off <name>` / clear；安装走 `core/skill_installer.py`，支持 skills.json 索引、`skills/` 目录扫描与 OpenCode `index.json` 协议） |
 | mcp | MCP 桥接 + `/mcp` | P13 | **已实现**（`core/mcp_client.py` stdio JSON-RPC：initialize/tools/list/tools/call；`core/mcp_runtime.py` 把服务端工具注册成 `mcp__server__tool`，带 intent 与结果账本；启动失败只记进 `/mcp` 不阻塞会话；`enable_mcp` 与 `mcp_servers` 生效） |
 | codemode | `CodeMode` | P14 | **已实现**（`core/code_sandbox.py`：独立解释器 `python -I -B`、环境变量清空、open 限定工作区、屏蔽进程/网络/FFI 模块与 os.system、CPU/内存 rlimit、超时杀进程、输出上限；文档写明这不是对抗恶意代码的边界） |
 | swarm | `Swarm` | P15 | **已实现**（`core/swarm.py`：最多 6 条泳道并发跑子代理，start 立即返回、await 带超时、status 看状态与结果、note/messages 共享板、cancel 收尾；`contextvars` 记当前泳道，Write/Edit/ApplyPatch 的每次落盘都记进触碰台账并归属到具体 worker） |

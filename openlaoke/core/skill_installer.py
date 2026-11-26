@@ -16,6 +16,21 @@ from typing import Any
 import httpx
 
 
+def safe_skill_name(name: str) -> bool:
+    """True when ``name`` can be used as a single directory name.
+
+    Skill names come from a repository listing or a URL, both of which a third
+    party controls. ``Path(self.install_dir) / "../../etc"`` would install
+    outside the skills directory, so anything that is not one plain component is
+    rejected before it reaches the filesystem.
+    """
+    if not name or name in {".", ".."}:
+        return False
+    if "/" in name or "\\" in name or "\x00" in name:
+        return False
+    return not (len(name) > 1 and name[1] == ":")  # Windows drive letter
+
+
 @dataclass
 class SkillInfo:
     """Metadata about a skill."""
@@ -45,8 +60,6 @@ class SkillInstaller:
     def __init__(self, install_dir: Path | None = None):
         self.install_dir = install_dir or Path.home() / ".openlaoke" / "skills"
         self.install_dir.mkdir(parents=True, exist_ok=True)
-        self._cache_dir = Path.home() / ".openlaoke" / "cache" / "skills"
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
 
     async def close(self):
@@ -114,7 +127,9 @@ class SkillInstaller:
 
         # Try OpenCode discovery protocol (index.json)
         try:
-            return await self._install_from_opencode_index(repo_url, skill_name)
+            opencode_results = await self._install_from_opencode_index(repo_url)
+            if opencode_results:
+                return opencode_results
         except Exception:
             pass
 
@@ -130,7 +145,19 @@ class SkillInstaller:
         except Exception as e:
             results.append(InstallResult("unknown", False, f"Failed to list repo: {e}"))
 
-        return results
+        if results:
+            return results
+
+        # Falling off the end returned None, which every caller iterated over.
+        target = skill_name or "any skill"
+        return [
+            InstallResult(
+                skill_name or "unknown",
+                False,
+                f"No skill found for {target} at {repo_url} (looked for skills.json, "
+                "a skills/ directory, an index.json and the repo root).",
+            )
+        ]
 
     async def _install_from_index(
         self, raw_base: str, api_base: str, index: dict, skill_name: str | None
@@ -175,10 +202,12 @@ class SkillInstaller:
 
         return results
 
-    async def _install_from_opencode_index(
-        self, url: str, skill_name: str | None
-    ) -> list[InstallResult]:
-        """Install skills using OpenCode discovery protocol (index.json)."""
+    async def _install_from_opencode_index(self, url: str) -> list[InstallResult]:
+        """Install skills using OpenCode discovery protocol (index.json).
+
+        Only reached when the caller has no results yet, which means no skill was
+        named: a named skill is attempted directly instead.
+        """
         base = url.rstrip("/") + "/"
         index_url = f"{base}index.json"
 
@@ -196,9 +225,6 @@ class SkillInstaller:
             if not files or "SKILL.md" not in files:
                 continue
 
-            if skill_name and name != skill_name:
-                continue
-
             result = await self._download_skill_files(host, name, files)
             results.append(result)
 
@@ -206,6 +232,8 @@ class SkillInstaller:
 
     async def _install_single_skill(self, raw_base: str, api_base: str, name: str) -> InstallResult:
         """Install a single skill from a GitHub repo."""
+        if not safe_skill_name(name):
+            return InstallResult(name, False, f"Unsafe skill name: {name!r}")
         # Check if already installed
         skill_dir = self.install_dir / name
         if skill_dir.exists() and (skill_dir / "SKILL.md").exists():
@@ -265,11 +293,15 @@ class SkillInstaller:
 
     async def _download_skill_files(self, host: str, name: str, files: list[str]) -> InstallResult:
         """Download skill files from OpenCode-style index."""
+        if not safe_skill_name(name):
+            return InstallResult(name, False, f"Unsafe skill name: {name!r}")
         try:
             skill_dir = self.install_dir / name
             skill_dir.mkdir(parents=True, exist_ok=True)
 
             for fname in files:
+                if not safe_skill_name(fname):
+                    continue
                 file_url = f"{host}/{name}/{fname}"
                 resp = await self._client.get(file_url)
                 if resp.status_code == 200:
@@ -339,6 +371,8 @@ class SkillInstaller:
 
     def remove_skill(self, name: str) -> InstallResult:
         """Remove an installed skill."""
+        if not safe_skill_name(name):
+            return InstallResult(name, False, f"Unsafe skill name: {name!r}")
         skill_dir = self.install_dir / name
         if not skill_dir.exists():
             return InstallResult(name, False, f"Skill '{name}' not found")
@@ -348,6 +382,8 @@ class SkillInstaller:
 
     def get_skill_path(self, name: str) -> Path | None:
         """Get the path to an installed skill."""
+        if not safe_skill_name(name):
+            return None
         skill_dir = self.install_dir / name
         if skill_dir.exists() and (skill_dir / "SKILL.md").exists():
             return skill_dir

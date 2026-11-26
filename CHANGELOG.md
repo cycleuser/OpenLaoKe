@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   actually read. `Read` fills it and `Write` consults it; both sides looked for a
   `ToolContext.file_state` that no caller ever created, so the read-before-write
   note below never fired.
+- **`/skill install` and `/skill remove`** (`commands/skill_commands.py`):
+  `core/skill_installer.py` could download skills from a GitHub repository, a
+  `skills/` directory scan or an OpenCode-style `index.json`, but the refactor
+  that trimmed `/skill` down to list/activate left all 232 lines unreachable.
+  `/skill install <github-url> [name]` installs and rescans the registry,
+  `/skill remove <name>` deletes a skill, and a download that lands but cannot
+  be loaded is reported instead of being called a success.
 
 ### Changed
 - **Overwriting a file the model has not read now warns instead of failing**
@@ -100,6 +107,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`core/config_wizard.py`), and `quick_setup()` returned an untouched config
   for a misspelled provider name instead of reporting it. Both now say what
   happened.
+- **A skill repository listing could write outside the skills directory**
+  (`core/skill_installer.py`): skill and file names come from the repository being
+  installed, and `install_dir / name` followed a `../` straight out of it. Names
+  are now checked to be a single plain path component, and a failed install
+  reports why instead of returning `None`.
 
 ## [0.1.46] - 2026-11-21
 

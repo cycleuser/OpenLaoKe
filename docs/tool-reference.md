@@ -73,7 +73,7 @@ Optional tools (Batch, Browser) only appear when their config flag is on.
 | `/sessions` | `/ls-sessions` | List saved sessions |
 | `/settings` | - | Show or change settings |
 | `/share` | - | Share the session as a secret GitHub gist |
-| `/skill` | `/skills` | List or activate a skill |
+| `/skill` | `/skills` | List, install or activate a skill |
 | `/sleep` | `/hibernate` | Release derived caches without ending the session |
 | `/stats` | `/dashboard` | Session dashboard: tokens, tools, edits, tasks, memory |
 | `/theme` | - | Set or show the terminal theme |

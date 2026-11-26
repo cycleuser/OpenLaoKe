@@ -37,7 +37,7 @@ pi's built-in command set is implemented one-to-one:
 
 `/new` `/name` `/session` `/tree` `/fork` `/clone` `/compact` `/resume` `/export` `/import` `/copy` `/share` `/changelog` `/hotkeys` `/scoped-models` `/trust` `/login` `/logout` `/reload` `/model` `/thinking` `/settings` `/quit`
 
-Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list or activate a skill), `/mode` (switch harness temperament), `/theme`, `/help`.
+Plus OpenLaoKe additions that fit the same philosophy: `/prompt` (expand a prompt template), `/skill` (list, install or activate a skill), `/mode` (switch harness temperament), `/theme`, `/help`.
 
 `/model` switches provider or model, with live model discovery:
 
@@ -169,7 +169,7 @@ Skills follow the [Agent Skills](https://agentskills.io) standard: a directory w
 ~/.openlaoke/skills/<name>/SKILL.md   # project: .openlaoke/skills/<name>/SKILL.md
 ```
 
-Only the name and description enter the system prompt; the body is read when `InvokeSkill` is called. `/skill` lists what is installed and activates one.
+Only the name and description enter the system prompt; the body is read when `InvokeSkill` is called. `/skill` lists what is installed and activates one; `/skill install <github-url> [name]` downloads a skill into that directory and `/skill remove <name>` deletes it.
 
 ## Bot mode
 

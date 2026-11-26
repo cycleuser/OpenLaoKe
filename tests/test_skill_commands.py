@@ -241,3 +241,193 @@ async def test_use_skill_delegates_to_skill(state, skill_home) -> None:
     assert result.success is True
     assert state.active_skills == ["reviewer"]
     assert UseSkillCommand().hidden is True
+
+
+# --------------------------------------------------------------------------- #
+# /skill install and /skill remove
+# --------------------------------------------------------------------------- #
+
+
+def fake_installer(monkeypatch, *, results, removed=None, record=None):
+    """Replace SkillInstaller with a stub that scripts install/remove results."""
+    from types import SimpleNamespace
+
+    import openlaoke.core.skill_installer as installer_module
+
+    class Stub:
+        def __init__(self, install_dir=None):
+            self.install_dir = install_dir
+            self.closed = False
+            if record is not None:
+                record["constructed"] = True
+
+        async def install_from_github(self, url, skill_name=None):
+            if record is not None:
+                record["install"] = (url, skill_name)
+            if isinstance(results, Exception):
+                raise results
+            return results
+
+        def remove_skill(self, name):
+            if record is not None:
+                record["remove"] = name
+            return removed
+
+        async def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(installer_module, "SkillInstaller", Stub)
+    return SimpleNamespace(stub=Stub)
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Any accidental real network use in this module should fail loudly."""
+    import openlaoke.core.skill_installer as installer_module
+
+    def guard(*args, **kwargs):
+        raise AssertionError("SkillInstaller must be stubbed in these tests")
+
+    monkeypatch.setattr(installer_module, "SkillInstaller", guard)
+
+
+@pytest.mark.asyncio
+async def test_install_without_a_url_explains_the_usage(state) -> None:
+    result = await SkillCommand().execute(ctx(state, "install"))
+
+    assert result.success is False
+    assert "/skill install <github-url>" in result.message
+
+
+@pytest.mark.asyncio
+async def test_install_reports_each_skill_and_refreshes_the_registry(
+    state, skill_home, monkeypatch
+) -> None:
+    from openlaoke.core.skill_installer import InstallResult
+
+    install(skill_home, "pdf", "read pdfs")
+    fake_installer(
+        monkeypatch,
+        results=[
+            InstallResult(
+                "pdf", True, "Installed to /x", skill_home / ".openlaoke" / "skills" / "pdf"
+            ),
+            InstallResult("broken", False, "SKILL.md not found"),
+        ],
+    )
+
+    result = await SkillCommand().execute(ctx(state, "install https://github.com/x/y"))
+
+    assert result.success is True
+    assert "[ok] pdf" in result.message
+    assert "[failed] broken: SKILL.md not found" in result.message
+    assert "skill(s) available" in result.message
+
+
+@pytest.mark.asyncio
+async def test_install_passes_the_optional_skill_name(state, skill_home, monkeypatch) -> None:
+    from openlaoke.core.skill_installer import InstallResult
+
+    record: dict = {}
+    install(skill_home, "pdf", "read pdfs")
+    fake_installer(monkeypatch, results=[InstallResult("pdf", True, "ok")], record=record)
+
+    await SkillCommand().execute(ctx(state, "install https://github.com/x/y pdf"))
+
+    assert record["install"] == ("https://github.com/x/y", "pdf")
+
+
+@pytest.mark.asyncio
+async def test_install_fails_when_every_skill_failed(state, monkeypatch) -> None:
+    from openlaoke.core.skill_installer import InstallResult
+
+    fake_installer(monkeypatch, results=[InstallResult("ghost", False, "No skill found")])
+
+    result = await SkillCommand().execute(ctx(state, "install https://github.com/x/y"))
+
+    assert result.success is False
+    assert "[failed] ghost" in result.message
+
+
+@pytest.mark.asyncio
+async def test_install_warns_when_a_downloaded_skill_is_not_loadable(
+    state, skill_home, monkeypatch
+) -> None:
+    """The file landed but the registry cannot read it: say so instead of claiming success."""
+    from openlaoke.core.skill_installer import InstallResult
+
+    fake_installer(monkeypatch, results=[InstallResult("halfway", True, "Installed")])
+
+    result = await SkillCommand().execute(ctx(state, "install https://github.com/x/y"))
+
+    assert result.success is True
+    assert "halfway installed but not loadable" in result.message
+
+
+@pytest.mark.asyncio
+async def test_install_reports_a_transport_error_without_a_traceback(
+    state, skill_home, monkeypatch
+) -> None:
+    import httpx
+
+    fake_installer(monkeypatch, results=httpx.ConnectError("offline"))
+
+    result = await SkillCommand().execute(ctx(state, "install https://github.com/x/y"))
+
+    assert result.success is False
+    assert "Download failed: offline" in result.message
+
+
+@pytest.mark.asyncio
+async def test_remove_without_a_name_explains_the_usage(state) -> None:
+    result = await SkillCommand().execute(ctx(state, "remove"))
+
+    assert result.success is False
+    assert "/skill remove <name>" in result.message
+
+
+@pytest.mark.asyncio
+async def test_remove_deletes_the_skill(state, skill_home, monkeypatch) -> None:
+    from openlaoke.core.skill_installer import InstallResult
+
+    install(skill_home, "gone", "temporary")
+    removed = InstallResult("gone", True, "Removed 'gone'")
+    fake_installer(monkeypatch, results=[], removed=removed)
+
+    result = await SkillCommand().execute(ctx(state, "remove gone"))
+
+    assert result.success is True
+    assert "Removed 'gone'" in result.message
+
+
+@pytest.mark.asyncio
+async def test_remove_reports_an_unknown_skill(state, monkeypatch) -> None:
+    from openlaoke.core.skill_installer import InstallResult
+
+    fake_installer(
+        monkeypatch, results=[], removed=InstallResult("nope", False, "Skill 'nope' not found")
+    )
+
+    result = await SkillCommand().execute(ctx(state, "rm nope"))
+
+    assert result.success is False
+    assert "not found" in result.message
+
+
+@pytest.mark.asyncio
+async def test_listing_mentions_how_to_install(state, skill_home) -> None:
+    install(skill_home, "pdf", "read pdfs")
+
+    message = (await SkillCommand().execute(ctx(state))).message
+
+    assert "/skill install <github-url>" in message
+
+
+@pytest.mark.asyncio
+async def test_install_handles_an_installer_that_returns_nothing(state, monkeypatch) -> None:
+    fake_installer(monkeypatch, results=[])
+
+    result = await SkillCommand().execute(ctx(state, "install https://github.com/x/y"))
+
+    assert result.success is False
+    assert "Nothing to install" in result.message
