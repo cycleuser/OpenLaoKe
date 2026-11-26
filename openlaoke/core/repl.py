@@ -120,7 +120,6 @@ class REPL:
         self._theme = ThemeManager(app_state.theme)
 
         from openlaoke.core.hook_system import HookRegistry
-        from openlaoke.core.prompt_cache_split import PromptCacheSplit
         from openlaoke.core.small_model_optimizations import (
             ReadLoopTracker,
             SmallModelGuard,
@@ -142,7 +141,6 @@ class REPL:
         self._world_sensor: Any = None
         self._cache_guard = CacheGuard(app_state)
         app_state._cache_guard = self._cache_guard
-        self._cache_split = PromptCacheSplit()
         self._cache_monitor = CacheMonitor()
         app_state._cache_monitor = self._cache_monitor
         self._mcp_runtime = MCPRuntime()
