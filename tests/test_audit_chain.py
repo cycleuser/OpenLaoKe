@@ -544,3 +544,19 @@ def test_the_audit_command_mentions_other_session_chains(tmp_path, monkeypatch):
     result = asyncio.run(AuditCommand().execute(Ctx()))
 
     assert "1 other session chain(s)" in result.message
+
+
+def test_list_logs_skips_an_unreadable_entry(tmp_path, monkeypatch):
+    from openlaoke.core import audit
+
+    audit.AuditLog(str(tmp_path), name="one").append("tool.request", {"tool": "Bash"})
+    real_stat = audit.Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        if self.name == "one.jsonl":
+            raise OSError("gone")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(audit.Path, "stat", fake_stat)
+
+    assert audit.list_logs(str(tmp_path)) == []

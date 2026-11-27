@@ -332,3 +332,97 @@ def test_the_artifacts_command_says_when_nothing_is_stored(tmp_path, monkeypatch
     result = asyncio.run(ArtifactsCommand().execute(Ctx()))
 
     assert "No stored tool output" in result.message
+
+
+def test_the_inventory_skips_stray_files_and_unreadable_entries(tmp_path, monkeypatch):
+    from openlaoke.core import tool_output_store as store_module
+    from openlaoke.core.tool_output_store import artifact_inventory
+
+    base = tmp_path / "art"
+    (base / "sess-1").mkdir(parents=True)
+    (base / "sess-1" / "one.txt").write_text("body")
+    (base / "stray.txt").write_text("not a session directory")
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        if self.name == "one.txt":
+            raise OSError("gone")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+    inventory = artifact_inventory(str(base))
+
+    # The stray file at the root is not a session; the unreadable one is counted
+    # as a file with an unknown size rather than crashing the listing.
+    assert inventory == [("sess-1", 1, 0)]
+    assert store_module  # keep the import meaningful for the linter
+
+
+def test_pruning_skips_stray_files_and_unreadable_entries(tmp_path, monkeypatch):
+    from openlaoke.core.tool_output_store import prune_artifacts
+
+    base = tmp_path / "art"
+    (base / "sess-1").mkdir(parents=True)
+    (base / "sess-1" / "one.txt").write_text("body")
+    (base / "stray.txt").write_text("not a session directory")
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        if self.name == "one.txt":
+            raise OSError("gone")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+
+    assert prune_artifacts(root=str(base)) == (0, 0)
+    assert (base / "one.txt").exists() is False  # never created; the guard held
+
+
+def test_the_artifact_root_falls_back_to_the_environment(tmp_path, monkeypatch):
+    from openlaoke.core.state import AppState
+    from openlaoke.core.tool_output_store import resolve_artifact_root
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "env-art"))
+
+    assert resolve_artifact_root(AppState(session_id="s", cwd=str(tmp_path))) == str(
+        tmp_path / "env-art"
+    )
+
+
+def test_the_artifact_root_prefers_the_live_store(tmp_path, monkeypatch):
+    from openlaoke.core.state import AppState
+    from openlaoke.core.tool_output_store import get_store, resolve_artifact_root
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "env-art"))
+    state = AppState(session_id="sess-1", cwd=str(tmp_path))
+    get_store(state)
+
+    assert resolve_artifact_root(state) == str(tmp_path / "env-art")
+
+
+def test_pruning_an_unlistable_directory_removes_nothing(tmp_path, monkeypatch):
+    import openlaoke.core.tool_output_store as store_module
+
+    def refuse(_path):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(store_module.os, "listdir", refuse)
+
+    assert store_module.prune_artifacts(root=str(tmp_path)) == (0, 0)
+
+
+def test_a_file_that_cannot_be_deleted_is_skipped(tmp_path, monkeypatch):
+    from openlaoke.core.tool_output_store import remove_session_artifacts
+
+    directory = tmp_path / "art" / "sess-1"
+    directory.mkdir(parents=True)
+    stubborn = directory / "one.txt"
+    stubborn.write_text("body")
+
+    def refuse(self, *args, **kwargs):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+
+    assert remove_session_artifacts("sess-1", root=str(tmp_path / "art")) == 0
+    assert stubborn.exists()

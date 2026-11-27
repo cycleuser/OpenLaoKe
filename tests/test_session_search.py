@@ -201,3 +201,74 @@ def test_search_does_not_list_a_session_twice(tmp_path) -> None:
 
 def test_search_of_a_missing_directory_is_empty(tmp_path) -> None:
     assert search_sessions("anything", sessions_dir=str(tmp_path / "nope")) == []
+
+
+def test_score_documents_scores_plain_texts(tmp_path) -> None:
+    from openlaoke.core.session_index import score_documents
+
+    scores = score_documents("migration order", ["the migration order", "nothing here"])
+
+    assert len(scores) == 2
+    assert scores[0] > 0
+    assert scores[1] == 0
+
+
+def test_the_limit_stops_the_result_list(tmp_path) -> None:
+    for index in range(6):
+        _write_session(tmp_path, f"s{index}", str(tmp_path), [_msg("user", "the same flag")])
+
+    hits = search_sessions("flag", sessions_dir=str(tmp_path), limit=3)
+
+    assert len(hits) == 3
+
+
+def test_an_unreadable_mtime_skips_the_session(tmp_path, monkeypatch) -> None:
+    import os.path as os_path
+
+    _write_session(tmp_path, "s1", str(tmp_path), [_msg("user", "a searchable line")])
+    real_getmtime = os_path.getmtime
+
+    def fake_getmtime(path):
+        if str(path).endswith("s1.json"):
+            raise OSError("gone")
+        return real_getmtime(path)
+
+    monkeypatch.setattr("openlaoke.core.session_index.os.path.getmtime", fake_getmtime)
+
+    assert search_sessions("searchable", sessions_dir=str(tmp_path), days=1) == []
+
+
+def test_an_unlistable_directory_is_treated_as_empty(tmp_path, monkeypatch) -> None:
+    import openlaoke.core.session_index as index_module
+
+    def refuse(_path):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(index_module.os, "listdir", refuse)
+
+    assert index_module._payloads(str(tmp_path)) == []
+
+
+def test_the_conversation_search_limit_stops_the_list() -> None:
+    messages = [UserMessage(role=MessageRole.USER, content=f"repeated flag {i}") for i in range(5)]
+
+    hits = search_conversation("flag", messages, limit=2)
+
+    assert len(hits) == 2
+
+
+def test_an_empty_conversation_search_returns_nothing() -> None:
+    assert search_conversation("flag", []) == []
+    assert search_conversation("", [UserMessage(role=MessageRole.USER, content="x")]) == []
+
+
+def test_a_message_with_no_text_is_not_indexed() -> None:
+    messages = [
+        UserMessage(role=MessageRole.USER, content=""),
+        UserMessage(role=MessageRole.USER, content="   "),
+        UserMessage(role=MessageRole.USER, content="a real line"),
+    ]
+
+    hits = search_conversation("real", messages)
+
+    assert [hit.index for hit in hits] == [2]
