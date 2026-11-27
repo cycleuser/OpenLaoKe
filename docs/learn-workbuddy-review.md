@@ -221,7 +221,7 @@ OpenLaoKe 目前没有任何审计痕迹：`risk_events` 只是内存里的 200 
 | prompt 预算 fail-closed（§5.2） | 已实现 + 测试（`core/prompt_budget.py`） |
 | 调度 run history（§5.3） | 已实现 + 测试（`core/scheduler.py`、`/schedule log`） |
 | 审计哈希链 + 锚点（§6） | 已实现 + 测试（`core/audit.py`、`/audit`） |
-| s20「失败也要出现在收尾里」 | 未做：artifact gate 已覆盖成功路径，失败清单要改收尾渲染，留待单独一轮 |
+| s20「失败也要出现在收尾里」 | 已实现 + 测试（`repl._report_turn_failures`） |
 
 每一条都配了「把修复改回去，测试必失败」的验证，验证方式写在各 commit 说明里。
 

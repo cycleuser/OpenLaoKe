@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **A turn now ends with the harness's account of what failed** (`core/repl.py`):
+  failed tool calls are collected per turn and printed after the model's closing
+  message ("3 tool call(s) failed this turn: …"), capped at five distinct
+  errors. The closing message is the model's own account of the turn, and a
+  cheerful "done" after three failed edits reads as success; this block is
+  printed by the harness, so it cannot be summarised away.
 - **Hash-chained audit log and `/audit`** (`core/audit.py`): every tool request,
   result and refusal appends one line that commits to the previous one, so an
   edited entry breaks the chain. The chain alone cannot notice *deletion* (any
@@ -120,6 +126,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **A tool result containing `[/]` aborted the whole turn** (`core/repl.py`):
+  `_print_tool_result` interpolated arbitrary tool output into Rich markup, so a
+  traceback line like `[Errno 2] …` lost its brackets and `[/]` raised
+  MarkupError inside `print`. Tool output and exception text are now escaped
+  before they are rendered, at every site that prints them (four more shared
+  the bug, including the handler meant to report provider errors).
 - **An interrupted save could destroy a whole session** (`core/state.py`):
   `_persist()` opened the session file with `"w"`, which truncates before
   writing, so a crash mid-save left half a JSON document and
