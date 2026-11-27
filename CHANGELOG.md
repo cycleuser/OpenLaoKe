@@ -25,6 +25,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   be loaded is reported instead of being called a success.
 
 ### Changed
+- **Shell commands no longer inherit credentials** (`core/state.py`,
+  `utils/security.py`): a tool subprocess was handed `os.environ.copy()`, so
+  `curl -d "$ANTHROPIC_API_KEY" https://…` needed no trick to work. Names that
+  look like credentials (`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`,
+  `AWS_*`, `AZURE_*`, `SSH_AUTH_SOCK`, …) are dropped now;
+  `OPENLAOKE_PASS_ENV=NAME,…` keeps individual names and
+  `OPENLAOKE_NO_ENV_FILTER=1` disables the filter. Provider keys still reach the
+  API client, which reads `os.environ` directly.
 - **`split_argv()` returns two values, not three** (`entrypoints/cli.py`): the
   third was a subcommand that no caller ever read and no token could ever match
   because the set it was compared against was empty.
@@ -62,6 +70,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **An interrupted save could destroy a whole session** (`core/state.py`):
+  `_persist()` opened the session file with `"w"`, which truncates before
+  writing, so a crash mid-save left half a JSON document and
+  `load_session()` returned nothing. The write now goes to a temporary file
+  that is fsynced and renamed into place, and the result is 0600.
 - **The model picker started on the wrong row** (`core/prompt_input.py`):
   `selected[0] = 0` meant Ctrl+P then Enter relied on the list having been sorted
   active-first. It now starts on the model in use.

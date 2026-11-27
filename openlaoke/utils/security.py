@@ -50,6 +50,93 @@ def redact_credentials(text: str) -> str:
     return text
 
 
+# Environment variable names that carry credentials. A shell command started by
+# the agent inherits the process environment, so without this a one-line
+# `curl -d "$ANTHROPIC_API_KEY" https://…` would export the key. The list is
+# matched case-insensitively; ``*`` is a suffix wildcard.
+_SECRET_ENV_NAMES = frozenset(
+    {
+        "SSH_AUTH_SOCK",
+        "GPG_AGENT_INFO",
+        "KRB5CCNAME",
+        "NETRC",
+        "DOCKER_AUTH_CONFIG",
+        "NPM_TOKEN",
+        "PYPI_TOKEN",
+        "HF_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "GITLAB_TOKEN",
+        "CI_JOB_TOKEN",
+        "SLACK_TOKEN",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "MOONSHOT_API_KEY",
+        "DASHSCOPE_API_KEY",
+        "MISTRAL_API_KEY",
+        "GROQ_API_KEY",
+        "XAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "TOGETHER_API_KEY",
+    }
+)
+
+_SECRET_ENV_PREFIXES = (
+    "AWS_",
+    "AZURE_",
+    "GOOGLE_",
+    "OPENAI_",
+    "ANTHROPIC_",
+    "DEEPSEEK_",
+    "MOONSHOT_",
+    "DASHSCOPE_",
+)
+
+_SECRET_ENV_SUFFIXES = (
+    "_API_KEY",
+    "_APIKEY",
+    "_TOKEN",
+    "_SECRET",
+    "_SECRET_KEY",
+    "_PASSWORD",
+    "_PASSWD",
+    "_CREDENTIALS",
+    "_ACCESS_KEY",
+    "_PRIVATE_KEY",
+)
+
+
+def is_secret_env_name(name: str) -> bool:
+    """True when an environment variable name looks like it holds a credential."""
+    upper = name.upper()
+    if upper in _SECRET_ENV_NAMES:
+        return True
+    if upper.startswith(_SECRET_ENV_PREFIXES):
+        return True
+    return upper.endswith(_SECRET_ENV_SUFFIXES)
+
+
+def scrub_environment(env: dict[str, str], allow: set[str] | None = None) -> dict[str, str]:
+    """Drop credential-shaped variables before handing an env to a subprocess.
+
+    Names in ``allow`` are kept even when they look like secrets, which is the
+    escape hatch for a project whose build genuinely needs one.
+
+    This is hygiene, not a sandbox: it stops the model from reading a key out of
+    the inherited environment, and does nothing about a key sitting in a file
+    it can already read.
+    """
+    keep = {name.upper() for name in (allow or set())}
+    return {
+        name: value
+        for name, value in env.items()
+        if name.upper() in keep or not is_secret_env_name(name)
+    }
+
+
 def strip_ansi(text: str) -> str:
     """Strip ANSI escape sequences from text."""
     ansi_pattern = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\([0-9a-zA-Z]")

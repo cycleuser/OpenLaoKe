@@ -316,6 +316,21 @@ Native protocols: **Anthropic Messages**, **OpenAI Chat Completions**, **Google 
 
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OLLAMA_API_KEY`, `GOOGLE_API_KEY`, `MINIMAX_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `OPENLAOKE_MODEL`, `HTTP_PROXY` / `HTTPS_PROXY`.
 
+Those credentials reach the provider client, not the shell. A command the agent
+runs gets the process environment with credential-shaped variables removed
+(`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AWS_*`, `AZURE_*`,
+`SSH_AUTH_SOCK`, …), so the model cannot read a key out of its own environment
+and post it somewhere. This is hygiene, not a sandbox: a key sitting in a file
+the agent can read is still readable, and `find . -delete` is still a shell
+command. Two escape hatches exist for projects whose build genuinely needs one:
+
+- `OPENLAOKE_PASS_ENV=GITHUB_TOKEN,NPM_TOKEN` — keep those names
+- `OPENLAOKE_NO_ENV_FILTER=1` — disable the filter entirely
+
+Variables set for the session (`/settings`, or `state.set_env_var`) are always
+passed through. Session files are written to a temporary file and renamed into
+place, so an interrupted save leaves the previous session intact.
+
 ## Architecture
 
 ```text

@@ -143,8 +143,26 @@ class AppState:
         self.working_directory = self.cwd
 
     def get_env_vars(self) -> dict[str, str]:
-        """Get merged environment variables (system + session overrides)."""
+        """Get the environment a tool subprocess should see.
+
+        Credential-shaped variables are dropped from the inherited environment:
+        a shell command the model writes must not be able to read
+        ``$ANTHROPIC_API_KEY`` and post it somewhere. Variables the user set for
+        this session are kept as given, and ``OPENLAOKE_PASS_ENV`` (comma
+        separated) re-allows individual inherited names.
+
+        Set ``OPENLAOKE_NO_ENV_FILTER=1`` to turn the whole thing off.
+        """
+        from openlaoke.utils.security import scrub_environment
+
         env = os.environ.copy()
+        if os.environ.get("OPENLAOKE_NO_ENV_FILTER") != "1":
+            allowed = {
+                name.strip()
+                for name in os.environ.get("OPENLAOKE_PASS_ENV", "").split(",")
+                if name.strip()
+            }
+            env = scrub_environment(env, allow=allowed)
         env.update(self.env_vars)
         return env
 
@@ -259,6 +277,7 @@ class AppState:
     def _persist(self) -> None:
         if not self._persist_path:
             return
+        temporary = f"{self._persist_path}.{os.getpid()}.tmp"
         try:
             os.makedirs(os.path.dirname(self._persist_path), exist_ok=True)
             data = {
@@ -301,9 +320,20 @@ class AppState:
                 "edit_stats": self.edit_stats,
                 "tool_call_counts": self.tool_call_counts,
             }
-            with open(self._persist_path, "w", encoding="utf-8") as f:
+            # Write beside the target and rename, so a crash mid-write leaves the
+            # previous session intact instead of a truncated JSON file. The old
+            # `open(..., "w")` truncated first, which lost whole conversations
+            # when the process was interrupted during a save.
+            with open(temporary, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, self._persist_path)
+            with suppress(OSError):
+                os.chmod(self._persist_path, 0o600)
         except Exception:
+            with suppress(OSError):
+                os.unlink(temporary)
             logger.warning("Failed to persist state to %s", self._persist_path, exc_info=True)
 
     @property
