@@ -414,7 +414,21 @@ async def _run_non_interactive(prompt: str, app_state, config) -> None:
 
     app_state.add_message(UserMessage(role=MessageRole.USER, content=prompt))
 
-    system_prompt = build_system_prompt(app_state, registry.get_all_for_prompt())
+    # Give the prompt a share of the real window when one can be resolved, so a
+    # small local model's rules are not silently truncated. Required blocks
+    # (the rules) always survive; only optional context can be dropped.
+    from openlaoke.core.model_discovery import get_effective_context_limit
+    from openlaoke.core.prompt_budget import budget_for_window
+
+    provider = config.providers.get_active_provider() if config.providers else None
+    window = (
+        await get_effective_context_limit(provider, app_state.session_config.model)
+        if provider
+        else None
+    )
+    system_prompt = build_system_prompt(
+        app_state, registry.get_all_for_prompt(), max_tokens=budget_for_window(window)
+    )
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
 
     from openlaoke.core.harness_modes import get_mode
