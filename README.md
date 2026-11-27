@@ -327,6 +327,18 @@ command. Two escape hatches exist for projects whose build genuinely needs one:
 - `OPENLAOKE_PASS_ENV=GITHUB_TOKEN,NPM_TOKEN` — keep those names
 - `OPENLAOKE_NO_ENV_FILTER=1` — disable the filter entirely
 
+### Project trust
+
+A cloned repository is not automatically allowed to put text into the system
+prompt. `.openlaoke/skills` and `.openlaoke/prompts` inside a project are loaded
+only after `/trust on`, which records the decision in `~/.openlaoke/trust.json`
+keyed by the resolved project path. `/trust status` distinguishes *undecided*
+(no record, nothing loaded) from *untrusted* (you said no), and the REPL prints
+one line at startup when a directory ships those files and they are being
+skipped, so a missing skill is not mistaken for a bug. `/trust reset` removes
+the decision. Everything else — global skills, global prompts, MCP servers from
+your own config — is unaffected.
+
 Variables set for the session (`/settings`, or `state.set_env_var`) are always
 passed through. Session files are written to a temporary file and renamed into
 place, so an interrupted save leaves the previous session intact.
