@@ -77,15 +77,16 @@ class InvokeSkillTool(Tool):
     @staticmethod
     def _find_skill_file(skill_name: str) -> Path | None:
         """Search for a SKILL.md file by name."""
+        from openlaoke.core.trust import project_skill_dirs
+
         skill = InvokeSkillTool._registry_skill(skill_name)
         if skill is not None and skill.path is not None and Path(skill.path).exists():
             return Path(skill.path)
 
         search_dirs = [
             Path.home() / ".openlaoke" / "skills",
-            Path.cwd() / ".openlaoke" / "skills",
             Path.home() / ".config" / "opencode" / "skills",
-        ]
+        ] + project_skill_dirs()
         for base in search_dirs:
             candidate = base / skill_name / "SKILL.md"
             if candidate.exists():
@@ -98,6 +99,8 @@ class InvokeSkillTool(Tool):
     @staticmethod
     def _list_available_skills() -> list[str]:
         """List all installed skill names (registry first, then local paths)."""
+        from openlaoke.core.trust import project_skill_dirs
+
         skills: set[str] = set()
         try:
             from openlaoke.core.skill_system import list_available_skills
@@ -108,9 +111,8 @@ class InvokeSkillTool(Tool):
 
         search_dirs = [
             Path.home() / ".openlaoke" / "skills",
-            Path.cwd() / ".openlaoke" / "skills",
             Path.home() / ".config" / "opencode" / "skills",
-        ]
+        ] + project_skill_dirs()
         for base in search_dirs:
             if not base.exists():
                 continue

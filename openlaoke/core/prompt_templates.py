@@ -177,15 +177,19 @@ class PromptTemplateRegistry:
 
 
 def get_default_prompt_dirs() -> list[Path]:
-    """Default prompt template directories (global first, project last)."""
+    """Default prompt template directories (global first, project last).
+
+    Project-local templates inject text into the prompt, so they load only when
+    the user has trusted this directory (``/trust on``).
+    """
+    from openlaoke.core.trust import project_prompt_dirs
+
     home = Path.home()
     dirs: list[Path] = []
     global_prompts = home / ".openlaoke" / "prompts"
     if global_prompts.exists():
         dirs.append(global_prompts)
-    project_prompts = Path.cwd() / ".openlaoke" / "prompts"
-    if project_prompts.exists():
-        dirs.append(project_prompts)
+    dirs.extend(project_prompt_dirs())
     return dirs
 
 

@@ -213,6 +213,7 @@ class REPL:
         self._prompt_manager.get_session()
         self._print_banner()
         self._print_welcome()
+        self._warn_untrusted_project_local()
 
         if self.app_config:
             self.app_state.language = getattr(self.app_config, "language", "en")
@@ -245,6 +246,25 @@ class REPL:
             if self.api:
                 await self.api.close()
             self._reset_terminal()
+
+    def _warn_untrusted_project_local(self) -> None:
+        """Say once why a project's own skills are not loading.
+
+        Loading them is fail-closed (see core/trust.py), and silent fail-closed
+        looks like a bug to the person who just wrote the skill.
+        """
+        from openlaoke.core.trust import skipped_project_dirs
+
+        try:
+            skipped = skipped_project_dirs(self.app_state.get_cwd())
+        except OSError:
+            return
+        if not skipped:
+            return
+        self.console.print(
+            f"  [{self._c('muted')}]{', '.join(skipped)} in this directory is not loaded "
+            "until you trust it ('/trust on').[/]"
+        )
 
     async def _start_mcp(self) -> None:
         """Start the configured MCP servers and add their tools.

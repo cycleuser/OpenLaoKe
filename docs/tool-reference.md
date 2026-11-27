@@ -83,7 +83,7 @@ Optional tools (Batch, Browser) only appear when their config flag is on.
 | `/todos` | `/todo` | Show the session task list |
 | `/transcript` | `/journal` | Show the append-only session journal and its integrity |
 | `/tree` | - | Show recorded session turns; /tree <n> rewinds to turn n |
-| `/trust` | - | Save the project trust decision (on/off/status) |
+| `/trust` | - | Trust this project so its .openlaoke skills and prompts load (on/off/reset) |
 
 ## Notes
 

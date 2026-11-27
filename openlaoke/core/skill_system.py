@@ -257,6 +257,13 @@ def get_default_skill_dirs() -> list[Path]:
     if opencode_skills.exists():
         dirs.append(opencode_skills)
 
+    # Project-local skills last (they win on a name clash), and only when this
+    # directory is trusted: a clone can ship .openlaoke/skills, and that text
+    # ends up in the system prompt once activated.
+    from openlaoke.core.trust import project_skill_dirs
+
+    dirs.extend(project_skill_dirs())
+
     return dirs
 
 

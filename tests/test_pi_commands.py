@@ -116,10 +116,13 @@ class TestScopedModels:
 class TestTrust:
     async def test_on_off_status(self, env) -> None:
         run, _state, _tmp = env
-        assert "untrusted" in (await run("trust", "status")).message
+        # Three states: no record is "undecided", which is treated as untrusted
+        # for loading but is not the same as an explicit refusal.
+        assert "undecided" in (await run("trust", "status")).message
         assert "trusted" in (await run("trust", "on")).message
         assert "trusted" in (await run("trust", "status")).message
         assert "untrusted" in (await run("trust", "off")).message
+        assert "undecided" in (await run("trust", "reset")).message
 
     async def test_invalid_subcommand(self, env) -> None:
         run, _state, _tmp = env

@@ -346,6 +346,10 @@ def test_skill_search_falls_back_to_the_known_directories(tmp_path, monkeypatch)
     skills.mkdir(parents=True)
     (skills / "flat.md").write_text("# flat", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
+    # Project-local skills only load in a trusted project (core/trust.py).
+    from openlaoke.core import trust
+
+    trust.set_trusted(tmp_path, True)
     monkeypatch.setattr(InvokeSkillTool, "_registry_skill", staticmethod(lambda _n: None))
 
     assert InvokeSkillTool._find_skill_file("flat") == skills / "flat.md"
@@ -360,6 +364,9 @@ def test_list_available_skills_merges_registry_and_disk(tmp_path, monkeypatch) -
     (skills / "from-disk").mkdir(parents=True)
     (skills / "from-disk" / "SKILL.md").write_text("# x", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
+    from openlaoke.core import trust
+
+    trust.set_trusted(tmp_path, True)
     monkeypatch.setattr(skill_system, "list_available_skills", lambda: ["from-registry"])
 
     assert InvokeSkillTool._list_available_skills() == ["from-disk", "from-registry"]

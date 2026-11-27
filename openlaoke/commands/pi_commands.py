@@ -99,10 +99,6 @@ def _changelog_path() -> Path | None:
     return None
 
 
-def _trust_path() -> Path:
-    return _OPENLAOKE_DIR / "trust.json"
-
-
 class NewCommand(SlashCommand):
     name = "new"
     description = "Start a new session"
@@ -408,28 +404,31 @@ class HotkeysCommand(SlashCommand):
 
 class TrustCommand(SlashCommand):
     name = "trust"
-    description = "Save the project trust decision (on/off/status)"
+    description = "Trust this project so its .openlaoke skills and prompts load (on/off/reset)"
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
-        project = str(Path(ctx.app_state.get_cwd()).resolve())
-        trust = _read_json(_trust_path(), {})
-        if not isinstance(trust, dict):
-            trust = {}
+        from openlaoke.core import trust
+
+        project = trust.project_key(ctx.app_state.get_cwd())
         args = ctx.args.strip().lower()
-        if not args or args == "status":
-            return CommandResult(
-                message=f"Project trust for {project}: {'trusted' if trust.get(project) else 'untrusted'}"
+        if not args or args in ("status", "?"):
+            state = trust.trust_state(project)
+            note = (
+                "\nThis directory ships .openlaoke skills or prompts, which are not "
+                "loaded until it is trusted."
+                if state != trust.TRUSTED
+                else ""
             )
+            return CommandResult(message=f"Project trust for {project}: {state}.{note}")
         if args in ("on", "yes", "true", "trust"):
-            trust[project] = True
+            state = trust.set_trusted(project, True)
         elif args in ("off", "no", "false", "untrust"):
-            trust[project] = False
+            state = trust.set_trusted(project, False)
+        elif args in ("reset", "clear", "ask"):
+            state = trust.set_trusted(project, None)
         else:
-            return CommandResult(success=False, message="Usage: /trust [on|off|status]")
-        _write_json(_trust_path(), trust)
-        return CommandResult(
-            message=f"Project trust for {project}: {'trusted' if trust[project] else 'untrusted'}."
-        )
+            return CommandResult(success=False, message="Usage: /trust [on|off|reset|status]")
+        return CommandResult(message=f"Project trust for {project}: {state}.")
 
 
 class LoginCommand(SlashCommand):
