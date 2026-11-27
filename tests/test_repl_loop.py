@@ -1163,7 +1163,7 @@ def test_a_scheduled_entry_without_a_command_or_prompt_is_queued():
             def due(self):
                 return [entry]
 
-            def mark_run(self, _entry):
+            def mark_run(self, _entry, **_kwargs):
                 return None
 
         import openlaoke.core.scheduler as sched

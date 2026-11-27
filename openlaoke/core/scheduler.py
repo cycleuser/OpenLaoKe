@@ -21,6 +21,12 @@ from typing import Any
 
 SCHEDULE_PATH = os.path.join(os.path.expanduser("~"), ".openlaoke", "schedule.json")
 MAX_ENTRIES = 100
+# Every run appends one JSON line next to the schedule file. The point is that
+# "did last night's job actually work" is answerable without scrolling the
+# transcript: an entry that reports ``runs: 12`` and no history hides twelve
+# failures.
+MAX_HISTORY_RECORDS = 500
+MAX_HISTORY_BYTES = 256 * 1024
 
 _EVERY = re.compile(
     r"^every\s+(\d+(?:\.\d+)?)\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?)$", re.I
@@ -48,6 +54,32 @@ _UNIT_SECONDS = {
 
 class ScheduleError(ValueError):
     """The schedule string could not be understood."""
+
+
+@dataclass
+class RunRecord:
+    """One firing of one entry."""
+
+    id: str
+    name: str
+    at: float
+    status: str = "ok"
+    detail: str = ""
+    duration_ms: int = 0
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RunRecord:
+        known = set(cls.__dataclass_fields__)
+        return cls(**{key: value for key, value in data.items() if key in known})
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def describe(self) -> str:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.at))
+        took = f" {self.duration_ms}ms" if self.duration_ms else ""
+        detail = f" {self.detail[:60]}" if self.detail else ""
+        return f"{when} {self.id:<10} {self.status:<6}{took} {self.name[:24]}{detail}"
 
 
 @dataclass
@@ -145,6 +177,106 @@ class Scheduler:
         if isinstance(raw, list):
             self.entries = [ScheduleEntry.from_dict(item) for item in raw if isinstance(item, dict)]
 
+    # ── run history ──────────────────────────────────────────────────────
+
+    @property
+    def history_path(self) -> str:
+        stem, extension = os.path.splitext(self.path)
+        return f"{stem}-runs{extension or '.jsonl'}"
+
+    def record_run(
+        self,
+        entry: ScheduleEntry,
+        *,
+        status: str = "ok",
+        detail: str = "",
+        started_at: float | None = None,
+        duration_ms: int = 0,
+    ) -> RunRecord:
+        """Append one history record; never lets a log failure stop a schedule."""
+        record = RunRecord(
+            id=entry.id,
+            name=entry.name,
+            at=started_at if started_at is not None else time.time(),
+            status=status,
+            detail=detail[:400],
+            duration_ms=max(0, int(duration_ms)),
+        )
+        try:
+            self._append_history(record)
+        except OSError:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Could not append scheduler run history to %s", self.history_path
+            )
+        return record
+
+    def _append_history(self, record: RunRecord) -> None:
+        path = self.history_path
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        payload = (json.dumps(record.to_dict(), ensure_ascii=False) + "\n").encode("utf-8")
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            view = memoryview(payload)
+            while view:
+                written = os.write(fd, view)
+                if written == 0:
+                    raise OSError("short write while appending scheduler history")
+                view = view[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        self._rotate_history(path)
+
+    def _rotate_history(self, path: str) -> None:
+        try:
+            if os.path.getsize(path) <= MAX_HISTORY_BYTES:
+                return
+            with open(path, encoding="utf-8") as handle:
+                lines = handle.readlines()
+        except OSError:
+            return
+        keep = lines[-MAX_HISTORY_RECORDS:]
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.writelines(keep)
+        os.replace(tmp, path)
+
+    def history(self, identifier: str = "", limit: int = 20) -> list[RunRecord]:
+        path = self.history_path
+        if not os.path.exists(path):
+            return []
+        records: list[RunRecord] = []
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    # A torn final line is expected after a crash; skip it.
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                record = RunRecord.from_dict(payload)
+                if identifier and identifier not in (record.id, record.name):
+                    continue
+                records.append(record)
+        return records[-max(1, limit) :]
+
+    def render_history(self, identifier: str = "", limit: int = 20) -> str:
+        records = self.history(identifier, limit)
+        if not records:
+            return "No scheduled runs recorded yet."
+        failures = sum(1 for record in records if record.status != "ok")
+        lines = [record.describe() for record in records]
+        lines.append(
+            f"({len(records)} run(s), {failures} not ok, log: {self.history_path})"
+        )
+        return "\n".join(lines)
+
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         payload = {"version": 1, "entries": [entry.to_dict() for entry in self.entries]}
@@ -215,7 +347,16 @@ class Scheduler:
             if entry.enabled and entry.next_run and entry.next_run <= moment
         ]
 
-    def mark_run(self, entry: ScheduleEntry, now: float | None = None) -> None:
+    def mark_run(
+        self,
+        entry: ScheduleEntry,
+        now: float | None = None,
+        *,
+        status: str = "ok",
+        detail: str = "",
+        started_at: float | None = None,
+        duration_ms: int = 0,
+    ) -> None:
         moment = now if now is not None else time.time()
         entry.last_run = moment
         entry.runs += 1
@@ -225,6 +366,13 @@ class Scheduler:
         else:
             entry.next_run = parse_when(entry.when, moment)
         self.save()
+        self.record_run(
+            entry,
+            status=status,
+            detail=detail,
+            started_at=started_at if started_at is not None else moment,
+            duration_ms=duration_ms,
+        )
 
     def render(self) -> str:
         if not self.entries:

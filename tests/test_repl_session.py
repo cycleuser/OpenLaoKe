@@ -1381,7 +1381,7 @@ def test_scheduler_loop_runs_due_entries(tmp_path, monkeypatch) -> None:
         def due(self) -> list[Any]:
             return entries
 
-        def mark_run(self, entry: Any) -> None:
+        def mark_run(self, entry: Any, **_kwargs: Any) -> None:
             marked.append(entry.name)
             if len(marked) == len(entries):
                 r._running = False
@@ -1720,7 +1720,7 @@ def test_a_scheduled_prompt_with_a_bot_reply_uses_the_reply(tmp_path, monkeypatc
         def due(self):
             return [entry]
 
-        def mark_run(self, _entry):
+        def mark_run(self, _entry, **_kwargs):
             return None
 
     async def sleep(_seconds):
@@ -1750,7 +1750,7 @@ def test_a_scheduled_prompt_without_a_bot_is_queued(tmp_path, monkeypatch) -> No
         def due(self):
             return [entry]
 
-        def mark_run(self, _entry):
+        def mark_run(self, _entry, **_kwargs):
             return None
 
     async def sleep(_seconds):

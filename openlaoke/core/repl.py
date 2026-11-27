@@ -309,16 +309,24 @@ class REPL:
             scheduler = get_scheduler(self.app_state)
             due = scheduler.due()
             for entry in due[:10]:
+                started = time.time()
+                status, detail = "ok", ""
                 if entry.command:
-                    from openlaoke.core.task import get_task_manager
+                    try:
+                        from openlaoke.core.task import get_task_manager
 
-                    manager = get_task_manager(self.app_state)
-                    await manager.run_bash(
-                        entry.command,
-                        description=f"scheduled: {entry.name}",
-                        auto_background_ms=0.0,
-                    )
-                    notice = f"[scheduled command '{entry.name}' started in the background]"
+                        manager = get_task_manager(self.app_state)
+                        await manager.run_bash(
+                            entry.command,
+                            description=f"scheduled: {entry.name}",
+                            auto_background_ms=0.0,
+                        )
+                        notice = f"[scheduled command '{entry.name}' started in the background]"
+                    except Exception as exc:  # noqa: BLE001 - one job must not stop the rest
+                        # Without this, an exception here ends ``_scheduler_loop``
+                        # and every later schedule silently stops firing.
+                        status, detail = "error", f"{type(exc).__name__}: {exc}"
+                        notice = f"[scheduled command '{entry.name}' failed: {exc}]"
                 elif entry.prompt:
                     bot_notice = await self._run_bot_routine(entry)
                     if bot_notice is None:
@@ -329,7 +337,13 @@ class REPL:
                 else:
                     notice = f"[scheduled reminder '{entry.name}': {entry.prompt}]"
                     self._input_queue.append(notice)
-                scheduler.mark_run(entry)
+                scheduler.mark_run(
+                    entry,
+                    status=status,
+                    detail=detail,
+                    started_at=started,
+                    duration_ms=int((time.time() - started) * 1000),
+                )
                 # The notice can carry a bot's own words, brackets included, so
                 # it is escaped: unescaped, Rich reads "[...]" as markup and the
                 # reply silently disappears from the line.
