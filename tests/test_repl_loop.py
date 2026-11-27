@@ -563,9 +563,7 @@ def test_an_api_error_prints_the_json_message_and_stops():
 
     r = make_repl([])
     request = httpx.Request("POST", "https://api.example.com/v1/chat")
-    response = httpx.Response(
-        400, json={"error": {"message": "bad model"}}, request=request
-    )
+    response = httpx.Response(400, json={"error": {"message": "bad model"}}, request=request)
     error = httpx.HTTPStatusError("boom", request=request, response=response)
     r._stream_provider_turn = lambda **_k: _raise(error)
 
@@ -915,7 +913,9 @@ def test_a_failing_parallel_read_becomes_a_tool_error():
     r._execute_tool = flaky
     messages: list[dict] = []
 
-    asyncio.run(r._dispatch_tools([tool_use("Read", "c1"), tool_use("Glob", "c2")], messages, {}, 3))
+    asyncio.run(
+        r._dispatch_tools([tool_use("Read", "c1"), tool_use("Glob", "c2")], messages, {}, 3)
+    )
 
     assert any("glob exploded" in str(m.get("content")) for m in messages)
 
@@ -1111,9 +1111,7 @@ def test_a_long_intent_is_shortened_in_the_action_line():
     r._guard = None
     messages: list[dict] = []
 
-    asyncio.run(
-        r._dispatch_tools([tool_use(intent="explain " * 20)], messages, {}, 3)
-    )
+    asyncio.run(r._dispatch_tools([tool_use(intent="explain " * 20)], messages, {}, 3))
 
     assert "..." in r.console.file.getvalue()
 
@@ -1248,13 +1246,9 @@ def test_a_tiny_model_uses_the_aggressive_pruner(monkeypatch):
 
     def aggressive(messages, **_k):
         calls.append("aggressive")
-        return PruneResult(
-            messages=messages[:1], tokens_before=50, tokens_after=10, elapsed_ms=0.1
-        )
+        return PruneResult(messages=messages[:1], tokens_before=50, tokens_after=10, elapsed_ms=0.1)
 
-    monkeypatch.setattr(
-        "openlaoke.core.compact.fast_pruner.fast_prune_aggressive", aggressive
-    )
+    monkeypatch.setattr("openlaoke.core.compact.fast_pruner.fast_prune_aggressive", aggressive)
     history = [{"role": "user", "content": "x" * 40} for _ in range(14)]
 
     r._prepare_turn_context(history, "sys", None, 2000)
@@ -1373,3 +1367,70 @@ def test_the_banner_falls_back_to_the_app_state_provider():
     r._print_welcome()
 
     assert "fallback-provider" in r.console.file.getvalue()
+
+
+# --------------------------------------------------------------------------- #
+# end-of-turn failure report (s20: a failure must survive the closing message)
+# --------------------------------------------------------------------------- #
+def test_a_failed_tool_call_is_reported_after_the_closing_message():
+    broken = FakeTool("Edit", result="Error: old_string not found", is_error=True)
+    r = make_repl(
+        [[tool_call("c1", "Edit")], [text("All done! Everything is fixed.")]], tools=[broken]
+    )
+
+    run(r)
+
+    out = r.console.file.getvalue()
+    assert "All done!" in out
+    assert out.index("All done!") < out.index("1 tool call(s) failed this turn:")
+    assert "Edit: Error: old_string not found" in out
+
+
+def test_a_turn_without_failures_says_nothing_about_failures():
+    r = make_repl([[text("nothing to report")]])
+
+    run(r)
+
+    assert "failed this turn" not in r.console.file.getvalue()
+
+
+def test_identical_failures_are_reported_once():
+    broken = FakeTool("Bash", result="exit 1", is_error=True)
+    turns = [[tool_call("c1", "Bash")], [tool_call("c2", "Bash")], [text("done")]]
+    r = make_repl(turns, tools=[broken], harness_mode="thorough")
+
+    run(r)
+
+    assert r.console.file.getvalue().count("Bash: exit 1") == 1
+
+
+def test_the_failure_report_escapes_rich_markup():
+    broken = FakeTool("Bash", result="error [/] not markup", is_error=True)
+    r = make_repl([[tool_call("c1", "Bash")], [text("done")]], tools=[broken])
+
+    run(r)
+
+    # Unescaped, "[/]" would end the style early and swallow the message.
+    assert "error [/] not markup" in r.console.file.getvalue()
+
+
+def test_the_report_caps_the_list_at_five_unique_failures():
+    tools = [FakeTool(f"T{index}", result=f"failed {index}", is_error=True) for index in range(7)]
+    turn = [tool_call(f"c{index}", f"T{index}") for index in range(7)]
+    r = make_repl([turn, [text("done")]], tools=tools)
+
+    run(r)
+
+    out = r.console.file.getvalue()
+    assert "7 tool call(s) failed this turn:" in out
+    assert "T0: failed 0" in out
+    assert "T6: failed 6" not in out
+    assert "2 more" in out
+
+
+def test_an_error_message_with_markup_is_printed_not_raised():
+    r = make_repl([[RuntimeError("provider said: [/] bad tag")]])
+
+    run(r)  # must not raise inside the error handler
+
+    assert "provider said" in r.console.file.getvalue()

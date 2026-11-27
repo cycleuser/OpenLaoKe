@@ -109,6 +109,7 @@ class REPL:
         self._artifact_written: set[str] = set()
         self._artifact_verified = False
         self._force_final = False
+        self._turn_failures: list[str] = []
 
         self._reset_terminal()
         self._active_tasks: set[asyncio.Task] = set()
@@ -608,7 +609,11 @@ class REPL:
                 self._patch_dangling_tool_calls()
                 self.console.print(f"[{self._c('warning')}]Interrupted — context preserved.[/]")
         except Exception as e:
-            self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
+            from rich.markup import escape
+
+            # An exception message is arbitrary text; unescaped brackets either
+            # vanish from the display or raise inside the error handler.
+            self.console.print(f"\n[bold {self._c('error')}]Error:[/] {escape(str(e))}")
             self.app_state.set_error(str(e))
         finally:
             self._agent_task = None
@@ -825,6 +830,36 @@ class REPL:
             self._artifact_verified = True
             self._force_final = True
 
+    def _note_tool_failure(self, tool_name: str, content: str) -> None:
+        """Remember a failed call for the end-of-turn report, not the transcript."""
+        first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
+        if len(first_line) > 120:
+            first_line = first_line[:117] + "..."
+        failures = getattr(self, "_turn_failures", None)
+        if failures is None:
+            failures = self._turn_failures = []
+        failures.append(f"{tool_name}: {first_line or '(no message)'}")
+
+    def _report_turn_failures(self) -> None:
+        """Say which calls failed, in the harness's own words, at turn end.
+
+        The closing message is the model's account of what happened, and a
+        cheerful "done" after three failed edits reads as success. This block is
+        printed by the harness after that message, so it cannot be edited out.
+        """
+        failures = getattr(self, "_turn_failures", None)
+        if not failures:
+            return
+        from rich.markup import escape
+
+        unique = list(dict.fromkeys(failures))
+        self.console.print()
+        self.console.print(f"  [{self._c('error')}]{len(unique)} tool call(s) failed this turn:[/]")
+        for line in unique[:5]:
+            self.console.print(f"  [{self._c('muted')}]- {escape(line)}[/]")
+        if len(unique) > 5:
+            self.console.print(f"  [{self._c('muted')}]- ... {len(unique) - 5} more[/]")
+
     async def _stream_provider_turn(
         self,
         *,
@@ -985,7 +1020,9 @@ class REPL:
             if model_size in ("tiny", "small"):
                 prune_result = fast_prune_aggressive(messages, max_tokens=ctx_budget)
             else:
-                prune_result = fast_prune(messages, max_tokens=ctx_budget, keep_tail_tokens=keep_tail)
+                prune_result = fast_prune(
+                    messages, max_tokens=ctx_budget, keep_tail_tokens=keep_tail
+                )
             if prune_result.tokens_after < prune_result.tokens_before:
                 messages = prune_result.messages
                 self.console.print(
@@ -1046,10 +1083,13 @@ class REPL:
             for tool_use, result in zip(tool_uses, results, strict=True):
                 if isinstance(result, BaseException):
                     result_content = f"Error: {result}"
+                    self._note_tool_failure(tool_use.name, result_content)
                 else:
                     result_content = (
                         result.content if isinstance(result.content, str) else str(result.content)
                     )
+                    if getattr(result, "is_error", False):
+                        self._note_tool_failure(tool_use.name, result_content)
                 messages.append(tool_result_message(tool_use.id, result_content))
                 self._record_tool_result(tool_use.id, result_content)
                 if not isinstance(result, BaseException):
@@ -1094,6 +1134,8 @@ class REPL:
                 result_content = (
                     result.content if isinstance(result.content, str) else str(result.content)
                 )
+                if getattr(result, "is_error", False):
+                    self._note_tool_failure(tool_use.name, result_content)
                 messages.append(tool_result_message(tool_use.id, result_content))
                 self._record_tool_result(tool_use.id, result_content)
                 self._note_artifact_result(tool_use, result)
@@ -1228,6 +1270,7 @@ class REPL:
         self._artifact_written = set()
         self._artifact_verified = False
         self._force_final = False
+        self._turn_failures = []
 
         messages = self._history_to_messages()
         system_prompt = self._cache_guard.system_prompt
@@ -1306,8 +1349,10 @@ class REPL:
                     cost = turn.cost
 
                     if turn.stream_error:
+                        from rich.markup import escape
+
                         self.console.print(
-                            f"  [bold {self._c('error')}]Error:[/] {turn.stream_error}"
+                            f"  [bold {self._c('error')}]Error:[/] {escape(str(turn.stream_error))}"
                         )
                         break
 
@@ -1435,18 +1480,24 @@ class REPL:
                 self.console.print(f"\n[{self._c('warning')}]Interrupted — context preserved.[/]")
                 break
             except httpx.HTTPStatusError as e:
+                # Provider error bodies routinely contain bracketed text; markup
+                # would either swallow it or raise inside the error handler.
+                from rich.markup import escape
+
                 self.console.print(
                     f"\n[bold {self._c('error')}]API Error:[/] {e.response.status_code}"
                 )
                 try:
                     error_data = e.response.json()
                     error_msg = error_data.get("error", {}).get("message", str(e))
-                    self.console.print(f"[{self._c('error')}]{error_msg}[/]")
+                    self.console.print(f"[{self._c('error')}]{escape(str(error_msg))}[/]")
                 except Exception:
-                    self.console.print(f"[{self._c('error')}]{e.response.text[:500]}[/]")
+                    self.console.print(f"[{self._c('error')}]{escape(e.response.text[:500])}[/]")
                 break
             except Exception as e:
-                self.console.print(f"\n[bold {self._c('error')}]Error:[/] {e}")
+                from rich.markup import escape
+
+                self.console.print(f"\n[bold {self._c('error')}]Error:[/] {escape(str(e))}")
                 break
             finally:
                 # turn_end fires however the iteration leaves, including the
@@ -1467,6 +1518,10 @@ class REPL:
                     if usage
                     else 0,
                 )
+
+        # After the model's own closing message, so a turn that failed loudly and
+        # then reported success still ends with the harness's account.
+        self._report_turn_failures()
 
     async def _execute_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
         tool = self.registry.get(tool_use.name)
@@ -1900,6 +1955,12 @@ class REPL:
         return line
 
     def _print_tool_result(self, rendered: str, tool_name: str, is_error: bool) -> None:
+        # Tool output is arbitrary text: a traceback ("[Errno 2] ..."), a markdown
+        # link or a log line with "[WARN]" is not markup. Printed unescaped, a
+        # bracket is either swallowed from the display or, for "[/]", raises
+        # MarkupError inside the print and aborts the whole turn.
+        from rich.markup import escape
+
         if is_error:
             style = self._c("error")
             prefix = "!"
@@ -1909,9 +1970,9 @@ class REPL:
 
         max_inline = 300
         if len(rendered) <= max_inline:
-            self.console.print(f"  [{style}]{prefix} {rendered}[/]")
+            self.console.print(f"  [{style}]{prefix} {escape(rendered)}[/]")
         else:
-            self.console.print(f"  [{style}]{prefix} {rendered[:max_inline]}...[/]")
+            self.console.print(f"  [{style}]{prefix} {escape(rendered[:max_inline])}...[/]")
             self.console.print(f"  [{self._c('muted')}]{prefix}   ({len(rendered)} chars total)[/]")
 
     def _get_git_store(self) -> Any | None:
