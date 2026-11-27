@@ -40,7 +40,7 @@ def default_artifact_root() -> str:
 
 def _safe_segment(value: str, fallback: str) -> str:
     cleaned = _SAFE_SEGMENT.sub("_", value.strip()).strip("._")
-    return (cleaned[:_MAX_SLUG] or fallback)
+    return cleaned[:_MAX_SLUG] or fallback
 
 
 @dataclass(frozen=True)
@@ -83,19 +83,14 @@ class ToolPointer:
         as it can. Callers with a tiny ``max_tool_history`` get a pointer that
         is a little over budget instead of an unrecoverable truncation.
         """
-        return (
-            f"[output {self.total_bytes}B externalized: {self.path} "
-            f"sha256:{self.digest[:12]}]"
-        )
+        return f"[output {self.total_bytes}B externalized: {self.path} sha256:{self.digest[:12]}]"
 
 
 class ToolOutputStore:
     """Writes oversized results under ``<root>/<session>/`` and returns pointers."""
 
     def __init__(self, root: str | None = None, session_id: str = "") -> None:
-        self.root = Path(root or default_artifact_root()) / _safe_segment(
-            session_id, "unscoped"
-        )
+        self.root = Path(root or default_artifact_root()) / _safe_segment(session_id, "unscoped")
 
     def store(
         self,

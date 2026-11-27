@@ -272,9 +272,7 @@ class Scheduler:
             return "No scheduled runs recorded yet."
         failures = sum(1 for record in records if record.status != "ok")
         lines = [record.describe() for record in records]
-        lines.append(
-            f"({len(records)} run(s), {failures} not ok, log: {self.history_path})"
-        )
+        lines.append(f"({len(records)} run(s), {failures} not ok, log: {self.history_path})")
         return "\n".join(lines)
 
     def save(self) -> None:

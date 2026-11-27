@@ -199,9 +199,7 @@ class MemoryStore:
         if not cleaned:
             raise ValueError("memory text is empty")
         if authority not in AUTHORITY_RANK:
-            raise ValueError(
-                f"authority must be one of {', '.join(sorted(AUTHORITY_RANK))}"
-            )
+            raise ValueError(f"authority must be one of {', '.join(sorted(AUTHORITY_RANK))}")
         replaced = [identifier for identifier in (supersedes or []) if self.get(identifier)]
 
         for existing in self.entries:
@@ -401,9 +399,7 @@ class MemoryStore:
             tags = f" [{', '.join(entry.tags)}]" if entry.tags else ""
             authority = "" if entry.authority == DEFAULT_AUTHORITY else f" <{entry.authority}>"
             replaced = f" superseded by {entry.superseded_by}" if entry.superseded else ""
-            supersedes = (
-                f" replaces {', '.join(entry.supersedes)}" if entry.supersedes else ""
-            )
+            supersedes = f" replaces {', '.join(entry.supersedes)}" if entry.supersedes else ""
             lines.append(
                 f"{entry.id} ({entry.kind}){tags}{authority}{replaced}{supersedes} {entry.text}"
             )
@@ -449,10 +445,11 @@ class MemoryStore:
                 key=lambda item: (-item[1], -AUTHORITY_RANK.get(item[0], 0)),
             )
         )
-        return f"{len(self.entries)} note(s) in {self.path}" + (
-            f"\ntags: {tag_note}" if tag_note else ""
-        ) + (f"\nauthority: {authority_note}" if authority_note else "") + (
-            f"\nsuperseded: {superseded}" if superseded else ""
+        return (
+            f"{len(self.entries)} note(s) in {self.path}"
+            + (f"\ntags: {tag_note}" if tag_note else "")
+            + (f"\nauthority: {authority_note}" if authority_note else "")
+            + (f"\nsuperseded: {superseded}" if superseded else "")
         )
 
 

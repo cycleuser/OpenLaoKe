@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import stat
+from pathlib import Path
 
 from openlaoke.core.sessions import SessionManager
 from openlaoke.core.state import AppState, create_app_state
@@ -32,7 +33,7 @@ def test_appending_writes_a_header_and_one_line_per_message(tmp_path):
     assert transcript.append_message(_message("hello")) == 1
     assert transcript.append_message(_message("again")) == 2
 
-    lines = open(transcript.path, encoding="utf-8").read().splitlines()
+    lines = Path(transcript.path).read_text(encoding="utf-8").splitlines()
     header = json.loads(lines[0])
     assert header["type"] == "session.start"
     assert header["session_id"] == "session_1"
@@ -83,7 +84,7 @@ def test_corruption_in_the_middle_is_reported_not_hidden(tmp_path):
     transcript = _transcript(tmp_path)
     transcript.append_message(_message("one"))
     transcript.append_message(_message("two"))
-    lines = open(transcript.path, encoding="utf-8").read().splitlines()
+    lines = Path(transcript.path).read_text(encoding="utf-8").splitlines()
     with open(transcript.path, "w", encoding="utf-8") as handle:
         handle.write("\n".join([lines[0], "not json", lines[2]]) + "\n")
 
@@ -97,7 +98,7 @@ def test_corruption_in_the_middle_is_reported_not_hidden(tmp_path):
 def test_duplicate_sequence_numbers_are_reported(tmp_path):
     transcript = _transcript(tmp_path)
     transcript.append_message(_message("one"))
-    line = open(transcript.path, encoding="utf-8").read().splitlines()[-1]
+    line = Path(transcript.path).read_text(encoding="utf-8").splitlines()[-1]
     with open(transcript.path, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
 
@@ -148,7 +149,9 @@ def test_a_journal_failure_does_not_break_the_turn(tmp_path, caplog):
 
 def test_a_truncated_snapshot_is_recovered_from_the_journal(tmp_path):
     manager = SessionManager(session_dir=str(tmp_path / "sessions"))
-    state = create_app_state(cwd=str(tmp_path), persist_path=str(tmp_path / "sessions" / "abc.json"))
+    state = create_app_state(
+        cwd=str(tmp_path), persist_path=str(tmp_path / "sessions" / "abc.json")
+    )
     state.session_id = "abc"
     state.set_persist_path(str(tmp_path / "sessions" / "abc.json"))
     state.add_message(_message("survives the crash"))

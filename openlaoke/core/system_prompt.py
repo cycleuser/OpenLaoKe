@@ -44,9 +44,7 @@ def system_prompt_blocks(
     ]
 
     if world_context:
-        blocks.append(
-            PromptBlock("context", f"## Current Context\n{world_context}", OPTIONAL)
-        )
+        blocks.append(PromptBlock("context", f"## Current Context\n{world_context}", OPTIONAL))
 
     environment = [
         "## Environment",

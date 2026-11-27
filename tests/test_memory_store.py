@@ -236,12 +236,12 @@ def test_tagging_adds_and_removes_tags(tmp_path) -> None:
     entry = store.remember("keep the gate green")
     ctx = _ctx(tmp_path, store)
 
-    tagged = asyncio.run(
-        MemoryTool().call(ctx, action="tag", id=entry.id, tags=["ci", "gate"])
-    )
+    tagged = asyncio.run(MemoryTool().call(ctx, action="tag", id=entry.id, tags=["ci", "gate"]))
     assert "ci" in tagged.content
 
-    untagged = asyncio.run(MemoryTool().call(ctx, action="tag", id=entry.id, tags=["ci"], remove=True))
+    untagged = asyncio.run(
+        MemoryTool().call(ctx, action="tag", id=entry.id, tags=["ci"], remove=True)
+    )
     assert "ci" not in untagged.content
     assert "gate" in untagged.content
 

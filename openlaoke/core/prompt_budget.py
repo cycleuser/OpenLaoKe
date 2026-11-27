@@ -97,7 +97,9 @@ def assemble(
     return "".join(parts), report
 
 
-def budget_for_window(window: int | None, *, fraction: float = 0.25, floor: int = 512) -> int | None:
+def budget_for_window(
+    window: int | None, *, fraction: float = 0.25, floor: int = 512
+) -> int | None:
     """A prompt allowance for a model window, or ``None`` when the window is unknown."""
     if not window or window <= 0:
         return None

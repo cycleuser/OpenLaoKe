@@ -7,10 +7,11 @@ import json
 import os
 import stat
 import time
+from pathlib import Path
 
 import pytest
 
-from openlaoke.core.scheduler import ScheduleEntry, Scheduler
+from openlaoke.core.scheduler import Scheduler
 from openlaoke.core.state import AppState
 
 
@@ -73,7 +74,7 @@ def test_the_history_file_is_private_and_json_lines(tmp_path):
     path = scheduler.history_path
     assert path.endswith("-runs.json")
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
-    line = open(path, encoding="utf-8").read().splitlines()[0]
+    line = Path(path).read_text(encoding="utf-8").splitlines()[0]
     assert json.loads(line)["id"] == entry.id
 
 
@@ -127,7 +128,6 @@ def test_render_history_says_so_when_nothing_has_run(tmp_path):
 
 def test_the_schedule_command_shows_the_log(tmp_path, monkeypatch):
     from openlaoke.commands.base import ScheduleCommand
-
     from openlaoke.core import scheduler as scheduler_module
 
     scheduler = _scheduler(tmp_path)

@@ -152,7 +152,7 @@ def test_blank_line_handling_round_trips(tmp_path) -> None:
 *** Update File: doc.md
 @@
  title
- 
+
 -body
 +new body
 *** End Patch

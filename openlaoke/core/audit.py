@@ -22,10 +22,11 @@ import os
 import stat
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,9 @@ class AuditEntry:
                 detail = value[:80]
                 break
         verdict = "error" if self.data.get("error") else ""
-        return " ".join(part for part in (f"#{self.index}", self.action, tool, detail, verdict) if part)
+        return " ".join(
+            part for part in (f"#{self.index}", self.action, tool, detail, verdict) if part
+        )
 
 
 def default_audit_dir() -> str:
@@ -84,9 +87,9 @@ def _process_lock(key: str) -> threading.Lock:
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:
-    return json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 class AuditLog:
@@ -121,9 +124,7 @@ class AuditLog:
             )
             entry = replace(
                 entry,
-                hash=_digest(
-                    entry.index, entry.timestamp, entry.action, entry.data, prev_hash
-                ),
+                hash=_digest(entry.index, entry.timestamp, entry.action, entry.data, prev_hash),
             )
             self._append_line_locked(entry)
             self._write_head_locked(entry.index, entry.hash)
@@ -201,9 +202,7 @@ class AuditLog:
                     f"{self.path.name}:{number}: invalid JSON record"
                 ) from exc
             if not isinstance(payload, dict):
-                raise AuditCorruptionError(
-                    f"{self.path.name}:{number}: record is not an object"
-                )
+                raise AuditCorruptionError(f"{self.path.name}:{number}: record is not an object")
             try:
                 entries.append(AuditEntry(**payload))
             except TypeError as exc:
@@ -236,16 +235,12 @@ class AuditLog:
         prev_hash = GENESIS_HASH
         for expected, entry in enumerate(entries, start=1):
             if entry.index != expected or entry.prev_hash != prev_hash:
-                raise AuditCorruptionError(
-                    f"audit chain linkage is broken at entry {expected}"
-                )
+                raise AuditCorruptionError(f"audit chain linkage is broken at entry {expected}")
             digest = _digest(
                 entry.index, entry.timestamp, entry.action, entry.data, entry.prev_hash
             )
             if digest != entry.hash:
-                raise AuditCorruptionError(
-                    f"audit entry hash is wrong at entry {expected}"
-                )
+                raise AuditCorruptionError(f"audit entry hash is wrong at entry {expected}")
             prev_hash = entry.hash
         anchor = self._read_head_locked()
         if anchor is None:
@@ -386,7 +381,7 @@ def _lock_fd(fd: int) -> None:
             os.write(fd, b"\0")
             os.fsync(fd)
         os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
     else:
         fcntl.flock(fd, fcntl.LOCK_EX)
 
@@ -394,7 +389,7 @@ def _lock_fd(fd: int) -> None:
 def _unlock_fd(fd: int) -> None:
     if os.name == "nt":  # pragma: no cover - Windows only
         os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
     else:
         fcntl.flock(fd, fcntl.LOCK_UN)
 

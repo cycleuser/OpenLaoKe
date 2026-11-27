@@ -219,7 +219,9 @@ def test_the_audit_command_shows_the_chain_and_reports_success(tmp_path, monkeyp
     monkeypatch.setenv("OPENLAOKE_AUDIT_DIR", str(tmp_path / "audit"))
     state = AppState(session_id="s", cwd=str(tmp_path))
     audit.record_tool_request(state, "Bash", {"command": "ls -la"}, "c1")
-    audit.record_tool_result(state, "Bash", type("R", (), {"content": "ok", "is_error": False})(), "c1")
+    audit.record_tool_result(
+        state, "Bash", type("R", (), {"content": "ok", "is_error": False})(), "c1"
+    )
 
     class Ctx:
         app_state = state

@@ -1224,8 +1224,6 @@ class TranscriptCommand(SlashCommand):
     async def execute(self, ctx: CommandContext) -> CommandResult:
         import shlex
 
-        from openlaoke.core.transcript import Transcript
-
         transcript = getattr(ctx.app_state, "_transcript", None)
         if transcript is None:
             return CommandResult(
