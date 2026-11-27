@@ -154,6 +154,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **`/trust` was recorded and never read** (`core/trust.py`): the decision went
+  into `trust.json` and no code consulted it, while `InvokeSkillTool` searched
+  `<cwd>/.openlaoke/skills` unconditionally and `prompt_templates` appended
+  `<cwd>/.openlaoke/prompts`. A cloned repository could therefore put text into
+  the system prompt just by shipping those directories. Project-local skills and
+  prompt templates now load only in a trusted project. An absent record is
+  "undecided": treated as untrusted for loading, reported separately by
+  `/trust`, and mentioned once at startup so a missing skill is not mistaken for
+  a bug. `/trust reset` removes the decision.
 - **A tool result containing `[/]` aborted the whole turn** (`core/repl.py`):
   `_print_tool_result` interpolated arbitrary tool output into Rich markup, so a
   traceback line like `[Errno 2] …` lost its brackets and `[/]` raised
