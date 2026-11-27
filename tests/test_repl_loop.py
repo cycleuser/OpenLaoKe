@@ -769,15 +769,20 @@ def test_a_feedback_hook_is_queued_for_the_next_turn():
     assert "hook feedback queued" in r.console.file.getvalue()
 
 
-def test_oversized_tool_output_is_truncated_for_history():
+def test_oversized_tool_output_is_externalized_for_history(tmp_path):
     tool = FakeTool("Read", result="x" * 1000)
     r = make_repl([], tools=[tool])
-    r.app_state.max_tool_history = 200
+    r.app_state.max_tool_history = 600
 
     result = asyncio.run(r._execute_tool(tool_use()))
 
-    assert "tool output compacted" in result.content
-    assert len(result.content.encode()) < 1000
+    assert "externalized" in result.content
+    assert len(result.content.encode()) <= 600
+    # The full body is still on disk and reachable from the pointer.
+    from pathlib import Path
+
+    stored = Path(result.content.split("full output: ", 1)[1].splitlines()[0])
+    assert stored.read_text() == "x" * 1000
 
 
 def test_an_accepted_large_result_keeps_four_times_the_cap():
@@ -788,8 +793,9 @@ def test_an_accepted_large_result_keeps_four_times_the_cap():
     plain = asyncio.run(r._execute_tool(tool_use(cid="c1")))
     accepted = asyncio.run(r._execute_tool(tool_use(cid="c2", accept_large_output=True)))
 
-    assert "tool output compacted" in plain.content
-    assert "tool output compacted" in accepted.content
+    assert "externalized" in plain.content
+    assert "externalized" in accepted.content
+    # 4x the cap means the accepted call keeps more of the body inline.
     assert accepted.content.count("y") > plain.content.count("y")
 
 

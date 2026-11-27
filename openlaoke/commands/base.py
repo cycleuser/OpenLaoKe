@@ -1134,3 +1134,40 @@ class ThemeCommand(SlashCommand):
             )
         ctx.app_state.theme = args
         return CommandResult(message=f"Theme set to: {args}")
+
+
+class AuditCommand(SlashCommand):
+    """Show the tool-execution audit chain and whether it still verifies.
+
+    The log is written by ``core.audit``: one hash-chained line per tool
+    request, result, or refusal. ``verify`` re-walks the chain and compares its
+    tip against the out-of-band anchor, so a hand-edited or truncated log is
+    reported rather than silently trusted.
+    """
+
+    name = "audit"
+    description = "Show the tool audit chain (and verify it)"
+    aliases = ["trail"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
+        from openlaoke.core import audit
+
+        if not audit.audit_enabled():
+            return CommandResult(
+                success=False,
+                message="Audit logging is disabled (OPENLAOKE_NO_AUDIT=1).",
+            )
+        args = shlex.split(ctx.args or "")
+        limit = 10
+        if args:
+            try:
+                limit = max(1, min(500, int(args[0])))
+            except ValueError:
+                return CommandResult(success=False, message="Usage: /audit [count]")
+        log = audit.get_audit(ctx.app_state)
+        if log is None:  # pragma: no cover - guarded by audit_enabled above
+            return CommandResult(success=False, message="Audit logging is disabled.")
+        text = log.status_text(limit=limit)
+        return CommandResult(success=log.verify(), message=text)

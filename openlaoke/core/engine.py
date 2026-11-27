@@ -140,6 +140,16 @@ async def execute_tool(
         return _error(tool_use.id, f"Tool '{tool_use.name}' is not enabled for this agent")
 
     if policy.check_tool is not None and not policy.check_tool(tool_use.name, tool_use.input):
+        from openlaoke.core import audit
+
+        audit.record(
+            app_state,
+            "tool.denied",
+            tool=tool_use.name,
+            call_id=tool_use.id,
+            reason="policy",
+            args=audit.summarize_args(tool_use.input),
+        )
         return _error(tool_use.id, f"Permission denied for {tool_use.name}")
 
     # Coerce argument types against the schema the way the interactive REPL
@@ -167,9 +177,13 @@ async def execute_tool(
         tool_use_id=tool_use.id,
         file_state=app_state.get_file_state(),
     )
+    from openlaoke.core import audit
+
+    audit.record_tool_request(app_state, tool_use.name, input_data, tool_use.id)
     if policy.on_tool_start is not None:
         policy.on_tool_start(tool_use)
     result = await tool.safe_call(ctx, **input_data)
+    audit.record_tool_result(app_state, tool_use.name, result, tool_use.id)
     if policy.transform_result is not None:
         result = policy.transform_result(tool_use, result)
     if policy.on_tool_end is not None:

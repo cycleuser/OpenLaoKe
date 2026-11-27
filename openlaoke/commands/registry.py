@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from openlaoke.commands.base import (
+    AuditCommand,
     BatchCommand,
     CacheCommand,
     ClearCommand,
@@ -58,6 +59,7 @@ _commands: dict[str, SlashCommand] = {}
 def register_all() -> None:
     """Register all built-in slash commands."""
     commands = [
+        AuditCommand(),
         ClearCommand(),
         CompactCommand(),
         BatchCommand(),

@@ -1549,6 +1549,16 @@ class REPL:
 
         if perm_result == PermissionResult.DENY:
             self.console.print(f"  [{self._c('error')}]Denied:[/] {tool_use.name}")
+            from openlaoke.core import audit
+
+            audit.record(
+                self.app_state,
+                "tool.denied",
+                tool=tool_use.name,
+                call_id=tool_use.id,
+                reason="config",
+                args=audit.summarize_args(tool_input),
+            )
             return ToolResultBlock(
                 tool_use_id=tool_use.id,
                 content=f"Permission denied for {tool_use.name}",
@@ -1559,6 +1569,16 @@ class REPL:
             approved = await self._ask_permission(tool_use.name, tool_input, tool)
             if not approved:
                 self.console.print(f"  [{self._c('error')}]Denied: {tool_use.name}[/]")
+                from openlaoke.core import audit
+
+                audit.record(
+                    self.app_state,
+                    "tool.denied",
+                    tool=tool_use.name,
+                    call_id=tool_use.id,
+                    reason="user",
+                    args=audit.summarize_args(tool_input),
+                )
                 return ToolResultBlock(
                     tool_use_id=tool_use.id,
                     content=f"User denied {tool_use.name}",
@@ -1587,7 +1607,11 @@ class REPL:
                 is_error=True,
             )
 
+        from openlaoke.core import audit
+
+        audit.record_tool_request(self.app_state, tool_use.name, tool_input, tool_use.id)
         result = await tool.safe_call(ctx, **tool_input)
+        audit.record_tool_result(self.app_state, tool_use.name, result, tool_use.id)
 
         if tool_use.name in ("Write", "Edit"):
             self._verify_file_written(tool_input, result)
@@ -1606,16 +1630,19 @@ class REPL:
                     tool_use_id=result.tool_use_id, content=guarded, is_error=False
                 )
 
-        # Truncate tool output for history: keep head 70% + tail 30%
-        # to preserve both beginning and end of long outputs.  An explicitly
-        # accepted result keeps 4x the normal cap, still bounded.
+        # Oversized output is kept on disk and replaced in history by a
+        # pointer (path + digest + head/tail), so the middle of a long log is
+        # still reachable instead of being dropped. An explicitly accepted
+        # result keeps 4x the normal cap, still bounded.
         _max_tool_out = self.app_state.max_tool_history * (4 if accepts_large else 1)
         if len(result_content.encode("utf-8")) > _max_tool_out:
-            from openlaoke.core.tool import truncate_tool_history
+            from openlaoke.core.tool_output_store import externalize
 
-            result_content = truncate_tool_history(result_content, _max_tool_out)
+            result_content = externalize(
+                self.app_state, tool_use.name, result_content, max_bytes=_max_tool_out
+            )
             # Rebuild the block: it is ``result.content`` that goes into the
-            # history, so truncating the local copy alone capped nothing.
+            # history, so replacing the local copy alone capped nothing.
             result = ToolResultBlock(
                 tool_use_id=result.tool_use_id,
                 content=result_content,
