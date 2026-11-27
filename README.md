@@ -331,6 +331,27 @@ Variables set for the session (`/settings`, or `state.set_env_var`) are always
 passed through. Session files are written to a temporary file and renamed into
 place, so an interrupted save leaves the previous session intact.
 
+### What lands on disk
+
+Four files record what a session did, and each answers a different question:
+
+| Path | Question it answers | Command |
+|---|---|---|
+| `~/.openlaoke/sessions/<id>.json` | what the runtime needs to resume | `/sessions`, `/resume` |
+| `~/.openlaoke/sessions/<id>.jsonl` | every message, append-only; replays a session whose snapshot was damaged | `/transcript` |
+| `~/.openlaoke/audit/audit.jsonl` | which tool ran, on what arguments, and whether it was refused | `/audit` |
+| `~/.openlaoke/artifacts/<session>/` | the full body of any tool output too large for the history | (the pointer names the file) |
+
+`/schedule log` reads `~/.openlaoke/schedule-runs.json`, one JSON line per
+firing with its status and duration.
+
+The audit log is a hash chain with an out-of-band tip in `audit.head`. Editing a
+line breaks every hash after it; deleting the last lines is caught by the tip,
+which a plain chain cannot detect (any prefix of a valid chain is valid). A
+chain that fails to verify refuses further appends rather than forking the
+evidence. `OPENLAOKE_AUDIT_DIR` relocates it and `OPENLAOKE_NO_AUDIT=1` turns it
+off; `OPENLAOKE_ARTIFACT_DIR` relocates the artifacts.
+
 ## Architecture
 
 ```text

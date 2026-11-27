@@ -7,6 +7,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Hash-chained audit log and `/audit`** (`core/audit.py`): every tool request,
+  result and refusal appends one line that commits to the previous one, so an
+  edited entry breaks the chain. The chain alone cannot notice *deletion* (any
+  prefix of a valid chain is valid), so `audit.head` records the tip out of band
+  and the two are cross-checked. A chain that does not verify refuses further
+  appends instead of forking the evidence. Arguments are summarised with
+  credential-looking keys redacted and bodies truncated, so the log answers
+  "what ran" without becoming a second copy of every file read. Disable with
+  `OPENLAOKE_NO_AUDIT=1`, relocate with `OPENLAOKE_AUDIT_DIR`.
+- **Append-only session journal and `/transcript`** (`core/transcript.py`): the
+  snapshot (`<id>.json`) is still rewritten on every save and is still what the
+  runtime loads, but each committed message now also appends one JSON line to
+  `<id>.jsonl`. A truncated snapshot is recovered by replaying the journal
+  instead of returning nothing, a half-written final line is skipped as the
+  expected crash artefact, and damage anywhere else is reported rather than
+  quietly accepted.
+- **Oversized tool output is kept, not dropped** (`core/tool_output_store.py`):
+  a result over the history cap is written under
+  `~/.openlaoke/artifacts/<session>/` and replaced by a pointer (path, sha256,
+  size, head and tail). The model can `Read` or `Grep` the file for the middle
+  instead of re-running an unreproducible command. The artifact counter
+  continues from what is on disk (a per-process 001 would overwrite evidence an
+  earlier pointer cites) and the filename carries the content digest.
+- **Memory authority and supersession** (`core/memory_store.py`): notes carry an
+  `authority` (`user` > `project` > `agent` > `imported`) and a `supersedes`
+  list. Retrieval groups by authority before BM25 score, so a note the user
+  typed is not pushed out by an agent note that merely repeats the query, and a
+  superseded note stops being retrieved while staying on disk. The Memory tool
+  can only write `agent` notes; `remember` with `supersedes=[id]` records the
+  replacement, and `/memory remember <text>` is the one path that writes a
+  `user` note.
+- **`/schedule log`** (`core/scheduler.py`): every firing appends a JSONL record
+  (entry, start time, status, detail, duration) beside `schedule.json`.
+  `runs: 12` with no history hid the fact that twelve runs had failed; the log
+  rotates at 500 records / 256 KB instead of growing forever.
 - **`/history` and `/restore`** (`commands/base.py`, `utils/file_history.py`):
   about to touch, but nothing could read those snapshots back. `/history` lists
   the files that have them and `/history <path>` shows one file's versions;
@@ -25,6 +60,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   be loaded is reported instead of being called a success.
 
 ### Changed
+- **One failing scheduled command no longer stops the scheduler**
+  (`core/repl.py`): an exception from `run_bash` propagated out of
+  `_scheduler_loop`, ending it, so every later schedule silently stopped firing.
+  The failure is now recorded in the run history and reported, and the loop
+  continues.
+- **The system prompt is assembled from tiered blocks**
+  (`core/prompt_budget.py`, `core/system_prompt.py`): when a token budget is
+  supplied, `required` blocks (the rules, the mode, the user's own instructions,
+  active skills, the language directive) are always kept and only `optional`
+  ones (context, environment) are dropped, in priority order. Previously a
+  prompt that had to shrink would have lost whatever happened to come last. The
+  non-interactive run passes a budget derived from the resolved context window.
+- **`build_system_prompt()` takes `max_tokens`** (`core/system_prompt.py`): with
+  no budget it behaves exactly as before, so existing callers and the frozen
+  REPL prompt are unaffected.
 - **Shell commands no longer inherit credentials** (`core/state.py`,
   `utils/security.py`): a tool subprocess was handed `os.environ.copy()`, so
   `curl -d "$ANTHROPIC_API_KEY" https://…` needed no trick to work. Names that

@@ -213,10 +213,18 @@ OpenLaoKe 目前没有任何审计痕迹：`risk_events` 只是内存里的 200 
 
 | 项 | 状态 |
 |---|---|
-| 子进程环境变量按名字剔除凭据（§2） | 已实现 + 测试 |
-| 会话落盘原子化（§3 第一步） | 已实现 + 测试 |
-| 大输出外部化（§4） | 待做，设计已在上文 |
-| 记忆 authority/冲突（§5.1） | 待做 |
-| prompt 预算 fail-closed（§5.2） | 待做 |
-| 调度 run history（§5.3） | 待做 |
-| 审计哈希链 + 锚点（§6） | 待做，实现要点已在上文 |
+| 子进程环境变量按名字剔除凭据（§2） | 已实现 + 测试（`utils/security.py`） |
+| 会话落盘原子化（§3 第一步） | 已实现 + 测试（`state._persist`） |
+| 追加式 transcript + replay 恢复（§3 第二步） | 已实现 + 测试（`core/transcript.py`、`/transcript`） |
+| 大输出外部化（§4） | 已实现 + 测试（`core/tool_output_store.py`） |
+| 记忆 authority/冲突（§5.1） | 已实现 + 测试（`core/memory_store.py`、`/memory remember`） |
+| prompt 预算 fail-closed（§5.2） | 已实现 + 测试（`core/prompt_budget.py`） |
+| 调度 run history（§5.3） | 已实现 + 测试（`core/scheduler.py`、`/schedule log`） |
+| 审计哈希链 + 锚点（§6） | 已实现 + 测试（`core/audit.py`、`/audit`） |
+| s20「失败也要出现在收尾里」 | 未做：artifact gate 已覆盖成功路径，失败清单要改收尾渲染，留待单独一轮 |
+
+每一条都配了「把修复改回去，测试必失败」的验证，验证方式写在各 commit 说明里。
+
+补充一个实现时才暴露的点：指针块本身有下限。`max_tool_history` 调到约 400 字节以下时，
+路径 + digest 就装不下了，此时退化成一行压缩指针（仍会略微超出预算）。这是可接受的——
+比丢掉中间段、让模型去重跑一条不可复现的命令要好。
