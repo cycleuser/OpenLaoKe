@@ -106,6 +106,7 @@ class AppState:
     _task_manager: Any = None
     _tool_registry: Any = None
     _memory_store: Any = None
+    _transcript: Any = None
     _file_state: Any = None
     _mcp_runtime: Any = None
     _scheduler: Any = None
@@ -191,8 +192,25 @@ class AppState:
         message.timestamp = time.time()
         self.messages.append(message)
         self._notify()
+        self._journal(message)
         if persist:
             self._persist()
+
+    def _journal(self, message: Message) -> None:
+        """Append to the session transcript, when this session has one.
+
+        The snapshot is rewritten on every save; the journal costs one line per
+        message and is what recovers the conversation if the snapshot is ever
+        unreadable. A journal failure is logged, never raised: the turn already
+        happened.
+        """
+        transcript = self._transcript
+        if transcript is None:
+            return
+        try:
+            transcript.append_message(message)
+        except OSError:
+            logger.warning("Could not append to the session transcript", exc_info=True)
 
     def get_messages(self) -> list[Message]:
         """Get a copy of all messages."""
@@ -261,6 +279,14 @@ class AppState:
 
     def set_persist_path(self, path: str) -> None:
         self._persist_path = path
+        from openlaoke.core.transcript import Transcript, transcript_path_for
+
+        self._transcript = Transcript(
+            transcript_path_for(path),
+            session_id=self.session_id,
+            cwd=self.cwd,
+            model=self.session_config.model,
+        )
 
     @property
     def context_cap(self) -> int | None:

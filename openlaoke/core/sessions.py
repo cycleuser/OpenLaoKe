@@ -125,7 +125,18 @@ class SessionManager:
         try:
             with open(path) as f:
                 data = json.load(f)
+        except json.JSONDecodeError:
+            # A truncated snapshot used to mean a lost conversation. The
+            # append-only transcript beside it still holds every message, so
+            # recover from that instead of returning nothing.
+            recovered = self._recover_from_transcript(path)
+            if recovered is not None:
+                logger.warning("Recovered session from the transcript at %s", path)
+            return recovered
+        except OSError:
+            return None
 
+        try:
             session_config = data.get("session_config", {})
             model = session_config.get("model", data.get("model", "claude-sonnet-4-20250514"))
 
@@ -210,3 +221,32 @@ class SessionManager:
         except Exception:
             logger.warning("Failed to load session from %s", path, exc_info=True)
             return None
+
+    def _recover_from_transcript(self, path: str) -> AppState | None:
+        """Rebuild a session from its append-only journal.
+
+        Only the messages come back, because that is all the journal records:
+        costs, tasks and the todo list live in the snapshot. Half a session with
+        its conversation beats no session at all, and the next save rewrites the
+        snapshot from what was recovered.
+        """
+        from openlaoke.core.transcript import Transcript, transcript_path_for
+
+        transcript = Transcript(transcript_path_for(path))
+        header, records = transcript.replay()
+        if not records:
+            return None
+
+        app_state = create_app_state(
+            cwd=header.get("cwd") or os.getcwd(),
+            model=header.get("model") or "claude-sonnet-4-20250514",
+            persist_path=path,
+        )
+        app_state.session_id = (
+            header.get("session_id") or os.path.splitext(os.path.basename(path))[0]
+        )
+        for record in records:
+            message = _message_from_dict(record["message"])
+            if message is not None:
+                app_state.messages.append(message)
+        return app_state

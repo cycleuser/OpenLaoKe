@@ -30,6 +30,7 @@ from openlaoke.commands.base import (
     ThemeCommand,
     ThinkingCommand,
     TodosCommand,
+    TranscriptCommand,
 )
 from openlaoke.commands.bot_commands import BotCommand
 from openlaoke.commands.pi_commands import (
@@ -84,6 +85,7 @@ def register_all() -> None:
         StatsCommand(),
         ThemeCommand(),
         ThinkingCommand(),
+        TranscriptCommand(),
         TodosCommand(),
         ChangelogCommand(),
         CloneCommand(),

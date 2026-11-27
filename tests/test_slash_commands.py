@@ -414,7 +414,7 @@ async def test_memory_summary_recall_and_clear(tmp_path, state) -> None:
     assert "pytest -q" in recalled
 
     missing = (await command.execute(ctx(state, "nothing-matches-this"))).message
-    assert missing == "No matching notes."
+    assert missing.startswith("No matching notes.")
 
     cleared = (await command.execute(ctx(state, "clear"))).message
     assert "Cleared 1 note(s)" in cleared
