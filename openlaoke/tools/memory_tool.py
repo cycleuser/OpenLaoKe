@@ -44,6 +44,13 @@ class MemoryInput(BaseModel):
     kind: str = Field(default="note", description="remember: 'note', 'decision', 'convention'")
     remove: bool = Field(default=False, description="tag: remove the listed tags instead of adding")
     limit: int = Field(default=8, description="Maximum notes to return")
+    supersedes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "remember: ids of notes this one replaces (a changed decision, a corrected "
+            "convention). They are kept on disk but stop being retrieved."
+        ),
+    )
 
 
 class MemoryTool(Tool):
@@ -76,11 +83,21 @@ class MemoryTool(Tool):
         if action == "remember":
             text = str(kwargs.get("text") or "")
             tags = [str(tag) for tag in (kwargs.get("tags") or [])]
+            supersedes = [str(item) for item in (kwargs.get("supersedes") or [])]
             try:
-                entry = store.remember(text, tags=tags, kind=str(kwargs.get("kind") or "note"))
+                # Always "agent": the tool cannot mint authority for itself. A
+                # note the user typed goes through ``/memory remember`` instead.
+                entry = store.remember(
+                    text,
+                    tags=tags,
+                    kind=str(kwargs.get("kind") or "note"),
+                    authority="agent",
+                    supersedes=supersedes,
+                )
             except ValueError as exc:
                 return self._error(ctx, f"Error: {exc}")
-            return self._result(ctx, f"Remembered as {entry.id}: {entry.text}")
+            replaced = f" (replaces {', '.join(entry.supersedes)})" if entry.supersedes else ""
+            return self._result(ctx, f"Remembered as {entry.id}{replaced}: {entry.text}")
 
         if action in ("recall", "search"):
             query = str(kwargs.get("text") or "").strip()

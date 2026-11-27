@@ -27,6 +27,14 @@ MEMORY_DIR = os.path.join(os.path.expanduser("~"), ".openlaoke", "memory")
 MAX_ENTRIES = 2000
 DEFAULT_LIMIT = 8
 
+# Who asserted a fact, strongest first. The model writes "agent" notes and
+# cannot promote itself: only a human typing ``/memory remember`` produces
+# "user", so a model that decides its own guess outranks the user's stated
+# preference has no way to record that. Retrieval ranks by this rank before
+# it ranks by BM25 score, because relevance is not authority.
+AUTHORITY_RANK = {"user": 3, "project": 2, "agent": 1, "imported": 0}
+DEFAULT_AUTHORITY = "agent"
+
 _WORD = re.compile(r"[a-z0-9_]+")
 _CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
 _STOPWORDS = {
@@ -95,6 +103,20 @@ class MemoryEntry:
     created_at: float = 0.0
     updated_at: float = 0.0
     uses: int = 0
+    authority: str = DEFAULT_AUTHORITY
+    # Notes this one replaces, and the note that replaced this one. A superseded
+    # note stays on disk (evidence is not deleted) but drops out of retrieval so
+    # an old decision cannot outvote the one that cancelled it.
+    supersedes: list[str] = field(default_factory=list)
+    superseded_by: str = ""
+
+    @property
+    def rank(self) -> int:
+        return AUTHORITY_RANK.get(self.authority, 0)
+
+    @property
+    def superseded(self) -> bool:
+        return bool(self.superseded_by)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -102,7 +124,10 @@ class MemoryEntry:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MemoryEntry:
         known = set(cls.__dataclass_fields__)
-        return cls(**{key: value for key, value in data.items() if key in known})
+        entry = cls(**{key: value for key, value in data.items() if key in known})
+        if entry.authority not in AUTHORITY_RANK:
+            entry.authority = DEFAULT_AUTHORITY
+        return entry
 
 
 def project_key(cwd: str) -> str:
@@ -155,16 +180,40 @@ class MemoryStore:
 
     # ── writing ──────────────────────────────────────────────────────────
 
-    def remember(self, text: str, tags: list[str] | None = None, kind: str = "note") -> MemoryEntry:
+    def remember(
+        self,
+        text: str,
+        tags: list[str] | None = None,
+        kind: str = "note",
+        authority: str = DEFAULT_AUTHORITY,
+        supersedes: list[str] | None = None,
+    ) -> MemoryEntry:
+        """Store a fact, optionally replacing older notes.
+
+        ``supersedes`` marks the listed notes as replaced instead of deleting
+        them: the history of a decision is often worth more than the decision.
+        Ids that do not exist are ignored, because a model recalling an id from
+        a stale turn should not fail the whole write.
+        """
         cleaned = " ".join(text.split())
         if not cleaned:
             raise ValueError("memory text is empty")
+        if authority not in AUTHORITY_RANK:
+            raise ValueError(
+                f"authority must be one of {', '.join(sorted(AUTHORITY_RANK))}"
+            )
+        replaced = [identifier for identifier in (supersedes or []) if self.get(identifier)]
 
         for existing in self.entries:
             if existing.text == cleaned:
                 existing.updated_at = time.time()
                 if tags:
                     existing.tags = sorted({*existing.tags, *tags})
+                # Re-asserting a fact at a higher authority upgrades it; a later
+                # "agent" restatement never demotes what the user said.
+                if AUTHORITY_RANK[authority] > existing.rank:
+                    existing.authority = authority
+                self._apply_supersedes(existing, replaced)
                 self._dirty = True
                 self.save()
                 return existing
@@ -177,7 +226,9 @@ class MemoryStore:
             kind=kind or "note",
             created_at=now,
             updated_at=now,
+            authority=authority,
         )
+        self._apply_supersedes(entry, replaced)
         self.entries.append(entry)
         if len(self.entries) > MAX_ENTRIES:
             self.entries = self.entries[-MAX_ENTRIES:]
@@ -185,6 +236,18 @@ class MemoryStore:
         self._dirty = True
         self.save()
         return entry
+
+    def _apply_supersedes(self, entry: MemoryEntry, replaced: list[str]) -> None:
+        for identifier in replaced:
+            if identifier == entry.id:
+                continue
+            old = self.get(identifier)
+            if old is None:
+                continue
+            old.superseded_by = entry.id
+            old.updated_at = time.time()
+            if identifier not in entry.supersedes:
+                entry.supersedes.append(identifier)
 
     def forget(self, identifier: str) -> MemoryEntry | None:
         for index, entry in enumerate(self.entries):
@@ -250,8 +313,19 @@ class MemoryStore:
         self._index = index
         return index
 
-    def search(self, query: str, limit: int = DEFAULT_LIMIT) -> list[tuple[MemoryEntry, float]]:
-        """BM25 ranking over the stored notes."""
+    def search(
+        self,
+        query: str,
+        limit: int = DEFAULT_LIMIT,
+        include_superseded: bool = False,
+    ) -> list[tuple[MemoryEntry, float]]:
+        """BM25 ranking over the stored notes, grouped by authority first.
+
+        Relevance is not authority: a note the user typed ("always use pytest,
+        never unittest") must not be pushed out of the top of the list by an
+        agent note that merely repeats the query's words more often. Within one
+        authority level the order is still pure BM25.
+        """
         query_tokens = tokenize(query)
         if not query_tokens or not self.entries:
             return []
@@ -267,6 +341,8 @@ class MemoryStore:
         k1, b = 1.5, 0.75
         scored: list[tuple[MemoryEntry, float]] = []
         for entry in self.entries:
+            if entry.superseded and not include_superseded:
+                continue
             counts, length = index[entry.id]
             score = 0.0
             for token in set(query_tokens):
@@ -283,11 +359,13 @@ class MemoryStore:
             if score > 0:
                 scored.append((entry, score))
 
-        scored.sort(key=lambda item: item[1], reverse=True)
+        scored.sort(key=lambda item: (item[0].rank, item[1]), reverse=True)
         return scored[:limit]
 
-    def recall(self, query: str, limit: int = DEFAULT_LIMIT) -> list[MemoryEntry]:
-        results = self.search(query, limit)
+    def recall(
+        self, query: str, limit: int = DEFAULT_LIMIT, include_superseded: bool = False
+    ) -> list[MemoryEntry]:
+        results = self.search(query, limit, include_superseded=include_superseded)
         for entry, _score in results:
             entry.uses += 1
         if results:
@@ -299,7 +377,9 @@ class MemoryStore:
         entries = self.entries
         if tag:
             entries = [entry for entry in entries if tag in entry.tags]
-        return sorted(entries, key=lambda entry: entry.updated_at, reverse=True)[:limit]
+        return sorted(entries, key=lambda entry: (entry.updated_at, entry.rank), reverse=True)[
+            :limit
+        ]
 
     def related(self, identifier: str) -> list[MemoryEntry]:
         entry = self.get(identifier)
@@ -319,7 +399,35 @@ class MemoryStore:
         lines = []
         for entry in entries:
             tags = f" [{', '.join(entry.tags)}]" if entry.tags else ""
-            lines.append(f"{entry.id} ({entry.kind}){tags} {entry.text}")
+            authority = "" if entry.authority == DEFAULT_AUTHORITY else f" <{entry.authority}>"
+            replaced = f" superseded by {entry.superseded_by}" if entry.superseded else ""
+            supersedes = (
+                f" replaces {', '.join(entry.supersedes)}" if entry.supersedes else ""
+            )
+            lines.append(
+                f"{entry.id} ({entry.kind}){tags}{authority}{replaced}{supersedes} {entry.text}"
+            )
+        return "\n".join(lines)
+
+    def digest(self, query: str = "", limit: int = 12, max_chars: int = 1200) -> str:
+        """A compact block for the system prompt, strongest authority first.
+
+        Superseded notes are excluded: the prompt must carry the current fact,
+        not the one it replaced. The block shrinks from the weakest end, so a
+        tight budget can never crowd out what the user said.
+        """
+        entries = self.recall(query, limit=limit) if query else self.recent(limit=limit)
+        entries = [entry for entry in entries if not entry.superseded]
+        entries.sort(key=lambda entry: (entry.rank, entry.updated_at), reverse=True)
+        lines: list[str] = []
+        used = 0
+        for entry in entries:
+            marker = "" if entry.authority == DEFAULT_AUTHORITY else f"[{entry.authority}] "
+            line = f"- {marker}{entry.text}"
+            if used + len(line) + 1 > max_chars:
+                break
+            lines.append(line)
+            used += len(line) + 1
         return "\n".join(lines)
 
     def stats(self) -> str:
@@ -330,8 +438,21 @@ class MemoryStore:
             for tag in entry.tags:
                 tags[tag] = tags.get(tag, 0) + 1
         tag_note = ", ".join(f"{tag}×{count}" for tag, count in sorted(tags.items())[:12])
+        authorities: dict[str, int] = {}
+        for entry in self.entries:
+            authorities[entry.authority] = authorities.get(entry.authority, 0) + 1
+        superseded = sum(1 for entry in self.entries if entry.superseded)
+        authority_note = ", ".join(
+            f"{name}×{count}"
+            for name, count in sorted(
+                authorities.items(),
+                key=lambda item: (-item[1], -AUTHORITY_RANK.get(item[0], 0)),
+            )
+        )
         return f"{len(self.entries)} note(s) in {self.path}" + (
             f"\ntags: {tag_note}" if tag_note else ""
+        ) + (f"\nauthority: {authority_note}" if authority_note else "") + (
+            f"\nsuperseded: {superseded}" if superseded else ""
         )
 
 

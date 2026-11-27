@@ -306,3 +306,180 @@ def test_register_adds_the_memory_tool(tmp_path) -> None:
     memory_tool.register(registry)
 
     assert registry.get("Memory") is not None
+
+
+# --------------------------------------------------------------------------- #
+# authority and supersession
+# --------------------------------------------------------------------------- #
+def test_a_user_note_outranks_a_more_relevant_agent_note(tmp_path) -> None:
+    """Relevance must not decide whose fact wins."""
+    store = _store(tmp_path)
+    store.remember("Always run the release gate with pytest.", authority="user")
+    # Scores higher on this query: it repeats the words more often.
+    store.remember(
+        "release gate release gate release gate unittest release gate",
+        authority="agent",
+    )
+
+    results = store.recall("release gate unittest")
+
+    assert results[0].authority == "user"
+    assert "pytest" in results[0].text
+
+
+def test_a_superseded_note_stops_being_retrieved_but_stays_on_disk(tmp_path) -> None:
+    store = _store(tmp_path)
+    old = store.remember("Deploy with the legacy rsync script.", kind="decision")
+    new = store.remember(
+        "Deploy with make release; the rsync script is retired.",
+        kind="decision",
+        supersedes=[old.id],
+    )
+
+    assert new.supersedes == [old.id]
+    assert old.superseded_by == new.id
+    assert [entry.id for entry in store.recall("deploy rsync script")] == [new.id]
+
+    everything = store.recall("deploy rsync script", include_superseded=True)
+    assert {entry.id for entry in everything} == {old.id, new.id}
+    assert store.get(old.id) is not None  # evidence is kept, not deleted
+
+
+def test_unknown_supersede_ids_are_ignored_rather_than_failing(tmp_path) -> None:
+    store = _store(tmp_path)
+
+    entry = store.remember("New fact.", supersedes=["mdoes-not-exist"])
+
+    assert entry.supersedes == []
+    assert entry.text == "New fact."
+
+
+def test_an_agent_restatement_cannot_demote_a_user_note(tmp_path) -> None:
+    store = _store(tmp_path)
+    original = store.remember("Never say 硅片.", authority="user")
+
+    again = store.remember("Never say 硅片.", authority="agent")
+
+    assert again.id == original.id
+    assert again.authority == "user"
+
+
+def test_reasserting_at_higher_authority_upgrades_the_note(tmp_path) -> None:
+    store = _store(tmp_path)
+    original = store.remember("Use 芯片.", authority="agent")
+
+    store.remember("Use 芯片.", authority="user")
+
+    assert original.authority == "user"
+
+
+def test_an_unknown_authority_is_rejected(tmp_path) -> None:
+    import pytest
+
+    store = _store(tmp_path)
+    with pytest.raises(ValueError):
+        store.remember("fact", authority="root")
+
+
+def test_the_memory_tool_can_only_write_agent_notes(tmp_path) -> None:
+    store = _store(tmp_path)
+    ctx = _ctx(tmp_path, store)
+
+    asyncio.run(MemoryTool().call(ctx, action="remember", text="Use ruff format --check."))
+
+    assert store.entries[0].authority == "agent"
+
+
+def test_the_memory_tool_can_supersede_and_says_so(tmp_path) -> None:
+    store = _store(tmp_path)
+    ctx = _ctx(tmp_path, store)
+    old = store.remember("Gate is unittest.", kind="convention")
+
+    result = asyncio.run(
+        MemoryTool().call(
+            ctx,
+            action="remember",
+            text="Gate is pytest.",
+            kind="convention",
+            supersedes=[old.id],
+        )
+    )
+
+    assert result.is_error is False
+    assert f"replaces {old.id}" in result.content
+    assert old.superseded_by != ""
+
+
+def test_the_command_writes_a_user_note_the_tool_cannot_outrank(tmp_path) -> None:
+    store = _store(tmp_path)
+    state = create_app_state(cwd=str(tmp_path))
+    state._memory_store = store
+
+    class Ctx:
+        app_state = state
+        args = "remember Always use pytest, never unittest."
+        reply = None
+
+    from openlaoke.commands.base import MemoryCommand
+
+    result = asyncio.run(MemoryCommand().execute(Ctx()))
+
+    assert "(user)" in result.message
+    assert store.entries[0].authority == "user"
+    assert store.entries[0].text == "Always use pytest, never unittest."
+
+
+def test_the_digest_puts_user_notes_first_and_drops_superseded_ones(tmp_path) -> None:
+    store = _store(tmp_path)
+    old = store.remember("Deploy with rsync.", kind="decision")
+    store.remember("Deploy with make release.", kind="decision", supersedes=[old.id])
+    store.remember("Never say 硅片.", authority="user")
+
+    digest = store.digest(max_chars=500)
+
+    lines = digest.splitlines()
+    assert lines[0].startswith("- [user] Never say 硅片.")
+    assert "rsync" not in digest
+    assert "make release" in digest
+
+
+def test_a_tight_digest_budget_keeps_the_strongest_note(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.remember("x" * 400, authority="agent")
+    store.remember("Always use 芯片.", authority="user")
+
+    digest = store.digest(max_chars=60)
+
+    assert "芯片" in digest
+    assert all(len(line) <= 60 for line in digest.splitlines())
+
+
+def test_render_and_stats_surface_authority_and_supersession(tmp_path) -> None:
+    store = _store(tmp_path)
+    old = store.remember("old fact")
+    new = store.remember("new fact", authority="user", supersedes=[old.id])
+
+    rendered = store.render([old, new])
+    assert f"superseded by {new.id}" in rendered
+    assert "new fact" in rendered and "<user>" in rendered
+    assert f"replaces {old.id}" in rendered
+
+    stats = store.stats()
+    assert "authority: user×1, agent×1" in stats
+    assert "superseded: 1" in stats
+
+
+def test_notes_written_before_authority_existed_still_load(tmp_path) -> None:
+    import json
+
+    path = tmp_path / "memory.json"
+    path.write_text(
+        json.dumps(
+            {"version": 1, "cwd": str(tmp_path), "entries": [{"id": "m1", "text": "legacy note"}]}
+        )
+    )
+
+    store = MemoryStore(str(tmp_path), path=str(path))
+
+    assert store.entries[0].authority == "agent"
+    assert store.entries[0].superseded is False

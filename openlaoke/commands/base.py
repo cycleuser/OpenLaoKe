@@ -711,7 +711,7 @@ class SearchCommand(SlashCommand):
 
 class MemoryCommand(SlashCommand):
     name = "memory"
-    description = "Show, search or clear this project's stored notes"
+    description = "Show, search, add or clear this project's stored notes"
     aliases = ["mem"]
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
@@ -726,8 +726,22 @@ class MemoryCommand(SlashCommand):
         if arg.lower() in ("clear", "wipe"):
             count = store.clear()
             return CommandResult(message=f"Cleared {count} note(s) from {store.path}.")
+        # Typing "/memory remember ..." is the one way to write a note the model
+        # cannot outrank. Everything the Memory tool writes is "agent".
+        lowered = arg.lower()
+        for verb in ("remember ", "add "):
+            if lowered.startswith(verb):
+                text = arg[len(verb) :].strip()
+                if not text:
+                    return CommandResult(success=False, message=f"Usage: /memory {verb.strip()} <text>")
+                entry = store.remember(text, authority="user")
+                return CommandResult(message=f"Remembered as {entry.id} (user): {entry.text}")
         entries = store.recall(arg, limit=8)
-        return CommandResult(message=store.render(entries) if entries else "No matching notes.")
+        if not entries:
+            return CommandResult(
+                message="No matching notes. '/memory remember <text>' saves one as a user note."
+            )
+        return CommandResult(message=store.render(entries))
 
 
 class BatchCommand(SlashCommand):
@@ -988,18 +1002,39 @@ class SleepCommand(SlashCommand):
 
 class ScheduleCommand(SlashCommand):
     name = "schedule"
-    description = "Show the local schedule"
+    description = "Show the local schedule, or its run history with '/schedule log'"
     aliases = ["cron"]
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
         from openlaoke.core.scheduler import get_scheduler
 
         scheduler = get_scheduler(ctx.app_state)
+        args = shlex.split(ctx.args or "")
+        if args and args[0].lower() in ("log", "history", "runs"):
+            # "runs: 12" with nothing else says a job fired twelve times and
+            # tells you nothing about whether any of them worked.
+            identifier = args[1] if len(args) > 1 else ""
+            limit = 20
+            if len(args) > 2:
+                try:
+                    limit = max(1, min(200, int(args[2])))
+                except ValueError:
+                    return CommandResult(success=False, message="Usage: /schedule log [id] [count]")
+            return CommandResult(message=scheduler.render_history(identifier, limit))
+        if args:
+            return CommandResult(
+                success=False,
+                message="Usage: /schedule  (list)  |  /schedule log [id] [count]",
+            )
         enabled = bool(getattr(getattr(ctx, "app_config", None), "enable_scheduler", False))
         note = (
             "" if enabled else "\n(scheduler loop is off: set enable_scheduler=true in the config)"
         )
-        return CommandResult(message=scheduler.render() + note)
+        return CommandResult(
+            message=scheduler.render() + note + "\n('/schedule log' shows what actually ran)"
+        )
 
 
 class McpCommand(SlashCommand):
@@ -1171,3 +1206,50 @@ class AuditCommand(SlashCommand):
             return CommandResult(success=False, message="Audit logging is disabled.")
         text = log.status_text(limit=limit)
         return CommandResult(success=log.verify(), message=text)
+
+
+class TranscriptCommand(SlashCommand):
+    """Show the append-only journal that backs this session's messages.
+
+    The snapshot (``<id>.json``) is rewritten on every save and is what the
+    runtime loads; the journal costs one line per message and is what recovers
+    the conversation when the snapshot is unreadable. This command is how you
+    check that both exist and agree on how much happened.
+    """
+
+    name = "transcript"
+    description = "Show the append-only session journal and its integrity"
+    aliases = ["journal"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
+        from openlaoke.core.transcript import Transcript
+
+        transcript = getattr(ctx.app_state, "_transcript", None)
+        if transcript is None:
+            return CommandResult(
+                message="This session has no journal: it was never saved to disk."
+            )
+        args = shlex.split(ctx.args or "")
+        limit = 10
+        if args:
+            try:
+                limit = max(1, min(200, int(args[0])))
+            except ValueError:
+                return CommandResult(success=False, message="Usage: /transcript [count]")
+
+        health = transcript.health()
+        _header, records = transcript.replay()
+        lines = [
+            f"Journal: {transcript.path}",
+            f"  {health.render()}",
+        ]
+        for record in records[-limit:]:
+            message = record.get("message", {})
+            role = str(message.get("role", "?"))
+            content = message.get("content")
+            text = content if isinstance(content, str) else str(content or "")
+            preview = " ".join(text.split())[:80]
+            lines.append(f"  #{record.get('seq', '?'):<4} {role:<10} {preview}")
+        return CommandResult(success=health.ok, message="\n".join(lines))
