@@ -835,9 +835,9 @@ class REPL:
         first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
         if len(first_line) > 120:
             first_line = first_line[:117] + "..."
-        failures = getattr(self, "_turn_failures", None)
-        if failures is None:
-            failures = self._turn_failures = []
+        # ``getattr`` covers a REPL assembled by tests via ``__new__``, which
+        # skips __init__ and therefore has no list yet.
+        failures = self._turn_failures = getattr(self, "_turn_failures", [])
         failures.append(f"{tool_name}: {first_line or '(no message)'}")
 
     def _report_turn_failures(self) -> None:

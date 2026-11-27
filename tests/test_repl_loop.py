@@ -1434,3 +1434,17 @@ def test_an_error_message_with_markup_is_printed_not_raised():
     run(r)  # must not raise inside the error handler
 
     assert "provider said" in r.console.file.getvalue()
+
+
+def test_a_long_failure_line_is_clipped_for_the_report():
+    broken = FakeTool("Bash", result="E" * 400, is_error=True)
+    r = make_repl([[tool_call("c1", "Bash")], [text("done")]], tools=[broken])
+
+    run(r)
+
+    # Rich word-wraps the long line, so compare with the wrapping removed, and
+    # only look at the report: the tool result itself is printed separately.
+    out = r.console.file.getvalue()
+    report = out.split("failed this turn:", 1)[1].replace("\n", "")
+    assert "Bash: " + "E" * 117 + "..." in report
+    assert "E" * 200 not in report
