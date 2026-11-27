@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import threading
 import time
@@ -77,6 +78,15 @@ def default_audit_dir() -> str:
     return os.path.expanduser(os.path.join("~", ".openlaoke", "audit"))
 
 
+_UNSAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_name(value: str) -> str:
+    """A session id is user-controlled; keep it inside the audit directory."""
+    cleaned = _UNSAFE_NAME.sub("_", str(value or "").strip()).strip("._")
+    return cleaned[:64] or "unscoped"
+
+
 def _process_lock(key: str) -> threading.Lock:
     with _LOCKS_GUARD:
         lock = _LOCKS.get(key)
@@ -93,13 +103,23 @@ def _canonical(payload: dict[str, Any]) -> bytes:
 
 
 class AuditLog:
-    """One hash chain under ``directory``, safe for threads and processes."""
+    """One hash chain under ``directory``, safe for threads and processes.
 
-    def __init__(self, directory: str | None = None) -> None:
+    The chain is per session (``<name>.jsonl``), not global. A single log shared
+    by every session grows without bound, and the cost lands exactly where it
+    hurts: an append is O(1) only while this process holds the tip cache, and
+    any other process writing to the same file invalidates it, turning every
+    later tool call into a full re-validation of the whole chain. One chain per
+    session is bounded by that session's tool calls and stays verifiable in
+    milliseconds.
+    """
+
+    def __init__(self, directory: str | None = None, name: str = "audit") -> None:
         self.directory = Path(directory or default_audit_dir())
-        self.path = self.directory / "audit.jsonl"
-        self.head_path = self.directory / "audit.head"
-        self.lock_path = self.directory / "audit.lock"
+        self.name = _safe_name(name)
+        self.path = self.directory / f"{self.name}.jsonl"
+        self.head_path = self.directory / f"{self.name}.head"
+        self.lock_path = self.directory / f"{self.name}.lock"
         self._lock = _process_lock(str(self.lock_path.resolve()))
         # (inode, size, mtime_ns, count, tip) from the last successful append.
         # Revalidating a 100k-entry chain on every tool call would be wasteful,
@@ -413,15 +433,34 @@ def audit_enabled() -> bool:
 
 
 def get_audit(app_state: Any) -> AuditLog | None:
-    """Return the audit log for a session, or ``None`` when disabled."""
+    """Return this session's audit log, or ``None`` when auditing is disabled."""
     if not audit_enabled():
         return None
     log = getattr(app_state, "_audit_log", None)
     if log is None:
         directory = os.environ.get("OPENLAOKE_AUDIT_DIR") or default_audit_dir()
-        log = AuditLog(directory)
+        log = AuditLog(directory, name=getattr(app_state, "session_id", "") or "unscoped")
         app_state._audit_log = log
     return log
+
+
+def list_logs(directory: str | None = None) -> list[tuple[str, int]]:
+    """``(name, bytes)`` for every chain in the audit directory, active first."""
+    root = Path(directory or os.environ.get("OPENLAOKE_AUDIT_DIR") or default_audit_dir())
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return []
+    logs: list[tuple[str, int]] = []
+    for filename in names:
+        if not filename.endswith(".jsonl"):
+            continue
+        path = root / filename
+        try:
+            logs.append((filename[: -len(".jsonl")], path.stat().st_size))
+        except OSError:
+            continue
+    return logs
 
 
 def record(app_state: Any, action: str, **data: Any) -> None:

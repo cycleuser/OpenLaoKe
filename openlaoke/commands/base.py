@@ -670,13 +670,36 @@ def _parse_amount(raw: str) -> int:
 
 class SessionsCommand(SlashCommand):
     name = "sessions"
-    description = "List saved sessions"
+    description = "List saved sessions, or '/sessions prune [days]' to delete old ones"
     aliases = ["ls-sessions"]
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
         from openlaoke.core.sessions import SessionManager
 
         manager = SessionManager()
+        args = shlex.split(ctx.args or "")
+        if args:
+            if args[0].lower() not in ("prune", "clean"):
+                return CommandResult(
+                    success=False, message="Usage: /sessions  |  /sessions prune [days]"
+                )
+            days = 30
+            if len(args) > 1:
+                try:
+                    days = max(1, int(args[1]))
+                except ValueError:
+                    return CommandResult(success=False, message="Usage: /sessions prune [days]")
+            # Deleting sessions is destructive, so it only happens when asked for
+            # by name. cleanup_old_sessions() existed but nothing ever called it.
+            removed = manager.cleanup_old_sessions(max_age_days=days)
+            return CommandResult(
+                message=(
+                    f"Removed {removed} session(s) older than {days} day(s), "
+                    "with their journals and stored tool output."
+                )
+            )
         sessions = manager.list_sessions()
         if not sessions:
             return CommandResult(message="No saved sessions yet.")
@@ -684,9 +707,12 @@ class SessionsCommand(SlashCommand):
         for info in sessions[:25]:
             stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(info.created_at))
             current = " *" if info.session_id == ctx.app_state.session_id else "  "
+            # Say when the snapshot is gone: that row is listed from its journal
+            # and will be replayed rather than loaded.
+            note = "  (journal only)" if info.recovered else ""
             rows.append(
                 f"{current}{info.session_id}  {stamp}  {info.message_count:>3} msg  "
-                f"{info.model}  {info.cwd or '-'}"
+                f"{info.model}  {info.cwd or '-'}{note}"
             )
         header = f"{len(sessions)} session(s); * marks this one"
         return CommandResult(message=header + "\n" + "\n".join(rows))
@@ -733,7 +759,9 @@ class MemoryCommand(SlashCommand):
             if lowered.startswith(verb):
                 text = arg[len(verb) :].strip()
                 if not text:
-                    return CommandResult(success=False, message=f"Usage: /memory {verb.strip()} <text>")
+                    return CommandResult(
+                        success=False, message=f"Usage: /memory {verb.strip()} <text>"
+                    )
                 entry = store.remember(text, authority="user")
                 return CommandResult(message=f"Remembered as {entry.id} (user): {entry.text}")
         entries = store.recall(arg, limit=8)
@@ -851,9 +879,7 @@ class RestoreCommand(SlashCommand):
 
         parts = ctx.args.split()
         if not parts:
-            return CommandResult(
-                success=False, message="Usage: /restore <path> [version]"
-            )
+            return CommandResult(success=False, message="Usage: /restore <path> [version]")
 
         path = parts[0]
         version: int | None = None
@@ -1103,7 +1129,14 @@ class ResumeCommand(SlashCommand):
         latest = sessions[0]
         ctx.app_state.set_persist_path(latest.path)
         ctx.app_state.resume_session = True
-        return CommandResult(message=f"Session {latest.session_id} will be resumed on next start.")
+        note = (
+            " Its snapshot is gone, so the messages will be replayed from the journal."
+            if latest.recovered
+            else ""
+        )
+        return CommandResult(
+            message=f"Session {latest.session_id} will be resumed on next start.{note}"
+        )
 
 
 class ExportCommand(SlashCommand):
@@ -1205,6 +1238,12 @@ class AuditCommand(SlashCommand):
         if log is None:  # pragma: no cover - guarded by audit_enabled above
             return CommandResult(success=False, message="Audit logging is disabled.")
         text = log.status_text(limit=limit)
+        others = [name for name, _size in audit.list_logs(str(log.directory)) if name != log.name]
+        if others:
+            text += (
+                f"\n({len(others)} other session chain(s) in {log.directory}; "
+                "each session writes its own)"
+            )
         return CommandResult(success=log.verify(), message=text)
 
 
@@ -1226,9 +1265,7 @@ class TranscriptCommand(SlashCommand):
 
         transcript = getattr(ctx.app_state, "_transcript", None)
         if transcript is None:
-            return CommandResult(
-                message="This session has no journal: it was never saved to disk."
-            )
+            return CommandResult(message="This session has no journal: it was never saved to disk.")
         args = shlex.split(ctx.args or "")
         limit = 10
         if args:
@@ -1251,3 +1288,60 @@ class TranscriptCommand(SlashCommand):
             preview = " ".join(text.split())[:80]
             lines.append(f"  #{record.get('seq', '?'):<4} {role:<10} {preview}")
         return CommandResult(success=health.ok, message="\n".join(lines))
+
+
+class ArtifactsCommand(SlashCommand):
+    """Externalized tool output: what is stored, and how to reclaim it.
+
+    Every oversized result writes a file here, and nothing else prunes them, so
+    a long-lived checkout accumulates them without bound. Listing is read-only;
+    pruning is explicit because the pointers in old sessions stop resolving.
+    """
+
+    name = "artifacts"
+    description = "List stored tool-output files, or prune old ones"
+    aliases = ["outputs"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
+        from openlaoke.core.tool_output_store import (
+            artifact_inventory,
+            prune_artifacts,
+            resolve_artifact_root,
+        )
+
+        args = shlex.split(ctx.args or "")
+        base = resolve_artifact_root(ctx.app_state)
+
+        if args and args[0].lower() in ("prune", "clean", "clear"):
+            days = 30
+            if len(args) > 1:
+                try:
+                    days = max(1, int(args[1]))
+                except ValueError:
+                    return CommandResult(success=False, message="Usage: /artifacts prune [days]")
+            files, freed = prune_artifacts(root=base, max_age_days=days)
+            return CommandResult(
+                message=(
+                    f"Removed {files} artifact file(s), {freed / 1024:.1f} KB, "
+                    f"older than {days} day(s)."
+                )
+            )
+        if args:
+            return CommandResult(
+                success=False, message="Usage: /artifacts  |  /artifacts prune [days]"
+            )
+
+        inventory = artifact_inventory(root=base)
+        if not inventory:
+            return CommandResult(message=f"No stored tool output in {base}.")
+        total_files = sum(count for _name, count, _size in inventory)
+        total_bytes = sum(size for _name, _count, size in inventory)
+        lines = [
+            f"{total_files} file(s), {total_bytes / 1024:.1f} KB in {base}",
+        ]
+        for name, count, size in inventory[:20]:
+            lines.append(f"  {name:<24} {count:>4} file(s)  {size / 1024:>8.1f} KB")
+        lines.append("('/artifacts prune 30' removes files older than 30 days)")
+        return CommandResult(message="\n".join(lines))

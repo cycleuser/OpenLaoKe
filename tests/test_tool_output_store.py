@@ -220,3 +220,115 @@ def test_a_racing_writer_with_the_same_body_reuses_the_file(tmp_path, monkeypatc
 
     assert pointer.path == str(winner)
     assert len(list(store.root.iterdir())) == 1
+
+
+# --------------------------------------------------------------------------- #
+# housekeeping
+# --------------------------------------------------------------------------- #
+def test_the_inventory_groups_files_by_session(tmp_path, monkeypatch):
+    from openlaoke.core.tool_output_store import artifact_inventory
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    ToolOutputStore(None, "sess-a").store("Bash", "body one")
+    ToolOutputStore(None, "sess-a").store("Bash", "body two")
+    ToolOutputStore(None, "sess-b").store("Read", "other")
+
+    inventory = {name: (count, size) for name, count, size in artifact_inventory()}
+
+    assert inventory["sess-a"][0] == 2
+    assert inventory["sess-b"][0] == 1
+    assert artifact_inventory(str(tmp_path / "missing")) == []
+
+
+def test_deleting_a_session_removes_only_its_artifacts(tmp_path, monkeypatch):
+    from openlaoke.core.tool_output_store import remove_session_artifacts
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    ToolOutputStore(None, "sess-a").store("Bash", "body one")
+    keep = ToolOutputStore(None, "sess-b").store("Read", "other body")
+
+    removed = remove_session_artifacts("sess-a")
+
+    assert removed == 1
+    assert not (tmp_path / "art" / "sess-a").exists()
+    assert Path(keep.path).exists()
+    assert remove_session_artifacts("nothing-here") == 0
+
+
+def test_pruning_removes_only_old_artifacts(tmp_path, monkeypatch):
+    import os as _os
+    import time as _time
+
+    from openlaoke.core.tool_output_store import prune_artifacts
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    old = ToolOutputStore(None, "old").store("Bash", "ancient")
+    fresh = ToolOutputStore(None, "fresh").store("Bash", "recent")
+    long_ago = _time.time() - 90 * 86400
+    _os.utime(old.path, (long_ago, long_ago))
+
+    files, freed = prune_artifacts(max_age_days=30)
+
+    assert files == 1
+    assert freed == len("ancient")
+    assert not Path(old.path).exists()
+    assert Path(fresh.path).exists()
+    assert not (tmp_path / "art" / "old").exists()
+    assert prune_artifacts(root=str(tmp_path / "missing")) == (0, 0)
+
+
+def test_the_inventory_is_empty_for_a_missing_directory(tmp_path):
+    from openlaoke.core.tool_output_store import artifact_inventory
+
+    assert artifact_inventory(str(tmp_path / "nope")) == []
+
+
+def test_the_artifacts_command_lists_and_prunes(tmp_path, monkeypatch):
+    import asyncio
+    import time as _time
+
+    from openlaoke.commands.base import ArtifactsCommand
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    old = ToolOutputStore(None, "sess-1").store("Bash", "old body")
+    import os as _os
+
+    long_ago = _time.time() - 90 * 86400
+    _os.utime(old.path, (long_ago, long_ago))
+
+    class Ctx:
+        app_state = AppState(session_id="sess-1", cwd=str(tmp_path))
+        args = ""
+
+    listed = asyncio.run(ArtifactsCommand().execute(Ctx()))
+    assert "1 file(s)" in listed.message
+    assert "sess-1" in listed.message
+
+    Ctx.args = "prune 30"
+    pruned = asyncio.run(ArtifactsCommand().execute(Ctx()))
+    assert pruned.success is True
+    assert "Removed 1 artifact file" in pruned.message
+
+    Ctx.args = "nonsense"
+    assert asyncio.run(ArtifactsCommand().execute(Ctx())).success is False
+
+    Ctx.args = "prune nope"
+    assert asyncio.run(ArtifactsCommand().execute(Ctx())).success is False
+
+
+def test_the_artifacts_command_says_when_nothing_is_stored(tmp_path, monkeypatch):
+    import asyncio
+
+    from openlaoke.commands.base import ArtifactsCommand
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+
+    class Ctx:
+        app_state = AppState(session_id="s", cwd=str(tmp_path))
+        args = ""
+
+    result = asyncio.run(ArtifactsCommand().execute(Ctx()))
+
+    assert "No stored tool output" in result.message

@@ -24,6 +24,7 @@ import hashlib
 import logging
 import os
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -90,7 +91,13 @@ class ToolOutputStore:
     """Writes oversized results under ``<root>/<session>/`` and returns pointers."""
 
     def __init__(self, root: str | None = None, session_id: str = "") -> None:
-        self.root = Path(root or default_artifact_root()) / _safe_segment(session_id, "unscoped")
+        # ``base`` is the directory shared by all sessions; ``root`` is this
+        # session's subdirectory. Housekeeping needs the base, callers quote the
+        # session path in pointers.
+        self.base = Path(
+            root or os.environ.get("OPENLAOKE_ARTIFACT_DIR") or default_artifact_root()
+        )
+        self.root = self.base / _safe_segment(session_id, "unscoped")
 
     def store(
         self,
@@ -171,11 +178,20 @@ def _split(encoded: bytes, head_bytes: int, tail_bytes: int) -> tuple[str, str]:
     return head, tail
 
 
+def resolve_artifact_root(app_state: Any = None) -> str:
+    """The directory that holds every session's artifacts, for housekeeping."""
+    store = getattr(app_state, "_tool_output_store", None)
+    if store is not None:
+        return str(store.base)
+    return os.environ.get("OPENLAOKE_ARTIFACT_DIR") or default_artifact_root()
+
+
 def get_store(app_state: Any) -> ToolOutputStore:
     store = getattr(app_state, "_tool_output_store", None)
     if store is None:
-        root = os.environ.get("OPENLAOKE_ARTIFACT_DIR") or default_artifact_root()
-        store = ToolOutputStore(root, getattr(app_state, "session_id", ""))
+        store = ToolOutputStore(
+            os.environ.get("OPENLAOKE_ARTIFACT_DIR"), getattr(app_state, "session_id", "")
+        )
         app_state._tool_output_store = store
     return store
 
@@ -214,3 +230,92 @@ def externalize(
     if len(rendered.encode("utf-8")) > max_bytes:
         rendered = pointer.render_compact()
     return rendered
+
+
+# ── housekeeping ────────────────────────────────────────────────────────
+#
+# Nothing else prunes these files, and every oversized tool result writes one:
+# a busy project accumulates them without bound. Deleting a session removes its
+# directory, and "/artifacts prune" sweeps files older than a cutoff.
+
+
+def _artifact_root(root: str | None) -> Path:
+    """Explicit root, then the environment override, then the default."""
+    return Path(root or os.environ.get("OPENLAOKE_ARTIFACT_DIR") or default_artifact_root())
+
+
+def artifact_inventory(root: str | None = None) -> list[tuple[str, int, int]]:
+    """``(session, file_count, bytes)`` for every session directory."""
+    base = _artifact_root(root)
+    try:
+        entries = sorted(os.listdir(base))
+    except OSError:
+        return []
+    inventory: list[tuple[str, int, int]] = []
+    for name in entries:
+        directory = base / name
+        if not directory.is_dir():
+            continue
+        count = total = 0
+        for item in directory.iterdir():
+            try:
+                if item.is_file():
+                    count += 1
+                    total += item.stat().st_size
+            except OSError:
+                continue
+        inventory.append((name, count, total))
+    return inventory
+
+
+def remove_session_artifacts(session_id: str, root: str | None = None) -> int:
+    """Delete one session's artifacts; returns how many files went away."""
+    directory = _artifact_root(root) / _safe_segment(session_id, "unscoped")
+    removed = 0
+    if not directory.is_dir():
+        return 0
+    for item in directory.iterdir():
+        try:
+            if item.is_file():
+                item.unlink()
+                removed += 1
+        except OSError:
+            continue
+    with suppress(OSError):
+        directory.rmdir()  # only succeeds when the directory is now empty
+    return removed
+
+
+def prune_artifacts(
+    root: str | None = None,
+    *,
+    max_age_days: int = 30,
+    now: float | None = None,
+) -> tuple[int, int]:
+    """Delete artifacts older than the cutoff; returns ``(files, bytes)``."""
+    import time as _time
+
+    moment = now if now is not None else _time.time()
+    cutoff = moment - max_age_days * 86400
+    base = _artifact_root(root)
+    try:
+        directories = [base / name for name in sorted(os.listdir(base))]
+    except OSError:
+        return 0, 0
+    files = freed = 0
+    for directory in directories:
+        if not directory.is_dir():
+            continue
+        for item in directory.iterdir():
+            try:
+                if not item.is_file() or item.stat().st_mtime >= cutoff:
+                    continue
+                size = item.stat().st_size
+                item.unlink()
+            except OSError:
+                continue
+            files += 1
+            freed += size
+        with suppress(OSError):
+            directory.rmdir()  # only succeeds when the sweep emptied it
+    return files, freed

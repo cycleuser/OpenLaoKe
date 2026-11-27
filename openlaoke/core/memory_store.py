@@ -426,6 +426,19 @@ class MemoryStore:
             used += len(line) + 1
         return "\n".join(lines)
 
+    def index_entries(self, limit: int = 8) -> list[MemoryEntry]:
+        """The notes worth naming in the prompt index.
+
+        Same rule as retrieval: a superseded note is not current, and a note the
+        user wrote outranks one the agent wrote. ``recent()`` alone would put a
+        replaced decision back in front of the model on every turn.
+        """
+        current = [
+            entry for entry in self.recent(limit=max(limit * 3, limit)) if not entry.superseded
+        ]
+        current.sort(key=lambda entry: (entry.rank, entry.updated_at), reverse=True)
+        return current[:limit]
+
     def stats(self) -> str:
         if not self.entries:
             return f"Memory is empty ({self.path})."

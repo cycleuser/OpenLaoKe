@@ -483,3 +483,34 @@ def test_notes_written_before_authority_existed_still_load(tmp_path) -> None:
 
     assert store.entries[0].authority == "agent"
     assert store.entries[0].superseded is False
+
+
+def test_the_prompt_index_skips_superseded_notes_and_marks_authority(tmp_path) -> None:
+    store = _store(tmp_path)
+    old = store.remember("Deploy with rsync.", kind="decision")
+    store.remember("Deploy with make release.", kind="decision", supersedes=[old.id])
+    store.remember("Always use pytest.", authority="user")
+
+    names = [entry.text for entry in store.index_entries()]
+    assert "Deploy with rsync." not in names
+    assert names[0] == "Always use pytest."
+
+
+def test_the_repl_memory_index_uses_the_same_rules(tmp_path) -> None:
+    from openlaoke.core.repl import REPL
+
+    store = _store(tmp_path)
+    old = store.remember("Deploy with rsync.", kind="decision")
+    store.remember("Deploy with make release.", kind="decision", supersedes=[old.id])
+    store.remember("Always use pytest.", authority="user")
+    state = create_app_state(cwd=str(tmp_path))
+    state._memory_store = store
+
+    repl = REPL.__new__(REPL)
+    repl.app_state = state
+    block = REPL._memory_digest(repl)
+
+    assert "rsync" not in block
+    assert "make release" in block
+    assert "[user] Always use pytest." in block
+    assert block.startswith("<memory-index>")

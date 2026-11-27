@@ -38,6 +38,9 @@ class SessionInfo:
     task_count: int
     model: str
     cwd: str
+    # True when only the append-only journal survived: the snapshot is missing or
+    # unreadable, and loading this session means replaying the journal.
+    recovered: bool = False
 
 
 def _message_from_dict(
@@ -82,10 +85,12 @@ class SessionManager:
 
     def list_sessions(self) -> list[SessionInfo]:
         sessions = []
+        seen: set[str] = set()
         for filename in os.listdir(self.session_dir):
             if not filename.endswith(".json"):
                 continue
             path = os.path.join(self.session_dir, filename)
+            seen.add(filename[: -len(".json")])
             try:
                 with open(path) as f:
                     data = json.load(f)
@@ -101,16 +106,73 @@ class SessionManager:
                     )
                 )
             except Exception:
+                # An unreadable snapshot is still a session if its journal is
+                # there; listing it is how you find out it can be recovered.
                 logger.warning("Failed to load session from %s", path, exc_info=True)
+                recovered = self._journal_entry(filename[: -len(".json")])
+                if recovered is not None:
+                    sessions.append(recovered)
                 continue
+        sessions.extend(self._journal_only_sessions(seen))
         return sorted(sessions, key=lambda s: s.created_at, reverse=True)
+
+    def _journal_entry(self, session_id: str) -> SessionInfo | None:
+        """Describe a session that only exists as a journal, or ``None``."""
+        from openlaoke.core.transcript import Transcript, transcript_path_for
+
+        snapshot = os.path.join(self.session_dir, f"{session_id}.json")
+        journal = transcript_path_for(snapshot)
+        if not os.path.exists(journal):
+            return None
+        transcript = Transcript(journal)
+        header, records = transcript.replay()
+        if not records:
+            return None
+        return SessionInfo(
+            session_id=header.get("session_id") or session_id,
+            path=snapshot,
+            created_at=header.get("at") or os.path.getmtime(journal),
+            message_count=len(records),
+            task_count=0,
+            model=header.get("model") or "unknown",
+            cwd=header.get("cwd") or "",
+            recovered=True,
+        )
+
+    def _journal_only_sessions(self, seen: set[str]) -> list[SessionInfo]:
+        found: list[SessionInfo] = []
+        for filename in os.listdir(self.session_dir):
+            if not filename.endswith(".jsonl"):
+                continue
+            session_id = filename[: -len(".jsonl")]
+            if session_id in seen:
+                continue
+            entry = self._journal_entry(session_id)
+            if entry is not None:
+                found.append(entry)
+        return found
 
     def delete_session(self, session_id: str) -> bool:
         path = os.path.join(self.session_dir, f"{session_id}.json")
-        if os.path.exists(path):
-            os.remove(path)
-            return True
-        return False
+        from openlaoke.core.transcript import transcript_path_for
+
+        journal = transcript_path_for(path)
+        removed = False
+        # The journal is part of the session. Leaving it behind means the
+        # conversation keeps living on disk after the user asked to delete it,
+        # and /sessions would still list it.
+        for candidate in (path, journal):
+            if os.path.exists(candidate):
+                os.remove(candidate)
+                removed = True
+        # Same argument for the externalized tool output: it is the body of that
+        # session's own results. Audit chains are left alone on purpose: they are
+        # the record of what ran, and evidence should outlive the working file.
+        from openlaoke.core.tool_output_store import remove_session_artifacts
+
+        if remove_session_artifacts(session_id) > 0:
+            removed = True
+        return removed
 
     def cleanup_old_sessions(self, max_age_days: int = 30) -> int:
         cutoff = time.time() - (max_age_days * 86400)
@@ -145,9 +207,9 @@ class SessionManager:
                 model=model,
                 persist_path=path,
             )
-            app_state.session_id = data.get("session_id") or os.path.splitext(
-                os.path.basename(path)
-            )[0]
+            app_state.session_id = (
+                data.get("session_id") or os.path.splitext(os.path.basename(path))[0]
+            )
 
             for msg_data in data.get("messages", []):
                 msg = _message_from_dict(msg_data)

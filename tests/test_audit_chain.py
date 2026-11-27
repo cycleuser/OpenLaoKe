@@ -474,3 +474,73 @@ def test_the_default_audit_directory_lives_under_the_state_dir(monkeypatch):
     monkeypatch.setenv("HOME", "/home/example")
 
     assert audit.default_audit_dir() == "/home/example/.openlaoke/audit"
+
+
+# --------------------------------------------------------------------------- #
+# one chain per session
+# --------------------------------------------------------------------------- #
+def test_each_session_writes_its_own_chain(tmp_path, monkeypatch):
+    from openlaoke.core import audit
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_AUDIT_DIR", str(tmp_path / "audit"))
+    first = AppState(session_id="session_a", cwd=str(tmp_path))
+    second = AppState(session_id="session_b", cwd=str(tmp_path))
+
+    audit.record(first, "tool.request", tool="Bash")
+    audit.record(second, "tool.request", tool="Read")
+
+    assert audit.get_audit(first).path.name == "session_a.jsonl"
+    assert audit.get_audit(second).path.name == "session_b.jsonl"
+    assert [entry.data["tool"] for entry in audit.get_audit(first).read()] == ["Bash"]
+    assert [entry.data["tool"] for entry in audit.get_audit(second).read()] == ["Read"]
+
+
+def test_a_session_id_cannot_escape_the_audit_directory(tmp_path):
+    from openlaoke.core.audit import AuditLog
+
+    log = AuditLog(str(tmp_path / "audit"), name="../../etc/passwd")
+
+    assert ".." not in log.path.parts
+    assert log.path.parent == tmp_path / "audit"
+
+
+def test_an_empty_session_id_falls_back_to_unscoped(tmp_path):
+    from openlaoke.core.audit import AuditLog
+
+    assert AuditLog(str(tmp_path), name="").path.name == "unscoped.jsonl"
+
+
+def test_list_logs_inventories_the_directory(tmp_path):
+    from openlaoke.core import audit
+
+    audit.AuditLog(str(tmp_path), name="one").append("tool.request", {"tool": "Bash"})
+    audit.AuditLog(str(tmp_path), name="two").append("tool.request", {"tool": "Read"})
+
+    names = [name for name, _size in audit.list_logs(str(tmp_path))]
+
+    assert names == ["one", "two"]
+    assert audit.list_logs(str(tmp_path / "missing")) == []
+
+
+def test_the_audit_command_mentions_other_session_chains(tmp_path, monkeypatch):
+    import asyncio
+
+    from openlaoke.commands.base import AuditCommand
+    from openlaoke.core import audit
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_AUDIT_DIR", str(tmp_path / "audit"))
+    state = AppState(session_id="session_a", cwd=str(tmp_path))
+    audit.record(state, "tool.request", tool="Bash")
+    audit.AuditLog(str(tmp_path / "audit"), name="session_b").append(
+        "tool.request", {"tool": "Read"}
+    )
+
+    class Ctx:
+        app_state = state
+        args = ""
+
+    result = asyncio.run(AuditCommand().execute(Ctx()))
+
+    assert "1 other session chain(s)" in result.message

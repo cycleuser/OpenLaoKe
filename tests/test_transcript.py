@@ -294,3 +294,171 @@ def test_the_load_messages_helper_returns_raw_dicts(tmp_path):
     transcript.append_message(_message("two"))
 
     assert [item["content"] for item in load_messages(transcript.path)] == ["one", "two"]
+
+
+def test_deleting_a_session_removes_its_journal_too(tmp_path):
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    state.add_message(_message("secret planning notes"))
+    manager.save_session(state)
+    journal = Path(transcript_path_for(path))
+    assert journal.exists()
+
+    assert manager.delete_session("abc") is True
+
+    assert not Path(path).exists()
+    assert not journal.exists()
+    # The conversation must not survive a delete in a second file.
+    assert "secret planning notes" not in "".join(
+        item.read_text(errors="ignore")
+        for item in (tmp_path / "sessions").iterdir()
+        if item.is_file()
+    )
+
+
+def test_deleting_a_session_that_only_has_a_journal_still_works(tmp_path):
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    state.add_message(_message("only in the journal"))
+    Path(path).unlink(missing_ok=True)
+
+    assert manager.delete_session("abc") is True
+    assert not Path(transcript_path_for(path)).exists()
+
+
+def test_a_journal_only_session_is_listed_as_recovered(tmp_path):
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    state.add_message(_message("one"))
+    state.add_message(_message("two"))
+    Path(path).unlink(missing_ok=True)  # snapshot lost, journal survives
+
+    sessions = [info for info in manager.list_sessions() if info.session_id == "abc"]
+
+    assert len(sessions) == 1
+    assert sessions[0].recovered is True
+    assert sessions[0].message_count == 2
+    assert sessions[0].cwd == str(tmp_path)
+    assert sessions[0].model
+
+
+def test_a_corrupt_snapshot_is_listed_once_not_twice(tmp_path):
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    state.add_message(_message("one"))
+    Path(path).write_text("{ truncated")
+
+    sessions = [info for info in manager.list_sessions() if info.session_id == "abc"]
+
+    assert len(sessions) == 1
+    assert sessions[0].recovered is True
+
+
+def test_a_journal_without_messages_is_not_listed(tmp_path):
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    (tmp_path / "sessions").mkdir(parents=True, exist_ok=True)
+    Path(tmp_path / "sessions" / "empty.jsonl").write_text("")
+
+    assert [info for info in manager.list_sessions() if info.session_id == "empty"] == []
+
+
+def test_the_sessions_command_marks_a_journal_only_row(tmp_path, monkeypatch):
+    from openlaoke.commands import base as commands_base
+    from openlaoke.core import sessions as sessions_module
+
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    state.add_message(_message("one"))
+    Path(path).unlink(missing_ok=True)
+    # /sessions imports SessionManager inside execute(), so patch it at source.
+    monkeypatch.setattr(sessions_module, "SessionManager", lambda *a, **k: manager)
+
+    class Ctx:
+        app_state = AppState(session_id="other", cwd=str(tmp_path))
+        args = ""
+
+    result = asyncio.run(commands_base.SessionsCommand().execute(Ctx()))
+
+    assert "journal only" in result.message
+
+
+def test_the_sessions_command_prunes_old_sessions_and_their_data(tmp_path, monkeypatch):
+    import time as _time
+
+    from openlaoke.commands import base as commands_base
+    from openlaoke.core import sessions as sessions_module
+    from openlaoke.core.tool_output_store import ToolOutputStore
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "old.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "old"
+    state.set_persist_path(path)
+    state.add_message(_message("ancient"))
+    manager.save_session(state)
+    artifact = ToolOutputStore(None, "old").store("Bash", "old output")
+    long_ago = _time.time() - 90 * 86400
+    payload = json.loads(Path(path).read_text())
+    payload["created_at"] = long_ago
+    Path(path).write_text(json.dumps(payload))
+    monkeypatch.setattr(sessions_module, "SessionManager", lambda *a, **k: manager)
+
+    class Ctx:
+        app_state = AppState(session_id="other", cwd=str(tmp_path))
+        args = "prune 30"
+
+    result = asyncio.run(commands_base.SessionsCommand().execute(Ctx()))
+
+    assert "Removed 1 session(s)" in result.message
+    assert not Path(path).exists()
+    assert not Path(transcript_path_for(path)).exists()
+    assert not Path(artifact.path).exists()
+
+
+def test_the_sessions_command_rejects_an_unknown_argument(tmp_path, monkeypatch):
+    from openlaoke.commands import base as commands_base
+    from openlaoke.core import sessions as sessions_module
+
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    monkeypatch.setattr(sessions_module, "SessionManager", lambda *a, **k: manager)
+
+    class Ctx:
+        app_state = AppState(session_id="other", cwd=str(tmp_path))
+        args = "wibble"
+
+    result = asyncio.run(commands_base.SessionsCommand().execute(Ctx()))
+
+    assert result.success is False
+    assert "Usage" in result.message
+
+
+def test_the_sessions_command_rejects_a_bad_age(tmp_path, monkeypatch):
+    from openlaoke.commands import base as commands_base
+    from openlaoke.core import sessions as sessions_module
+
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    monkeypatch.setattr(sessions_module, "SessionManager", lambda *a, **k: manager)
+
+    class Ctx:
+        app_state = AppState(session_id="other", cwd=str(tmp_path))
+        args = "prune soon"
+
+    result = asyncio.run(commands_base.SessionsCommand().execute(Ctx()))
+
+    assert result.success is False

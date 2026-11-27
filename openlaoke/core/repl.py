@@ -787,10 +787,16 @@ class REPL:
             store = get_store(self.app_state)
         except OSError:
             return ""
-        entries = store.recent(limit=8)
+        # Same rule as retrieval, or the index contradicts it: a superseded note
+        # would keep being named every turn, and a note the user typed would sit
+        # below one the agent guessed.
+        entries = store.index_entries(limit=8)
         if not entries:
             return ""
-        rows = [f"- {entry.id} {entry.text[:90]}" for entry in entries]
+        rows = []
+        for entry in entries:
+            marker = "" if entry.authority == "agent" else f"[{entry.authority}] "
+            rows.append(f"- {entry.id} {marker}{entry.text[:90]}")
         return (
             "<memory-index>\n"
             + "\n".join(rows)
