@@ -207,7 +207,13 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
-session*
+# A bare `session*` matched at every depth and silently swallowed source:
+# openlaoke/core/session_index.py and openlaoke/tools/session_search_tool.py
+# were never committed, so a fresh clone could not import them. Anchor the
+# patterns that were actually meant and keep them out of the package.
+/session*.json
+/sessions/
+!openlaoke/**/session*.py
 /outputs
 /pdf_output
 /figures
