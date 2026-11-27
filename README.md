@@ -339,11 +339,19 @@ Four files record what a session did, and each answers a different question:
 |---|---|---|
 | `~/.openlaoke/sessions/<id>.json` | what the runtime needs to resume | `/sessions`, `/resume` |
 | `~/.openlaoke/sessions/<id>.jsonl` | every message, append-only; replays a session whose snapshot was damaged | `/transcript` |
-| `~/.openlaoke/audit/audit.jsonl` | which tool ran, on what arguments, and whether it was refused | `/audit` |
-| `~/.openlaoke/artifacts/<session>/` | the full body of any tool output too large for the history | (the pointer names the file) |
+| `~/.openlaoke/audit/<session>.jsonl` | which tool ran, on what arguments, and whether it was refused | `/audit` |
+| `~/.openlaoke/artifacts/<session>/` | the full body of any tool output too large for the history | `/artifacts` |
 
 `/schedule log` reads `~/.openlaoke/schedule-runs.json`, one JSON line per
 firing with its status and duration.
+
+Each session writes its own audit chain, so a chain is bounded by that
+session's tool calls and stays verifiable in milliseconds; `/audit` names the
+other chains in the directory. Deleting a session removes its snapshot, its
+journal and its artifacts, and leaves the audit chain alone: that is the record
+of what ran, and evidence should outlive the working file. `/sessions prune 30`
+and `/artifacts prune 30` are the explicit ways to reclaim space; nothing is
+deleted on its own.
 
 The audit log is a hash chain with an out-of-band tip in `audit.head`. Editing a
 line breaks every hash after it; deleting the last lines is caught by the tip,

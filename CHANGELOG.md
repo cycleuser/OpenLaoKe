@@ -6,7 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Each session writes its own audit chain** (`core/audit.py`): one global
+  `audit.jsonl` grew with every session ever run, and an append is only O(1)
+  while this process holds the tip cache — any other process writing to the same
+  file turned the next tool call into a full re-validation of the whole chain.
+  The chain is now `<session_id>.jsonl`, bounded by that session's tool calls.
+  `/audit` still shows the tip, and names how many other chains are in the
+  directory.
+- **Deleting a session deletes its data** (`core/sessions.py`): the journal and
+  the artifact directory were left behind, so the conversation survived a delete
+  and `/sessions` kept listing it. Both go now; audit chains stay, because they
+  are the record of what ran.
+- **`/sessions` lists journal-only sessions** (`core/sessions.py`): a session
+  whose snapshot is damaged could only be recovered by someone who already knew
+  its id. It is now listed with "(journal only)" and `/resume` says its messages
+  will be replayed.
+- **The prompt's memory index follows the same rules as retrieval**
+  (`core/repl.py`): it used `recent()`, so a superseded note kept being named
+  every turn and a user note sat below an agent note. It uses
+  `MemoryStore.index_entries()` now and marks authority.
+
 ### Added
+- **`/artifacts`** (`core/tool_output_store.py`): lists the stored tool-output
+  files per session with sizes, and `/artifacts prune 30` deletes the ones older
+  than 30 days. Nothing pruned them before, and every oversized result writes
+  one.
+- **`/sessions prune [days]`** (`commands/base.py`): `cleanup_old_sessions()`
+  existed but nothing called it. Deleting sessions stays an explicit command,
+  never something that happens on its own.
 - **A turn now ends with the harness's account of what failed** (`core/repl.py`):
   failed tool calls are collected per turn and printed after the model's closing
   message ("3 tool call(s) failed this turn: …"), capped at five distinct

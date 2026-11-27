@@ -709,7 +709,7 @@ class SessionsCommand(SlashCommand):
             current = " *" if info.session_id == ctx.app_state.session_id else "  "
             # Say when the snapshot is gone: that row is listed from its journal
             # and will be replayed rather than loaded.
-            note = "  (journal only)" if info.recovered else ""
+            note = "  (journal only)" if getattr(info, "recovered", False) else ""
             rows.append(
                 f"{current}{info.session_id}  {stamp}  {info.message_count:>3} msg  "
                 f"{info.model}  {info.cwd or '-'}{note}"
@@ -1131,7 +1131,7 @@ class ResumeCommand(SlashCommand):
         ctx.app_state.resume_session = True
         note = (
             " Its snapshot is gone, so the messages will be replayed from the journal."
-            if latest.recovered
+            if getattr(latest, "recovered", False)
             else ""
         )
         return CommandResult(
