@@ -354,3 +354,123 @@ def test_a_policy_refusal_is_recorded_with_a_reason(tmp_path, monkeypatch):
     entries = audit.get_audit(state).read()
     assert [entry.action for entry in entries] == ["tool.denied"]
     assert entries[0].data["reason"] == "policy"
+
+
+# --------------------------------------------------------------------------- #
+# corruption paths and small helpers
+# --------------------------------------------------------------------------- #
+def test_tail_returns_the_last_rows(tmp_path):
+    log = _log(tmp_path)
+    for index in range(4):
+        log.append("tool.request", {"tool": f"t{index}"})
+
+    assert [entry.index for entry in log.tail(2)] == [3, 4]
+    assert [entry.index for entry in log.tail()] == [1, 2, 3, 4]
+
+
+def test_a_record_that_is_not_an_object_is_corruption(tmp_path):
+    log = _log(tmp_path)
+    log.append("tool.request", {"tool": "Bash"})
+    log.path.write_text("[1, 2, 3]\n")
+
+    with pytest.raises(AuditCorruptionError, match="not an object"):
+        log.read()
+
+
+def test_a_record_with_the_wrong_shape_is_corruption(tmp_path):
+    log = _log(tmp_path)
+    log.append("tool.request", {"tool": "Bash"})
+    payload = json.loads(log.path.read_text().splitlines()[0])
+    payload["unexpected"] = True
+    log.path.write_text(json.dumps(payload) + "\n")
+
+    with pytest.raises(AuditCorruptionError, match="wrong shape"):
+        log.read()
+
+
+def test_a_broken_link_between_entries_is_reported(tmp_path):
+    log = _log(tmp_path)
+    log.append("tool.request", {"tool": "Bash"})
+    log.append("tool.result", {"tool": "Bash"})
+    rows = [json.loads(line) for line in log.path.read_text().splitlines()]
+    rows[1]["prev_hash"] = "f" * 64
+    log.path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+    # read() is a raw reader so /audit can show what is there; verification and
+    # appending are what refuse the broken chain.
+    assert len(log.read()) == 2
+    assert log.verify() is False
+    with pytest.raises(AuditCorruptionError, match="linkage is broken"):
+        log.append("tool.request", {"tool": "Bash"})
+
+
+@pytest.mark.parametrize(
+    "anchor",
+    [
+        "not json",
+        "[]",
+        '{"count": "3", "head": "' + "a" * 64 + '"}',
+        '{"count": -1, "head": "' + "a" * 64 + '"}',
+        '{"count": 1, "head": "short"}',
+        '{"count": 1, "head": "' + "z" * 64 + '"}',
+    ],
+)
+def test_every_malformed_anchor_is_reported_as_corruption(tmp_path, anchor):
+    log = _log(tmp_path)
+    log.append("tool.request", {"tool": "Bash"})
+    log.head_path.write_text(anchor + "\n")
+
+    assert log.verify() is False
+
+
+def test_a_non_regular_audit_file_is_refused(tmp_path, monkeypatch):
+    import openlaoke.core.audit as audit_module
+
+    log = _log(tmp_path)
+    log.append("tool.request", {"tool": "Bash"})
+    real_fstat = audit_module.os.fstat
+
+    def fake_fstat(fd):
+        info = real_fstat(fd)
+        if os.path.basename(str(log.path)) == "audit.jsonl":
+            return os.stat_result((0o10000,) + tuple(info)[1:])  # FIFO, not a regular file
+        return info
+
+    monkeypatch.setattr(audit_module.os, "fstat", fake_fstat)
+
+    with pytest.raises(AuditCorruptionError, match="not a regular file"):
+        log.append("tool.request", {"tool": "Bash"})
+
+
+def test_a_zero_length_write_is_an_error_not_a_silent_success(tmp_path, monkeypatch):
+    import openlaoke.core.audit as audit_module
+
+    log = _log(tmp_path)
+    monkeypatch.setattr(audit_module.os, "write", lambda _fd, _view: 0)
+
+    with pytest.raises(OSError, match="short write"):
+        log.append("tool.request", {"tool": "Bash"})
+
+
+def test_a_failed_tool_result_records_a_short_error_preview(tmp_path, monkeypatch):
+    from openlaoke.core import audit
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_AUDIT_DIR", str(tmp_path / "audit"))
+    state = AppState(session_id="s", cwd=str(tmp_path))
+    result = type("R", (), {"content": "boom: " + "x" * 1000, "is_error": True})()
+
+    audit.record_tool_result(state, "Bash", result, "c1")
+
+    entry = audit.get_audit(state).read()[0]
+    assert entry.data["is_error"] is True
+    assert entry.data["error"].startswith("boom:")
+    assert len(entry.data["error"]) <= audit.MAX_ARG_CHARS
+
+
+def test_the_default_audit_directory_lives_under_the_state_dir(monkeypatch):
+    from openlaoke.core import audit
+
+    monkeypatch.setenv("HOME", "/home/example")
+
+    assert audit.default_audit_dir() == "/home/example/.openlaoke/audit"

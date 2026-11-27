@@ -125,3 +125,18 @@ def test_world_context_is_optional_so_it_goes_first(tmp_path):
 
     assert "## Current Context" not in text
     assert report.dropped == ["context"]
+
+
+def test_the_report_names_the_dropped_blocks_and_warns_when_over_budget():
+    _text, report = assemble(
+        [
+            PromptBlock("rules", "r" * 4000, REQUIRED),
+            PromptBlock("context", "c" * 100, OPTIONAL),
+        ],
+        max_tokens=10,
+    )
+
+    rendered = report.render()
+
+    assert "Dropped (optional, out of budget): context" in rendered
+    assert "WARNING: required blocks alone exceed the budget" in rendered

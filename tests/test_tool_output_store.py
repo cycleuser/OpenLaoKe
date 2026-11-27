@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+
 from openlaoke.core.state import AppState
 from openlaoke.core.tool_output_store import (
     ToolOutputStore,
@@ -146,3 +148,75 @@ def test_a_pointer_renders_path_digest_and_both_ends():
     assert "~2250 tokens" in text
     assert "head bytes" in text
     assert "tail bytes" in text
+
+
+def test_the_default_artifact_root_lives_under_the_state_dir(monkeypatch):
+    from openlaoke.core.tool_output_store import default_artifact_root
+
+    monkeypatch.setenv("HOME", "/home/example")
+
+    assert default_artifact_root() == "/home/example/.openlaoke/artifacts"
+
+
+def test_a_leftover_file_with_the_same_name_is_not_overwritten(tmp_path, monkeypatch):
+    store = ToolOutputStore(str(tmp_path / "art"), "s")
+    store.root.mkdir(parents=True)
+    body = "body two"
+    digest = hashlib.sha256(body.encode()).hexdigest()[:12]
+    # A different body already occupies the name this one would pick (a real
+    # possibility if a write was interrupted, and the only way O_EXCL fires
+    # without a hash collision).
+    squatter = store.root / f"0001-bash-{digest}.txt"
+    squatter.write_text("truncated")
+    # Hold the counter at 1 so the write really meets the squatter.
+    monkeypatch.setattr(store, "_next_index", lambda: 1)
+
+    second = store.store("Bash", body)
+
+    assert squatter.read_text() == "truncated"
+    assert Path(second.path).read_text() == body
+    assert Path(second.path).name.startswith("0002-")
+
+
+def test_a_zero_length_write_is_an_error_not_a_silent_success(tmp_path, monkeypatch):
+    import openlaoke.core.tool_output_store as store_module
+
+    store = ToolOutputStore(str(tmp_path / "art"), "s")
+    monkeypatch.setattr(store_module.os, "write", lambda _fd, _view: 0)
+
+    with pytest.raises(OSError, match="short write"):
+        store.store("Bash", "body")
+
+
+def test_the_first_index_is_one_when_the_directory_is_new(tmp_path):
+    store = ToolOutputStore(str(tmp_path / "art"), "s")
+
+    assert store._next_index() == 1
+
+
+def test_the_next_index_follows_whatever_is_on_disk(tmp_path):
+    store = ToolOutputStore(str(tmp_path / "art"), "s")
+    store.root.mkdir(parents=True)
+    (store.root / "0007-whatever.txt").write_text("x")
+    (store.root / "notes.txt").write_text("ignored")
+
+    assert store._next_index() == 8
+
+
+def test_a_racing_writer_with_the_same_body_reuses_the_file(tmp_path, monkeypatch):
+    """Two processes storing the same body at once must end up at one file."""
+    store = ToolOutputStore(str(tmp_path / "art"), "s")
+    store.root.mkdir(parents=True)
+    body = "contested body"
+    digest = hashlib.sha256(body.encode()).hexdigest()[:12]
+    winner = store.root / f"0001-bash-{digest}.txt"
+    winner.write_text(body)
+    # Preconditions of the race: the scan saw nothing and the counter pointed
+    # at the name the other writer then took.
+    monkeypatch.setattr(store, "_next_index", lambda: 1)
+    monkeypatch.setattr(type(store.root), "glob", lambda *_args, **_kwargs: iter(()))
+
+    pointer = store.store("Bash", body)
+
+    assert pointer.path == str(winner)
+    assert len(list(store.root.iterdir())) == 1

@@ -8,6 +8,8 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+
 from openlaoke.core.sessions import SessionManager
 from openlaoke.core.state import AppState, create_app_state
 from openlaoke.core.transcript import Transcript, transcript_path_for
@@ -228,3 +230,67 @@ def test_the_transcript_command_rejects_a_bad_count(tmp_path):
 
     assert result.success is False
     assert "Usage" in result.message
+
+
+def test_health_render_names_every_problem(tmp_path):
+    transcript = _transcript(tmp_path)
+    transcript.append_message(_message("one"))
+    line = Path(transcript.path).read_text(encoding="utf-8").splitlines()[-1]
+    with open(transcript.path, "a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+        handle.write("not json\n")
+        handle.write('{"type": "message", "seq": 9, "mess')
+
+    rendered = transcript.health().render()
+
+    assert "torn final line" in rendered
+    assert "duplicate seq: 1" in rendered
+    assert "corrupt lines: 4" in rendered
+
+
+def test_a_zero_length_write_is_an_error_not_a_silent_success(tmp_path, monkeypatch):
+    import openlaoke.core.transcript as transcript_module
+
+    transcript = _transcript(tmp_path)
+    monkeypatch.setattr(transcript_module.os, "write", lambda _fd, _view: 0)
+
+    with pytest.raises(OSError, match="short write"):
+        transcript.append_message(_message("body"))
+
+
+def test_records_returns_the_raw_lines(tmp_path):
+    transcript = _transcript(tmp_path)
+    transcript.append_message(_message("one"))
+
+    records = transcript.records()
+
+    assert records[0]["type"] == "session.start"
+    assert records[1]["message"]["content"] == "one"
+
+
+def test_a_non_object_line_counts_as_corruption(tmp_path):
+    transcript = _transcript(tmp_path)
+    transcript.append_message(_message("one"))
+    with open(transcript.path, "a", encoding="utf-8") as handle:
+        handle.write("[1, 2]\n")
+
+    assert transcript.health().corrupt_lines == [3]
+
+
+def test_an_empty_file_replays_to_nothing(tmp_path):
+    transcript = _transcript(tmp_path)
+    Path(transcript.path).parent.mkdir(parents=True)
+    Path(transcript.path).write_text("")
+
+    assert transcript.health().records == 0
+    assert transcript.replay() == ({}, [])
+
+
+def test_the_load_messages_helper_returns_raw_dicts(tmp_path):
+    from openlaoke.core.transcript import load_messages
+
+    transcript = _transcript(tmp_path)
+    transcript.append_message(_message("one"))
+    transcript.append_message(_message("two"))
+
+    assert [item["content"] for item in load_messages(transcript.path)] == ["one", "two"]
