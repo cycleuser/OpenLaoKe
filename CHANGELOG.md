@@ -59,7 +59,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   failure and trim appends one JSONL line to `~/.openlaoke/insomnia/<session>.log`
   (rotated at 1 MB, and a log that cannot be written never stops the run), and
   `/insomnia [on|off|add|list|clear|log]` drives it. A resumed session whose
-  queue still has tasks starts draining immediately.
+  queue still has tasks starts draining immediately, and while a schedule is
+  still going to fire the drain stays awake for it: a reminder due at 03:00
+  starts a turn instead of waiting for someone to press enter, and the run only
+  idles when this process actually started a scheduler with entries left.
 - **`prune_artifacts()` can protect live sessions** (`core/tool_output_store.py`):
   `/artifacts prune` deletes by age, and a session still running can have
   artifacts older than the cutoff while its history still points at them. A

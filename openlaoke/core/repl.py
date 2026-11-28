@@ -702,7 +702,20 @@ class REPL:
             while self._running and not self._interrupt_requested:
                 task = next_task(self.app_state)
                 if task is None:
-                    break
+                    # The scheduler is the other source of unattended work: a
+                    # reminder that fires at 03:00 has to start a turn, not wait
+                    # for someone to press enter. Its loop appends the notice to
+                    # the input queue, so taking it from there is the same path
+                    # a typed message takes.
+                    if self._input_queue:
+                        notice = str(self._input_queue.pop(0))
+                        task = {"prompt": notice, "attempts": 1}
+                        log.append("scheduled_wake", prompt=notice[:200])
+                    elif self._insomnia_should_idle():
+                        await asyncio.sleep(30.0)
+                        continue
+                    else:
+                        break
                 head = str(task.get("prompt") or "")[:200]
                 log.append(
                     "task_start", index=completed + 1, attempt=task.get("attempts"), prompt=head
@@ -737,6 +750,22 @@ class REPL:
                 f"or a new message keeps going unattended.[/]"
             )
         return completed
+
+    def _insomnia_should_idle(self) -> bool:
+        """True when a running schedule will produce work, so waiting is useful.
+
+        Only when this process actually started the scheduler: idling for a
+        schedule nobody is watching would be a sleep with no wake-up.
+        """
+        if getattr(self, "_scheduler_task", None) is None:
+            return False
+        try:
+            from openlaoke.core.scheduler import get_scheduler
+
+            entries = get_scheduler(self.app_state).entries
+        except Exception:
+            return False
+        return any(entry.enabled and entry.next_run for entry in entries)
 
     async def _insomnia_run_task(self, task: dict[str, Any]) -> tuple[bool, str]:
         """Run one queued task, retrying a failed turn instead of giving up.

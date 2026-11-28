@@ -514,3 +514,51 @@ def _ctx(state, args: str = ""):
     from openlaoke.commands.base import CommandContext
 
     return CommandContext(app_state=state, args=args)
+
+
+def test_a_scheduled_reminder_wakes_the_run(tmp_path, monkeypatch) -> None:
+    """A 03:00 reminder must start a turn, not wait for someone to press enter."""
+    r = make_repl([[text("handled the nightly reminder")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r._scheduler_task = object()  # pretend the scheduler loop is running
+    r._insomnia_should_idle = lambda: True
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        # The scheduler loop appends the notice while the drain is waiting, once:
+        # the drain must then run that turn and stop idling.
+        if len(sleeps) == 1:
+            r._input_queue.append("[scheduled reminder 'nightly': run the tests]")
+        else:
+            r._insomnia_should_idle = lambda: False
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    completed = asyncio.run(r._insomnia_drain())
+
+    assert completed == 1
+    # First wait: the notice arrives and its turn runs. Second wait: the drain
+    # goes back to watching the schedule, and the fake ends it there.
+    assert sleeps == [30.0, 30.0]
+    assert r.api.turn_index == 1
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "scheduled_wake" in log
+
+
+def test_a_run_does_not_idle_without_a_running_scheduler(tmp_path, monkeypatch) -> None:
+    r = make_repl([[text("never")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r._scheduler_task = None
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    assert asyncio.run(r._insomnia_drain()) == 0
+    assert sleeps == []
+    assert r._insomnia_should_idle() is False
