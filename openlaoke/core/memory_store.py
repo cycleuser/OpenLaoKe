@@ -412,7 +412,7 @@ class MemoryStore:
         not the one it replaced. The block shrinks from the weakest end, so a
         tight budget can never crowd out what the user said.
         """
-        entries = self.recall(query, limit=limit) if query else self.recent(limit=limit)
+        entries = self.recall(query, limit=limit) if query else self.current_entries()
         entries = [entry for entry in entries if not entry.superseded]
         entries.sort(key=lambda entry: (entry.rank, entry.updated_at), reverse=True)
         lines: list[str] = []
@@ -426,6 +426,19 @@ class MemoryStore:
             used += len(line) + 1
         return "\n".join(lines)
 
+    def current_entries(self, limit: int | None = None) -> list[MemoryEntry]:
+        """Every non-superseded note, strongest authority first, newest first.
+
+        Filtering has to happen before the list is truncated. ``recent()``
+        returns the newest N and only then drops the replaced ones, so a burst
+        of recent supersessions empties the result while older current notes sit
+        right behind them, unseen. Notes live in memory, so there is no cost to
+        looking at all of them.
+        """
+        current = [entry for entry in self.entries if not entry.superseded]
+        current.sort(key=lambda entry: (entry.rank, entry.updated_at), reverse=True)
+        return current if limit is None else current[:limit]
+
     def index_entries(self, limit: int = 8) -> list[MemoryEntry]:
         """The notes worth naming in the prompt index.
 
@@ -433,11 +446,7 @@ class MemoryStore:
         user wrote outranks one the agent wrote. ``recent()`` alone would put a
         replaced decision back in front of the model on every turn.
         """
-        current = [
-            entry for entry in self.recent(limit=max(limit * 3, limit)) if not entry.superseded
-        ]
-        current.sort(key=lambda entry: (entry.rank, entry.updated_at), reverse=True)
-        return current[:limit]
+        return self.current_entries(limit=limit)
 
     def stats(self) -> str:
         if not self.entries:

@@ -312,7 +312,9 @@ async def test_run_agent_propagates_cancellation(monkeypatch, manager, state) ->
 def test_subagent_state_round_trips(tmp_path) -> None:
     path = str(tmp_path / "sub" / "subagent_1.json")
 
-    agent_runner._save_subagent_state(path, "prompt", [{"role": "user"}], ["part"], 3, "failed", "boom")
+    agent_runner._save_subagent_state(
+        path, "prompt", [{"role": "user"}], ["part"], 3, "failed", "boom"
+    )
     loaded = agent_runner._load_subagent_state(path)
 
     assert loaded is not None
@@ -327,6 +329,23 @@ def test_saving_to_an_impossible_path_is_only_logged(tmp_path) -> None:
     blocker = tmp_path / "blocker"
     blocker.write_text("x", encoding="utf-8")
     agent_runner._save_subagent_state(str(blocker / "sub" / "s.json"), "p", [], [], 0, "running")
+
+
+def test_an_interrupted_state_save_keeps_the_previous_copy(tmp_path, monkeypatch) -> None:
+    path = str(tmp_path / "subagent_1.json")
+    agent_runner._save_subagent_state(path, "first", [], [], 1, "running")
+
+    def half_then_fail(payload, handle, **kwargs):
+        handle.write('{"prompt": "half')
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(agent_runner.json, "dump", half_then_fail)
+    agent_runner._save_subagent_state(path, "second", [], [], 2, "running")
+
+    loaded = agent_runner._load_subagent_state(path)
+    assert loaded is not None, "the half-written file replaced the good one"
+    assert loaded["prompt"] == "first"
+    assert loaded["iteration"] == 1
 
 
 def test_loading_a_missing_or_broken_state_returns_none(tmp_path) -> None:
@@ -448,14 +467,15 @@ async def test_a_successful_subagent_cleans_up_its_state_file(tmp_path, monkeypa
     async def fake_loop(**kwargs):
         seen.update(kwargs)
         return SimpleNamespace(
-            stop_reason="end_turn", messages=[{"role": "user"}], text_parts=["first", "second"], error=None
+            stop_reason="end_turn",
+            messages=[{"role": "user"}],
+            text_parts=["first", "second"],
+            error=None,
         )
 
     monkeypatch.setattr(engine, "run_loop", fake_loop)
 
-    result = await agent_runner.run_subagent(
-        "do it", "task", state, task_state(tmp_path)
-    )
+    result = await agent_runner.run_subagent("do it", "task", state, task_state(tmp_path))
 
     assert result == "first\nsecond"
     assert seen["messages"] == [{"role": "user", "content": "do it"}]

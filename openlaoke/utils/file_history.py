@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 
 MAX_SNAPSHOTS = 100
 HISTORY_DIR = "~/.openlaoke/file_history"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,11 +109,36 @@ def compute_checksum(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
+def _write_history(history_path: str, payload: dict[str, Any]) -> None:
+    """Replace the history file in one step.
+
+    The whole file is rewritten on every snapshot, and it is the only copy of
+    every earlier version of the file. Truncating it in place means a crash (or
+    a full disk) between the truncate and the last byte leaves a half-written
+    JSON document, and the next read treats that as "no history at all", so one
+    bad moment erases every version of every earlier edit. Writing beside it and
+    renaming leaves the old file intact until the new one is complete.
+    """
+    directory = os.path.dirname(history_path) or "."
+    os.makedirs(directory, exist_ok=True)
+    temporary = f"{history_path}.{os.getpid()}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, history_path)
+    finally:
+        if os.path.exists(temporary):
+            with suppress(OSError):
+                os.remove(temporary)
+
+
 def save_snapshot(
     file_path: str,
     content: str,
     message_id: str | None = None,
-) -> FileSnapshot:
+) -> FileSnapshot | None:
     """Save a snapshot of the file before modification."""
     abs_path = os.path.abspath(file_path)
     history_dir = get_history_dir()
@@ -123,8 +152,12 @@ def save_snapshot(
             with open(history_path, encoding="utf-8") as f:
                 data = json.load(f)
             history = FileHistory.from_dict(data)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Starting over loses every earlier version, so say so instead of
+            # letting /history look as though nothing was ever recorded.
+            logger.warning(
+                "File history at %s is unreadable (%s); starting over", history_path, exc
+            )
 
     # Derive the next version from the highest existing one, not from the list
     # length: the ring below drops the oldest entries, so a length-based counter
@@ -154,10 +187,13 @@ def save_snapshot(
         history.snapshots = history.snapshots[-MAX_SNAPSHOTS:]
 
     try:
-        with open(history_path, "w", encoding="utf-8") as f:
-            json.dump(history.to_dict(), f, indent=2)
-    except Exception:
-        pass
+        _write_history(history_path, history.to_dict())
+    except OSError as exc:
+        # An edit must not fail because its history could not be recorded, but
+        # returning a snapshot that is not on disk would be a lie: /restore
+        # would not find it.
+        logger.warning("Could not record file history for %s: %s", abs_path, exc)
+        return None
 
     return snapshot
 

@@ -181,6 +181,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **A burst of supersessions emptied the prompt's memory index**
+  (`core/memory_store.py`): `index_entries()` took the newest N notes and only
+  then dropped the superseded ones, so a session that changed its mind a few
+  times in a row produced an index with nothing in it while older current notes
+  sat right behind them. `digest()` did the same without a query. Both now
+  filter first and truncate after; the shared `current_entries()` says what
+  "current" means in one place.
+- **An interrupted write erased every earlier version of a file**
+  (`utils/file_history.py`): the history file holds all recorded versions of
+  that file and was rewritten in place with `json.dump`, and the failure was
+  swallowed. A crash or a full disk between the truncate and the last byte left
+  JSON that would not parse, which reads back as "no history", so `/history`
+  and `/restore` lost every version of that file at once. It is written beside
+  itself and renamed now, and a save that could not be recorded reports failure
+  instead of returning a snapshot that `/restore` will never find. An
+  unreadable history file is logged rather than silently replaced.
+- **An interrupted sub-agent checkpoint made the agent unresumable**
+  (`core/agent_runner.py`): the state file is rewritten every iteration and is
+  the only thing `/agent-resume` can read, and it was truncated in place.
+  Same fix: write beside it and rename.
 - **`/trust` was recorded and never read** (`core/trust.py`): the decision went
   into `trust.json` and no code consulted it, while `InvokeSkillTool` searched
   `<cwd>/.openlaoke/skills` unconditionally and `prompt_templates` appended

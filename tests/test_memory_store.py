@@ -514,3 +514,36 @@ def test_the_repl_memory_index_uses_the_same_rules(tmp_path) -> None:
     assert "make release" in block
     assert "[user] Always use pytest." in block
     assert block.startswith("<memory-index>")
+
+
+def test_recent_supersessions_do_not_hide_the_older_current_notes(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.remember("Always use pytest.", authority="user")
+    # A long supersession chain: every link except the last is superseded, so
+    # the newest window is almost entirely replaced notes.
+    previous = store.remember("Port 8080 for the dev server.")
+    for step in range(30):
+        previous = store.remember(
+            f"Port {9000 + step} for the dev server.", supersedes=[previous.id]
+        )
+
+    names = [entry.text for entry in store.index_entries(limit=8)]
+
+    assert names[0] == "Always use pytest."
+    assert "Port 9029 for the dev server." in names
+    assert len(names) >= 2, names
+
+
+def test_the_prompt_digest_is_not_emptied_by_a_supersession_chain(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.remember("Always use pytest.", authority="user")
+    previous = store.remember("Port 8080 for the dev server.")
+    for step in range(20):
+        previous = store.remember(
+            f"Port {9000 + step} for the dev server.", supersedes=[previous.id]
+        )
+
+    block = store.digest()
+
+    assert "Always use pytest." in block
+    assert "Port 9019 for the dev server." in block

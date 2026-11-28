@@ -82,9 +82,7 @@ def test_history_round_trip() -> None:
 
 
 def test_history_state_round_trip_keeps_the_tracked_set() -> None:
-    state = FileHistoryState(
-        histories={"a": FileHistory(path="a")}, tracked_files={"a", "b"}
-    )
+    state = FileHistoryState(histories={"a": FileHistory(path="a")}, tracked_files={"a", "b"})
     restored = FileHistoryState.from_dict(state.to_dict())
     assert restored.tracked_files == {"a", "b"}
     assert "a" in restored.histories
@@ -152,9 +150,10 @@ def test_save_snapshot_keeps_only_the_last_hundred(work_file) -> None:
     versions = [s.version for s in stored.snapshots]
     assert versions == list(range(6, fh.MAX_SNAPSHOTS + 6))
     # The newest version therefore restores the newest content.
-    assert get_snapshot_by_version(
-        work_file, fh.MAX_SNAPSHOTS + 5
-    ).content == f"content-{fh.MAX_SNAPSHOTS + 4}"
+    assert (
+        get_snapshot_by_version(work_file, fh.MAX_SNAPSHOTS + 5).content
+        == f"content-{fh.MAX_SNAPSHOTS + 4}"
+    )
 
 
 def test_save_snapshot_survives_a_corrupt_history_file(work_file) -> None:
@@ -169,15 +168,33 @@ def test_save_snapshot_survives_a_corrupt_history_file(work_file) -> None:
     assert get_history(work_file).snapshots[0].content == "fresh"
 
 
-def test_save_snapshot_tolerates_an_unwritable_store(work_file, history_dir) -> None:
+def test_save_snapshot_reports_failure_when_the_store_is_unwritable(work_file, history_dir) -> None:
     history_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(history_dir, 0o500)
     try:
-        snapshot = save_snapshot(work_file, "x")
-        # The in-memory snapshot is still returned; only persistence failed.
-        assert snapshot.content == "x"
+        # An unrecorded snapshot must not be handed back: /restore would search
+        # for a version that was never written. The edit itself still goes on.
+        assert save_snapshot(work_file, "x") is None
     finally:
         os.chmod(history_dir, 0o700)
+
+
+def test_a_failed_write_keeps_the_versions_already_recorded(work_file) -> None:
+    save_snapshot(work_file, "v1 content")
+    store = Path(get_history_path(os.path.abspath(work_file)))
+
+    def half_then_fail(payload, handle, **kwargs):
+        handle.write('{"path": "half')
+        raise OSError(28, "No space left on device")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(fh.json, "dump", half_then_fail)
+        assert save_snapshot(work_file, "v2 content") is None
+
+    # The half-written temporary file is gone and the earlier version survived.
+    assert [item.name for item in store.parent.iterdir()] == [store.name]
+    history = get_history(work_file)
+    assert [snapshot.content for snapshot in history.snapshots] == ["v1 content"]
 
 
 # --------------------------------------------------------------------------- #
@@ -383,7 +400,9 @@ def test_track_file_edit_returns_none_when_the_read_fails(work_file, monkeypatch
 
 def test_stored_history_is_human_readable_json(work_file) -> None:
     save_snapshot(work_file, "hello", message_id="m1")
-    payload = json.loads(Path(get_history_path(os.path.abspath(work_file))).read_text(encoding="utf-8"))
+    payload = json.loads(
+        Path(get_history_path(os.path.abspath(work_file))).read_text(encoding="utf-8")
+    )
     assert payload["path"] == os.path.abspath(work_file)
     assert payload["snapshots"][0]["content"] == "hello"
     assert payload["snapshots"][0]["message_id"] == "m1"
@@ -447,7 +466,9 @@ def test_list_histories_skips_corrupt_and_empty_entries(work_file, history_dir) 
     track_file_edit(work_file)
     history_dir.mkdir(parents=True, exist_ok=True)
     (history_dir / "broken.json").write_text("{not json", encoding="utf-8")
-    (history_dir / "empty.json").write_text(json.dumps({"path": "/x", "snapshots": []}), encoding="utf-8")
+    (history_dir / "empty.json").write_text(
+        json.dumps({"path": "/x", "snapshots": []}), encoding="utf-8"
+    )
     (history_dir / "ignored.txt").write_text("noise", encoding="utf-8")
 
     listed = fh.list_histories()
