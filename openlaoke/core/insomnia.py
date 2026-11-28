@@ -35,6 +35,44 @@ BACKOFF_CAP_SECONDS = 600.0
 HISTORY_LIMIT = 400
 LOG_MAX_BYTES = 1_000_000
 
+# Two limits matter to a run nobody is watching: money and disk. Both are on by
+# default and both can be turned off (0 means unlimited / never prune), because
+# "do not stop" is the point of the mode and only the operator knows when the
+# wallet is the limit rather than the clock.
+COST_LIMIT_USD = 10.0
+# Same 30 days as `/artifacts prune`, so an unattended run never deletes
+# evidence the manual command would have kept.
+ARTIFACT_DAYS = 30
+ARTIFACT_PRUNE_INTERVAL = 600.0
+
+
+def spent_usd(state: Any) -> float:
+    """What this session has cost so far, in the provider's currency."""
+    cost = getattr(state, "cost_info", None)
+    return float(getattr(cost, "total_cost", 0.0) or 0.0)
+
+
+def cost_limit(state: Any) -> float:
+    """The configured cap; ``0`` means unlimited."""
+    try:
+        return float(getattr(state, "insomnia_max_cost", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def cost_limit_reached(state: Any) -> bool:
+    """True when the run has spent its budget and must stop before more work."""
+    limit = cost_limit(state)
+    return limit > 0 and spent_usd(state) >= limit
+
+
+def artifact_retention_days(state: Any) -> int:
+    """How old an artifact must be before an unattended run deletes it."""
+    try:
+        return max(0, int(getattr(state, "insomnia_artifact_days", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
 
 def log_path_for(state: Any, root: str | None = None) -> str:
     """Where this session's run log goes; ``insomnia_log_path`` wins if set."""

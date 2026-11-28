@@ -80,6 +80,11 @@ class AppState:
     insomnia_task_queue: list[dict[str, Any]] = field(default_factory=list)
     insomnia_max_iterations: int = 1000
     insomnia_max_retries: int = 8
+    # 0 means "no limit": the cost cap and the artifact retention are on by
+    # default because an unattended run is the one place where an unbounded
+    # night is a real bill and a real disk, but the operator can turn both off.
+    insomnia_max_cost: float = 10.0
+    insomnia_artifact_days: int = 30
     insomnia_auto_accept: bool = True
     insomnia_log_path: str | None = None
     last_thinking: str = ""
@@ -351,6 +356,8 @@ class AppState:
                 "insomnia_task_queue": self.insomnia_task_queue,
                 "insomnia_max_iterations": self.insomnia_max_iterations,
                 "insomnia_max_retries": self.insomnia_max_retries,
+                "insomnia_max_cost": self.insomnia_max_cost,
+                "insomnia_artifact_days": self.insomnia_artifact_days,
                 "insomnia_auto_accept": self.insomnia_auto_accept,
                 "insomnia_log_path": self.insomnia_log_path,
                 "guard_state": self.guard_state,

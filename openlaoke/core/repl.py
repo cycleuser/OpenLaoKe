@@ -685,7 +685,7 @@ class REPL:
         level instead of one stack frame per task: a queue of a thousand tasks
         would otherwise end in a RecursionError long before it ended in work.
         """
-        from openlaoke.core.insomnia import HISTORY_LIMIT, next_task, trim_history
+        from openlaoke.core.insomnia import HISTORY_LIMIT, next_task, requeue, trim_history
 
         if getattr(self, "_insomnia_draining", False):
             return 0
@@ -693,6 +693,7 @@ class REPL:
             return 0
 
         self._insomnia_draining = True
+        self._insomnia_budget_hit = False
         log = self._insomnia_log
         completed = 0
         started_with = len(self.app_state.insomnia_task_queue or [])
@@ -717,10 +718,23 @@ class REPL:
                     else:
                         break
                 head = str(task.get("prompt") or "")[:200]
+                if self._insomnia_cost_stop():
+                    # The task never ran, so put it back without spending one of
+                    # its attempts: the money ran out, not the task's patience.
+                    task["attempts"] = max(0, int(task.get("attempts") or 1) - 1)
+                    requeue(self.app_state, task, error="cost limit")
+                    break
                 log.append(
                     "task_start", index=completed + 1, attempt=task.get("attempts"), prompt=head
                 )
                 ok, error = await self._insomnia_run_task(task)
+                if self._insomnia_budget_hit:
+                    # The turn was cut mid-flight by the budget. The work is
+                    # incomplete, so the task goes back in the queue instead of
+                    # being counted as done or as a failure.
+                    log.append("task_paused", index=completed + 1, prompt=head)
+                    requeue(self.app_state, task, error="cost limit")
+                    break
                 if ok:
                     completed += 1
                     log.append("task_done", index=completed, prompt=head)
@@ -734,6 +748,7 @@ class REPL:
                 dropped = trim_history(self.app_state, HISTORY_LIMIT)
                 if dropped:
                     log.append("history_trimmed", dropped=dropped)
+                self._insomnia_prune_artifacts()
         finally:
             self._insomnia_draining = False
 
@@ -766,6 +781,67 @@ class REPL:
         except Exception:
             return False
         return any(entry.enabled and entry.next_run for entry in entries)
+
+    def _insomnia_cost_stop(self) -> bool:
+        """End the turn when an unattended run has spent its budget.
+
+        Checked after every iteration, not only between tasks: a single task can
+        loop over hundreds of tool calls, and stopping at the task boundary would
+        let the overshoot be as large as the most expensive task in the queue.
+        """
+        if not getattr(self.app_state, "insomnia_mode", False):
+            return False
+        from openlaoke.core.insomnia import cost_limit, cost_limit_reached, spent_usd
+
+        if not cost_limit_reached(self.app_state):
+            # Raising the limit mid-run has to take effect, so the flag is
+            # recomputed rather than sticky.
+            self._insomnia_budget_hit = False
+            return False
+        if getattr(self, "_insomnia_budget_hit", False):
+            # Already said and logged once; the drain only needs the answer.
+            return True
+        self._insomnia_budget_hit = True
+        spent = spent_usd(self.app_state)
+        limit = cost_limit(self.app_state)
+        self._insomnia_log.append("cost_limit", spent=round(spent, 4), limit=limit)
+        self.console.print(
+            f"  [{self._c('error')}]insomnia: spent ${spent:.2f} of the ${limit:.2f} "
+            "budget, stopping. Raise it with '/insomnia cost <usd>' or lift it with "
+            "'/insomnia cost off'.[/]"
+        )
+        return True
+
+    def _insomnia_prune_artifacts(self) -> None:
+        """Reclaim old tool output while the run is going, at most every 10 min.
+
+        Every oversized result writes a file, and an unattended run writes a lot
+        of them. The running session is protected: its history still points at
+        those files. ``insomnia_artifact_days = 0`` turns this off.
+        """
+        from openlaoke.core.insomnia import ARTIFACT_PRUNE_INTERVAL, artifact_retention_days
+
+        days = artifact_retention_days(self.app_state)
+        if days <= 0:
+            return
+        now = time.time()
+        if now - float(getattr(self, "_insomnia_last_prune", 0.0)) < ARTIFACT_PRUNE_INTERVAL:
+            return
+        self._insomnia_last_prune = now
+        from openlaoke.core.tool_output_store import prune_artifacts, resolve_artifact_root
+
+        try:
+            files, freed = prune_artifacts(
+                root=resolve_artifact_root(self.app_state),
+                max_age_days=days,
+                keep_sessions={self.app_state.session_id},
+            )
+        except OSError:
+            return
+        if files:
+            self._insomnia_log.append(
+                "artifacts_pruned", files=files, kb=round(freed / 1024, 1), older_than_days=days
+            )
 
     async def _insomnia_run_task(self, task: dict[str, Any]) -> tuple[bool, str]:
         """Run one queued task, retrying a failed turn instead of giving up.
@@ -1643,6 +1719,8 @@ class REPL:
                     if usage and cost:
                         self.app_state.accumulate_tokens(usage)
                         self.app_state.accumulate_cost(cost)
+                        if self._insomnia_cost_stop():
+                            break
                     self._note_context_usage(usage)
 
                     if content_text or tool_uses or usage:

@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -396,6 +397,8 @@ def test_a_snapshot_without_the_new_fields_restores_the_class_defaults(tmp_path)
     assert state is not None
     assert state.insomnia_max_iterations == 1000
     assert state.insomnia_max_retries == 8
+    assert state.insomnia_max_cost == 10.0
+    assert state.insomnia_artifact_days == 30
     assert state.insomnia_auto_accept is True
     assert state.insomnia_log_path is None
 
@@ -562,3 +565,195 @@ def test_a_run_does_not_idle_without_a_running_scheduler(tmp_path, monkeypatch) 
     assert asyncio.run(r._insomnia_drain()) == 0
     assert sleeps == []
     assert r._insomnia_should_idle() is False
+
+
+# --------------------------------------------------------------------------- #
+# Limits: money and disk
+# --------------------------------------------------------------------------- #
+
+
+def test_the_cost_cap_is_on_by_default_and_zero_means_unlimited(tmp_path) -> None:
+    from openlaoke.core.insomnia import COST_LIMIT_USD, cost_limit, cost_limit_reached, spent_usd
+
+    state = create_app_state(cwd=str(tmp_path))
+    assert state.insomnia_max_cost == COST_LIMIT_USD > 0
+    assert spent_usd(state) == 0.0
+    assert cost_limit_reached(state) is False
+
+    state.cost_info.input_cost = COST_LIMIT_USD + 0.01
+    assert cost_limit_reached(state) is True
+
+    state.insomnia_max_cost = 0
+    assert cost_limit(state) == 0.0
+    assert cost_limit_reached(state) is False, "0 means unlimited"
+
+
+def test_a_turn_stops_the_moment_the_budget_is_spent(tmp_path) -> None:
+    r = make_repl([[text("x")]])
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r.app_state.insomnia_max_cost = 5.0
+    r._insomnia_budget_hit = False
+
+    # Not in insomnia mode: the cap belongs to the unattended run only.
+    r.app_state.cost_info.input_cost = 99.0
+    assert r._insomnia_cost_stop() is False
+
+    r.app_state.insomnia_mode = True
+    assert r._insomnia_cost_stop() is True
+    assert r._insomnia_budget_hit is True
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "cost_limit" in log
+
+    # Raising the cap mid-run must take effect, not stay stuck on the flag.
+    r.app_state.insomnia_max_cost = 200.0
+    assert r._insomnia_cost_stop() is False
+    assert r._insomnia_budget_hit is False
+
+
+def test_the_drain_stops_before_a_task_and_keeps_it_queued(tmp_path) -> None:
+    r = make_repl([[text("never called")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r.app_state.insomnia_max_cost = 1.0
+    r.app_state.cost_info.input_cost = 2.0
+    enqueue(r.app_state, "expensive task")
+
+    completed = asyncio.run(r._insomnia_drain())
+
+    assert completed == 0
+    assert r.api.turn_index == 0, "the budget stop must happen before the provider call"
+    tasks = queue_tasks(r.app_state)
+    assert [task["prompt"] for task in tasks] == ["expensive task"]
+    # The attempt was refunded: the money ran out, not the task's patience.
+    assert tasks[0]["attempts"] == 0
+    assert "cost limit" in tasks[0]["last_error"]
+
+
+def test_a_task_cut_off_mid_turn_is_requeued_not_counted(tmp_path) -> None:
+    r = make_repl([[text("partially done")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r.app_state.insomnia_max_cost = 1.0
+    enqueue(r.app_state, "long task")
+
+    # The budget runs out while the task's turn is in flight.
+    original = r._insomnia_run_task
+
+    async def cut_short(task):
+        r.app_state.cost_info.input_cost = 2.0
+        ok, error = await original(task)
+        r._insomnia_budget_hit = True
+        return ok, error
+
+    r._insomnia_run_task = cut_short
+
+    assert asyncio.run(r._insomnia_drain()) == 0
+    assert [task["prompt"] for task in queue_tasks(r.app_state)] == ["long task"]
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "task_paused" in log
+
+
+def test_artifacts_are_pruned_during_a_run_but_the_live_session_kept(tmp_path, monkeypatch) -> None:
+    import os as _os
+
+    from openlaoke.core.tool_output_store import ToolOutputStore
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    old = ToolOutputStore(None, "other-session").store("Bash", "old body")
+    long_ago = time.time() - 30 * 86400
+    _os.utime(old.path, (long_ago, long_ago))
+    live = ToolOutputStore(None, "test-session").store("Bash", "still referenced")
+    _os.utime(live.path, (long_ago, long_ago))
+
+    r = make_repl([[text("done")]])
+    r.app_state.session_id = "test-session"
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_artifact_days = 30
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    enqueue(r.app_state, "one task")
+
+    asyncio.run(r._insomnia_drain())
+
+    assert Path(live.path).exists(), "the running session's artifacts must survive"
+    assert not Path(old.path).exists(), "another session's stale artifact should go"
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "artifacts_pruned" in log
+
+
+def test_artifact_pruning_can_be_turned_off(tmp_path, monkeypatch) -> None:
+    import os as _os
+
+    from openlaoke.core.tool_output_store import ToolOutputStore
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    old = ToolOutputStore(None, "other-session").store("Bash", "old body")
+    long_ago = time.time() - 30 * 86400
+    _os.utime(old.path, (long_ago, long_ago))
+
+    r = make_repl([[text("done")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_artifact_days = 0  # never prune
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    enqueue(r.app_state, "one task")
+
+    asyncio.run(r._insomnia_drain())
+
+    assert Path(old.path).exists()
+
+
+@pytest.mark.asyncio
+async def test_the_cost_and_days_subcommands(tmp_path) -> None:
+    from openlaoke.commands.base import InsomniaCommand
+
+    state = create_app_state(cwd=str(tmp_path))
+    state.insomnia_log_path = str(tmp_path / "run.log")
+    command = InsomniaCommand()
+
+    shown = await command.execute(_ctx(state, "cost"))
+    assert "$10.00" in shown.message and "$0.00" in shown.message
+
+    set_to = await command.execute(_ctx(state, "cost 3.5"))
+    assert set_to.success is True and state.insomnia_max_cost == 3.5
+
+    lifted = await command.execute(_ctx(state, "cost off"))
+    assert state.insomnia_max_cost == 0.0
+    assert "unlimited" in lifted.message or "lifted" in lifted.message
+
+    bad = await command.execute(_ctx(state, "cost lots"))
+    assert bad.success is False
+
+    negative = await command.execute(_ctx(state, "cost -1"))
+    assert negative.success is False
+
+    days = await command.execute(_ctx(state, "days 3"))
+    assert state.insomnia_artifact_days == 3
+    assert "older than 3 day(s)" in days.message
+
+    days_off = await command.execute(_ctx(state, "days off"))
+    assert state.insomnia_artifact_days == 0
+    assert "never pruned" in days_off.message
+
+    bad_days = await command.execute(_ctx(state, "days soon"))
+    assert bad_days.success is False
+
+
+@pytest.mark.asyncio
+async def test_the_status_shows_both_limits_and_their_off_switch(tmp_path) -> None:
+    from openlaoke.commands.base import InsomniaCommand
+
+    state = create_app_state(cwd=str(tmp_path))
+    state.insomnia_log_path = str(tmp_path / "run.log")
+    state.insomnia_max_cost = 2.5
+    state.insomnia_artifact_days = 4
+    state.cost_info.input_cost = 1.25
+
+    status = await InsomniaCommand().execute(_ctx(state, ""))
+
+    assert "cost cap: $2.50 (spent $1.25)" in status.message
+    assert "artifacts: prune older than 4 day(s)" in status.message
+
+    state.insomnia_max_cost = 0.0
+    state.insomnia_artifact_days = 0
+    status = await InsomniaCommand().execute(_ctx(state, ""))
+    assert "cost cap: unlimited" in status.message
+    assert "artifacts: never prune" in status.message

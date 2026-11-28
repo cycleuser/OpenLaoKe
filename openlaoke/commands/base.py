@@ -1385,9 +1385,12 @@ class InsomniaCommand(SlashCommand):
         from openlaoke.core.insomnia import (
             MAX_ITERATIONS,
             RETRY_LIMIT,
+            artifact_retention_days,
             backoff_seconds,
+            cost_limit,
             log_path_for,
             queue_tasks,
+            spent_usd,
         )
 
         state = ctx.app_state
@@ -1399,6 +1402,12 @@ class InsomniaCommand(SlashCommand):
             state._persist()
             if state.insomnia_mode:
                 retries = int(getattr(state, "insomnia_max_retries", 0) or RETRY_LIMIT)
+                cap = cost_limit(state)
+                cap_text = f"${cap:.2f}" if cap > 0 else "unlimited"
+                days = artifact_retention_days(state)
+                days_text = (
+                    f"artifacts older than {days} day(s) pruned" if days else "artifacts kept"
+                )
                 return CommandResult(
                     message=(
                         "Insomnia mode on. Queued tasks run one after another without "
@@ -1407,6 +1416,8 @@ class InsomniaCommand(SlashCommand):
                         f"steps, a failed turn retried up to {retries} time(s) with backoff "
                         f"(first wait {backoff_seconds(1):.0f}s), and the live history "
                         "trimmed at turn boundaries so a long run stays bounded.\n"
+                        f"Limits: cost cap {cap_text}, {days_text}. "
+                        "'/insomnia cost off' and '/insomnia days off' lift them.\n"
                         f"Log: {log_path_for(state)}\n"
                         "Add work with '/insomnia add <task>'."
                     )
@@ -1452,6 +1463,80 @@ class InsomniaCommand(SlashCommand):
                     return CommandResult(success=False, message="Usage: /insomnia log [lines]")
             return CommandResult(message=InsomniaLog(log_path_for(state)).render_tail(limit))
 
+        if action in ("cost", "budget"):
+            if len(args) < 2:
+                current = cost_limit(state)
+                cap = f"${current:.2f}" if current > 0 else "unlimited"
+                return CommandResult(
+                    message=(
+                        f"Cost cap: {cap} (spent so far ${spent_usd(state):.2f})\n"
+                        "Usage: /insomnia cost <usd> | /insomnia cost off"
+                    )
+                )
+            value = args[1].lower()
+            if value in ("off", "none", "unlimited", "0"):
+                state.insomnia_max_cost = 0.0
+                state._persist()
+                return CommandResult(
+                    message=(
+                        "Cost cap lifted: the run will keep going whatever it spends. "
+                        f"Spent so far ${spent_usd(state):.2f}."
+                    )
+                )
+            try:
+                amount = float(value.lstrip("$"))
+            except ValueError:
+                return CommandResult(
+                    success=False, message="Usage: /insomnia cost <usd> | /insomnia cost off"
+                )
+            if amount < 0:
+                return CommandResult(success=False, message="The cap cannot be negative.")
+            state.insomnia_max_cost = amount
+            state._persist()
+            if amount == 0:
+                return CommandResult(message="Cost cap lifted (0 means unlimited).")
+            note = ""
+            if spent_usd(state) >= amount:
+                note = (
+                    f" Already spent ${spent_usd(state):.2f}, so the next turn will stop "
+                    "at once; raise it further or use 'off'."
+                )
+            return CommandResult(message=f"Cost cap set to ${amount:.2f}.{note}")
+
+        if action in ("days", "artifacts"):
+            if len(args) < 2:
+                days = artifact_retention_days(state)
+                current = f"{days} day(s)" if days else "kept forever"
+                return CommandResult(
+                    message=(
+                        f"Artifact retention: {current}\n"
+                        "Usage: /insomnia days <n> | /insomnia days off"
+                    )
+                )
+            value = args[1].lower()
+            if value in ("off", "none", "never", "0"):
+                state.insomnia_artifact_days = 0
+                state._persist()
+                return CommandResult(
+                    message="Artifact retention off: stored tool output is never pruned by a run."
+                )
+            try:
+                days = int(args[1])
+            except ValueError:
+                return CommandResult(
+                    success=False, message="Usage: /insomnia days <n> | /insomnia days off"
+                )
+            if days < 0:
+                return CommandResult(success=False, message="Days cannot be negative.")
+            state.insomnia_artifact_days = days
+            state._persist()
+            return CommandResult(
+                message=(
+                    f"Artifacts older than {days} day(s) are pruned during a run "
+                    "(the running session is always kept)."
+                )
+            )
+
         tasks = queue_tasks(state)
         if action and action not in ("status", "list"):
             return CommandResult(
@@ -1462,16 +1547,24 @@ class InsomniaCommand(SlashCommand):
                     "  add     queue a task\n"
                     "  list    show the queue\n"
                     "  clear   empty the queue\n"
-                    "  log     show the run log"
+                    "  log     show the run log\n"
+                    "  cost    show or set the cost cap ('off' = unlimited)\n"
+                    "  days    show or set artifact retention ('off' = never prune)"
                 ),
             )
 
         state_text = "on" if state.insomnia_mode else "off"
+        cap = cost_limit(state)
+        cap_text = f"${cap:.2f} (spent ${spent_usd(state):.2f})" if cap > 0 else "unlimited"
+        days = artifact_retention_days(state)
+        days_text = f"prune older than {days} day(s)" if days else "never prune"
         lines = [
             f"Insomnia mode: {state_text}",
             f"  queue: {len(tasks)} task(s)",
             f"  turn budget: {int(getattr(state, 'insomnia_max_iterations', 0) or MAX_ITERATIONS)} step(s)",
             f"  retries per task: {int(getattr(state, 'insomnia_max_retries', 0) or RETRY_LIMIT)}",
+            f"  cost cap: {cap_text}",
+            f"  artifacts: {days_text}",
             f"  log: {log_path_for(state)}",
         ]
         for index, task in enumerate(tasks[:10], start=1):

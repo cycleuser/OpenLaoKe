@@ -40,6 +40,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MemoryStore.index_entries()` now and marks authority.
 
 ### Added
+- **Money and disk limits for an unattended run, both switchable off**
+  (`core/insomnia.py`, `core/repl.py`, `commands/base.py`): the mode had no
+  ceiling at all, which is the wrong default for something that runs while you
+  sleep. Two limits are on now. The cost cap (`insomnia_max_cost`, $10 by
+  default) is checked after **every** iteration, not only between tasks: a single
+  task can loop over hundreds of tool calls, and a per-task check would let the
+  overshoot be the size of the most expensive task. On hitting it the turn stops,
+  the task goes back in the queue instead of being counted as done or failed
+  (its attempt is refunded only if it never started), and the event is logged.
+  Artifacts older than `insomnia_artifact_days` (30 by default, the same as
+  `/artifacts prune`) are pruned at most every 10 minutes while the run goes,
+  with the running session protected because its history still points at those
+  files. `/insomnia cost <usd|off>` and `/insomnia days <n|off>` set or lift
+  each one; `off` (or `0`) means unlimited, and raising the cap mid-run takes
+  effect because the check recomputes instead of latching. `/insomnia` shows the
+  cap, what this session has spent, and the retention.
 - **A working unattended mode and `/insomnia`** (`core/insomnia.py`, `core/repl.py`,
   `commands/base.py`): the state fields, the banner and the localized strings
   existed, and nothing read them. Insomnia mode printed "Mode: Insomnia" and
