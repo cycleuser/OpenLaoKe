@@ -291,13 +291,20 @@ def prune_artifacts(
     *,
     max_age_days: int = 30,
     now: float | None = None,
+    keep_sessions: frozenset[str] | set[str] | None = None,
 ) -> tuple[int, int]:
-    """Delete artifacts older than the cutoff; returns ``(files, bytes)``."""
+    """Delete artifacts older than the cutoff; returns ``(files, bytes)``.
+
+    ``keep_sessions`` protects directories by name. A session that is still
+    running can be older than the cutoff while its pointers are live, and a
+    pointer to a deleted file is worse than a stale file taking up space.
+    """
     import time as _time
 
     moment = now if now is not None else _time.time()
     cutoff = moment - max_age_days * 86400
     base = _artifact_root(root)
+    protected = {_safe_segment(name, "unscoped") for name in (keep_sessions or ())}
     try:
         directories = [base / name for name in sorted(os.listdir(base))]
     except OSError:
@@ -305,6 +312,8 @@ def prune_artifacts(
     files = freed = 0
     for directory in directories:
         if not directory.is_dir():
+            continue
+        if directory.name in protected:
             continue
         for item in directory.iterdir():
             try:

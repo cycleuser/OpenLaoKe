@@ -305,10 +305,15 @@ def test_the_artifacts_command_lists_and_prunes(tmp_path, monkeypatch):
     assert "1 file(s)" in listed.message
     assert "sess-1" in listed.message
 
+    # The current session is protected: only another session's file goes.
+    stale = ToolOutputStore(None, "old-sess").store("Bash", "old body")
+    _os.utime(stale.path, (long_ago, long_ago))
     Ctx.args = "prune 30"
     pruned = asyncio.run(ArtifactsCommand().execute(Ctx()))
     assert pruned.success is True
     assert "Removed 1 artifact file" in pruned.message
+    assert Path(old.path).exists()
+    assert not Path(stale.path).exists()
 
     Ctx.args = "nonsense"
     assert asyncio.run(ArtifactsCommand().execute(Ctx())).success is False
@@ -426,3 +431,38 @@ def test_a_file_that_cannot_be_deleted_is_skipped(tmp_path, monkeypatch):
 
     assert remove_session_artifacts("sess-1", root=str(tmp_path / "art")) == 0
     assert stubborn.exists()
+
+
+def test_pruning_never_touches_the_running_session(tmp_path, monkeypatch):
+    import os as _os
+    import time as _time
+
+    from openlaoke.core.tool_output_store import prune_artifacts
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    old = ToolOutputStore(None, "live").store("Bash", "still referenced")
+    other = ToolOutputStore(None, "gone").store("Bash", "also old")
+    long_ago = _time.time() - 90 * 86400
+    for pointer in (old, other):
+        _os.utime(pointer.path, (long_ago, long_ago))
+
+    files, _freed = prune_artifacts(max_age_days=30, keep_sessions={"live"})
+
+    assert files == 1
+    assert Path(old.path).exists()
+    assert not Path(other.path).exists()
+
+
+def test_a_session_id_in_the_keep_set_is_sanitised_like_a_directory_name(tmp_path, monkeypatch):
+    import os as _os
+    import time as _time
+
+    from openlaoke.core.tool_output_store import prune_artifacts
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    pointer = ToolOutputStore(None, "../weird/name").store("Bash", "kept")
+    long_ago = _time.time() - 90 * 86400
+    _os.utime(pointer.path, (long_ago, long_ago))
+
+    assert prune_artifacts(max_age_days=30, keep_sessions={"../weird/name"}) == (0, 0)
+    assert Path(pointer.path).exists()

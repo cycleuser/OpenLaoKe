@@ -1275,11 +1275,20 @@ class TranscriptCommand(SlashCommand):
                 return CommandResult(success=False, message="Usage: /transcript [count]")
 
         health = transcript.health()
-        _header, records = transcript.replay()
+        header, records = transcript.replay()
         lines = [
             f"Journal: {transcript.path}",
             f"  {health.render()}",
         ]
+        if header:
+            started = float(header.get("at") or 0.0)
+            stamp = (
+                time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else "unknown"
+            )
+            lines.append(
+                f"  session {header.get('session_id') or '?'}  cwd {header.get('cwd') or '-'}  "
+                f"model {header.get('model') or '-'}  started {stamp}"
+            )
         for record in records[-limit:]:
             message = record.get("message", {})
             role = str(message.get("role", "?"))
@@ -1321,7 +1330,13 @@ class ArtifactsCommand(SlashCommand):
                     days = max(1, int(args[1]))
                 except ValueError:
                     return CommandResult(success=False, message="Usage: /artifacts prune [days]")
-            files, freed = prune_artifacts(root=base, max_age_days=days)
+            files, freed = prune_artifacts(
+                root=base,
+                max_age_days=days,
+                # The running session's pointers must keep resolving even if its
+                # first artifacts are older than the cutoff.
+                keep_sessions={ctx.app_state.session_id},
+            )
             return CommandResult(
                 message=(
                     f"Removed {files} artifact file(s), {freed / 1024:.1f} KB, "

@@ -462,3 +462,55 @@ def test_the_sessions_command_rejects_a_bad_age(tmp_path, monkeypatch):
     result = asyncio.run(commands_base.SessionsCommand().execute(Ctx()))
 
     assert result.success is False
+
+
+def test_a_resumed_session_journals_the_id_it_was_loaded_as(tmp_path):
+    """The header is written on the first append, not when the state is built."""
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+    manager.save_session(state)
+    Path(transcript_path_for(path)).unlink(missing_ok=True)  # pre-journal snapshot
+
+    resumed = manager.load_session("abc")
+    assert resumed is not None
+    resumed.add_message(_message("after the resume"))
+
+    header, _records = Transcript(transcript_path_for(path)).replay()
+    assert header["session_id"] == "abc"
+    assert header["cwd"] == str(tmp_path)
+
+
+def test_the_journal_header_is_not_rewritten_on_every_message(tmp_path):
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = create_app_state(cwd=str(tmp_path), persist_path=path)
+    state.session_id = "abc"
+    state.set_persist_path(path)
+
+    state.add_message(_message("one"))
+    state.add_message(_message("two"))
+
+    lines = Path(transcript_path_for(path)).read_text(encoding="utf-8").splitlines()
+    assert [json.loads(line)["type"] for line in lines] == ["session.start", "message", "message"]
+
+
+def test_the_transcript_command_shows_the_header(tmp_path):
+    from openlaoke.commands.base import TranscriptCommand
+
+    path = str(tmp_path / "sessions" / "abc.json")
+    state = AppState(session_id="abc", cwd=str(tmp_path))
+    state.set_persist_path(path)
+    state.add_message(_message("hello"))
+
+    class Ctx:
+        app_state = state
+        args = ""
+
+    result = asyncio.run(TranscriptCommand().execute(Ctx()))
+
+    assert "session abc" in result.message
+    assert f"cwd {tmp_path}" in result.message
+    assert "model" in result.message
+    assert "started" in result.message

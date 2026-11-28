@@ -43,7 +43,7 @@ class SnapshotStore:
     """Persists per-turn file snapshots for rewind and fork."""
 
     def __init__(self, base_dir: str | None = None, max_cache_entries: int = 128) -> None:
-        self.base_dir = base_dir or os.path.expanduser("~/.openlaoke/snapshots")
+        self.base_dir = str(base_dir or snapshot_dir())
         os.makedirs(self.base_dir, exist_ok=True)
         self._max_cache_entries = max(1, max_cache_entries)
         self._cache: OrderedDict[tuple[str, int], TurnSnapshot] = OrderedDict()

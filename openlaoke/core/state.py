@@ -207,6 +207,14 @@ class AppState:
         transcript = self._transcript
         if transcript is None:
             return
+        # The journal header is written on the first append, and the id can change
+        # between set_persist_path() and here: SessionManager creates the state
+        # (which assigns a generated id) and only then overwrites session_id with
+        # the one from the file. Journaling the captured value would record the
+        # wrong session for every resumed snapshot that predates journals.
+        transcript.session_id = self.session_id or transcript.session_id
+        transcript.cwd = self.cwd or transcript.cwd
+        transcript.model = self.session_config.model or transcript.model
         try:
             transcript.append_message(message)
         except OSError:

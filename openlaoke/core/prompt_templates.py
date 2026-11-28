@@ -217,9 +217,5 @@ def list_prompt_templates() -> list[str]:
     return get_prompt_registry().names()
 
 
-def load_prompt_template(name: str) -> PromptTemplate | None:
-    return get_prompt_registry().get(name)
-
-
 def expand_prompt_template(name: str, arguments: str = "") -> str | None:
     return get_prompt_registry().expand(name, arguments)

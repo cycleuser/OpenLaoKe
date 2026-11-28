@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **The journal records the session it actually belongs to** (`core/state.py`):
+  the header is written on the first append from the id captured when the
+  transcript was constructed, but `SessionManager` creates the state (which
+  generates an id) and only then overwrites `session_id` with the one read from
+  the file. Every resumed snapshot that predates journals therefore journalled a
+  generated id, so the journal and the snapshot disagreed about who they were.
+  `AppState._journal()` now copies `session_id`, `cwd` and model onto the
+  transcript before appending.
+- **`/transcript` shows the header** (`commands/base.py`): it printed the
+  health line and the records but reused the header as a discarded variable, so
+  the session id, working directory, model and start time in the file were
+  never shown.
 - **Each session writes its own audit chain** (`core/audit.py`): one global
   `audit.jsonl` grew with every session ever run, and an append is only O(1)
   while this process holds the tip cache — any other process writing to the same
@@ -28,6 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MemoryStore.index_entries()` now and marks authority.
 
 ### Added
+- **`prune_artifacts()` can protect live sessions** (`core/tool_output_store.py`):
+  `/artifacts prune` deletes by age, and a session still running can have
+  artifacts older than the cutoff while its history still points at them. A
+  pointer to a deleted file is worse than a stale file taking up space. The
+  running session is passed as `keep_sessions`, matched on the sanitised
+  directory name.
 - **`/artifacts`** (`core/tool_output_store.py`): lists the stored tool-output
   files per session with sizes, and `/artifacts prune 30` deletes the ones older
   than 30 days. Nothing pruned them before, and every oversized result writes
@@ -131,6 +149,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a newline.
 
 ### Removed
+- **The dead `types/hooks.py` module** (`openlaoke/types/hooks.py`): `HookType`,
+  `HookCommand`, `FunctionHook`, `HookMatcher`, `HookContext` and `HookResult`
+  were exported and imported by nothing. `core/hook_system.py` has its own
+  `HookRegistration` and `HOOK_TYPES` and never used them. `is_hook_event()` was
+  the only importer. Deleting the module also removes `HookType` and friends
+  from `openlaoke.types.__all__` (27 entries).
+- **`load_prompt_template()`** (`core/prompt_templates.py`): a one-line wrapper
+  around `get_prompt_registry().get()` that no caller used, next to
+  `expand_prompt_template()`, which does have callers.
 - **The unused second provider layer** (`openlaoke/provider.py`): an `LLMProvider`
   ABC with its own chunk types, cache-marker bookkeeping and retry helper, which
   `MultiProviderClient` had already replaced. Only `enforce_role_alternation` was
