@@ -296,3 +296,24 @@ def test_an_export_file_is_not_searched_twice(tmp_path) -> None:
     hits = search_sessions("token budget", sessions_dir=str(tmp_path))
 
     assert len(hits) == 1, [hit.session_id for hit in hits]
+
+
+def test_a_stray_file_in_the_sessions_directory_does_not_break_search(tmp_path) -> None:
+    """A list, a string, a number: `/search` must skip them, not raise."""
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "stray.json").write_text('["not", "a", "session"]', encoding="utf-8")
+    (sessions / "odd.json").write_text('"a string"', encoding="utf-8")
+    (sessions / "real.json").write_text(
+        json.dumps(
+            {
+                "session_id": "real",
+                "messages": [{"role": "user", "content": "the migration order"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    hits = search_sessions("migration", sessions_dir=str(sessions))
+
+    assert [hit.session_id for hit in hits] == ["real"]

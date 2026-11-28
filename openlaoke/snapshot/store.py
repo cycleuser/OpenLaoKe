@@ -9,6 +9,7 @@ import tempfile
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -133,15 +134,34 @@ class SnapshotStore:
         path = self.path_for(session_id)
         if not os.path.exists(path):
             return TurnSnapshot(turn_index=turn_index)
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if data.get("turn_index") == turn_index:
-                    return self._deserialize_turn(data)
+        for index, data in self._records(path):
+            if index == turn_index:
+                return self._deserialize_turn(data)
         return TurnSnapshot(turn_index=turn_index)
+
+    def _records(self, path: str) -> Iterator[tuple[int, dict[str, Any]]]:
+        """``(turn_index, record)`` for every readable line, junk skipped.
+
+        The file is one JSON object per line, and a crash or a hand edit can
+        leave a line that parses but is not a record (a list, a string, a turn
+        index that is not a number). One of those used to make `/tree` and
+        `/restore` raise out of a file they could otherwise use.
+        """
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(data, dict):
+                        continue
+                    index = data.get("turn_index")
+                    if isinstance(index, bool) or not isinstance(index, int):
+                        continue
+                    yield index, data
+        except OSError:
+            return
 
     def save_turn(self, session_id: str, turn: TurnSnapshot) -> None:
         path = self.path_for(session_id)
@@ -152,6 +172,10 @@ class SnapshotStore:
                     try:
                         data = json.loads(line)
                     except json.JSONDecodeError:
+                        continue
+                    # A line that is not a record cannot be preserved sanely:
+                    # keeping it would re-read the same junk on every save.
+                    if not isinstance(data, dict):
                         continue
                     if data.get("turn_index") != turn.turn_index:
                         existing.append(line.rstrip())
@@ -175,17 +199,11 @@ class SnapshotStore:
             return []
         turns: list[TurnSnapshot] = []
         seen: set[int] = set()
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                idx = data.get("turn_index", -1)
-                if idx in seen:
-                    continue
-                seen.add(idx)
-                turns.append(self._deserialize_turn(data))
+        for idx, data in self._records(path):
+            if idx in seen:
+                continue
+            seen.add(idx)
+            turns.append(self._deserialize_turn(data))
         return sorted(turns, key=lambda t: t.turn_index)
 
     def rewind(self, session_id: str, target_turn: int) -> dict[str, str]:
@@ -276,21 +294,24 @@ class SnapshotStore:
         )
 
     def _deserialize_turn(self, data: dict[str, Any]) -> TurnSnapshot:
-        files = {
-            p: FileSnapshot(
-                path=s["path"],
-                content=s["content"],
-                existed=s["existed"],
-                captured_at_turn=s["captured_at_turn"],
-                captured_at=s.get("captured_at", 0.0),
+        files: dict[str, FileSnapshot] = {}
+        stored_files = data.get("files")
+        for key, record in stored_files.items() if isinstance(stored_files, dict) else []:
+            if not isinstance(record, dict) or "path" not in record:
+                continue
+            files[key] = FileSnapshot(
+                path=str(record.get("path") or key),
+                content=record.get("content"),
+                existed=bool(record.get("existed", True)),
+                captured_at_turn=int(record.get("captured_at_turn") or 0),
+                captured_at=float(record.get("captured_at") or 0.0),
             )
-            for p, s in data.get("files", {}).items()
-        }
+        conversation = data.get("conversation")
         return TurnSnapshot(
-            turn_index=data["turn_index"],
+            turn_index=int(data.get("turn_index") or 0),
             files=files,
-            conversation=data.get("conversation", []),
-            created_at=data.get("created_at", 0.0),
+            conversation=conversation if isinstance(conversation, list) else [],
+            created_at=float(data.get("created_at") or 0.0),
         )
 
 

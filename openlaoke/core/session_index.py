@@ -128,6 +128,13 @@ def _payloads(sessions_dir: str) -> list[dict[str, Any]]:
             # would return every hit twice and name a session /sessions does not
             # list.
             continue
+        if not isinstance(payload, dict):
+            # Valid JSON that is not a session (a stray list, a hand-edited
+            # file). The journal fallback below still gets a chance.
+            payload = _journal_payload(sessions_dir, stem)
+            if payload is not None:
+                payloads.append(payload)
+            continue
         payload.setdefault("session_id", stem)
         payload["_path"] = path
         payloads.append(payload)
