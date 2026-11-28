@@ -60,3 +60,15 @@ def test_sanitize_path_allows_home(tmp_path):
 def test_sanitize_path_rejects_outside(tmp_path):
     with pytest.raises(ValueError):
         sanitize_path("/etc/hostname", str(tmp_path))
+
+
+def test_a_path_with_a_lone_surrogate_is_cleaned_not_raised(tmp_path) -> None:
+    """JSON can carry "\\ud800"; the filesystem cannot, and neither should we raise."""
+    from openlaoke.utils import path_safety
+
+    broken = f"{tmp_path}/\ud800x"
+
+    resolved = path_safety.resolve_path(broken, str(tmp_path))
+
+    assert "\ud800" not in resolved
+    assert path_safety.validate_path(resolved, str(tmp_path)) is None

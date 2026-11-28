@@ -80,14 +80,19 @@ def _as_bool(value: Any, default: bool) -> bool:
 
 
 def _message_from_dict(
-    msg_data: dict,
+    msg_data: Any,
 ) -> UserMessage | AssistantMessage | SystemMessage | ProgressMessage | AttachmentMessage | None:
+    if not isinstance(msg_data, dict):
+        # A number or a bare string in the list is not a message. Refusing the
+        # whole session over one bad record loses the conversation that the
+        # transcript beside it still has.
+        return None
     msg = message_from_dict(msg_data)
     if msg is not None:
         return msg
     return SystemMessage(
         role=MessageRole.SYSTEM,
-        content=msg_data.get("content", ""),
+        content=msg_data.get("content") or "",
         subtype=msg_data.get("subtype", "info"),
         tool_use_id=msg_data.get("tool_use_id", ""),
     )
@@ -244,12 +249,22 @@ class SessionManager:
         except OSError:
             return None
 
+        if not isinstance(data, dict):
+            # Valid JSON that is not an object: nothing to read here, but the
+            # transcript beside it may still hold the conversation.
+            logger.warning("Session snapshot at %s is not an object", path)
+            return self._recover_from_transcript(path)
+
         try:
             session_config = data.get("session_config", {})
+            if not isinstance(session_config, dict):
+                session_config = {}
             model = session_config.get("model", data.get("model", "claude-sonnet-4-20250514"))
+            if not isinstance(model, str) or not model:
+                model = "claude-sonnet-4-20250514"
 
             app_state = create_app_state(
-                cwd=data.get("cwd", os.getcwd()),
+                cwd=data.get("cwd") if isinstance(data.get("cwd"), str) else os.getcwd(),
                 model=model,
                 persist_path=path,
             )
@@ -257,12 +272,20 @@ class SessionManager:
                 data.get("session_id") or os.path.splitext(os.path.basename(path))[0]
             )
 
-            for msg_data in data.get("messages", []):
+            stored_messages = data.get("messages")
+            if not isinstance(stored_messages, list):
+                stored_messages = []
+            for msg_data in stored_messages:
                 msg = _message_from_dict(msg_data)
                 if msg is not None:
                     app_state.messages.append(msg)
 
-            for task_id, task_data in data.get("tasks", {}).items():
+            stored_tasks = data.get("tasks")
+            if not isinstance(stored_tasks, dict):
+                stored_tasks = {}
+            for task_id, task_data in stored_tasks.items():
+                if not isinstance(task_data, dict):
+                    continue
                 try:
                     task_type = TaskType(task_data.get("type", "local_bash"))
                 except ValueError:
@@ -282,21 +305,21 @@ class SessionManager:
                 )
 
             token_data = data.get("token_usage", {})
-            if token_data:
+            if isinstance(token_data, dict) and token_data:
                 from openlaoke.types.core_types import TokenUsage
 
                 app_state.token_usage = TokenUsage(
-                    input_tokens=token_data.get("input_tokens", 0),
-                    output_tokens=token_data.get("output_tokens", 0),
-                    cache_read_tokens=token_data.get("cache_read_tokens", 0),
-                    cache_creation_tokens=token_data.get("cache_creation_tokens", 0),
+                    input_tokens=_as_int(token_data.get("input_tokens"), 0),
+                    output_tokens=_as_int(token_data.get("output_tokens"), 0),
+                    cache_read_tokens=_as_int(token_data.get("cache_read_tokens"), 0),
+                    cache_creation_tokens=_as_int(token_data.get("cache_creation_tokens"), 0),
                 )
 
-            if data.get("guard_state"):
+            if isinstance(data.get("guard_state"), dict):
                 app_state.guard_state = data["guard_state"]
-            if data.get("compact_state"):
+            if isinstance(data.get("compact_state"), dict):
                 app_state.compact_state = data["compact_state"]
-            if data.get("todo"):
+            if isinstance(data.get("todo"), dict):
                 app_state.todo_state = data["todo"]
             if isinstance(data.get("risk_events"), list):
                 app_state.risk_events = data["risk_events"]
@@ -304,18 +327,18 @@ class SessionManager:
                 app_state.edit_stats = data["edit_stats"]
             if isinstance(data.get("tool_call_counts"), dict):
                 app_state.tool_call_counts = {
-                    str(key): int(value) for key, value in data["tool_call_counts"].items()
+                    str(key): _as_int(value, 0) for key, value in data["tool_call_counts"].items()
                 }
 
             cost_data = data.get("cost_info", {})
-            if cost_data:
+            if isinstance(cost_data, dict) and cost_data:
                 from openlaoke.types.core_types import CostInfo
 
                 app_state.cost_info = CostInfo(
-                    input_cost=cost_data.get("input_cost", 0.0),
-                    output_cost=cost_data.get("output_cost", 0.0),
-                    cache_read_cost=cost_data.get("cache_read_cost", 0.0),
-                    cache_creation_cost=cost_data.get("cache_creation_cost", 0.0),
+                    input_cost=_as_float(cost_data.get("input_cost"), 0.0),
+                    output_cost=_as_float(cost_data.get("output_cost"), 0.0),
+                    cache_read_cost=_as_float(cost_data.get("cache_read_cost"), 0.0),
+                    cache_creation_cost=_as_float(cost_data.get("cache_creation_cost"), 0.0),
                 )
 
             # The fallbacks are the AppState defaults, not zero-ish values: a
@@ -334,7 +357,8 @@ class SessionManager:
             # inside the turn, which the unattended mode then retried forever;
             # every one of them is coerced to the value a new session would have.
             app_state.insomnia_mode = _as_bool(data.get("insomnia_mode"), False)
-            app_state.insomnia_task_queue = data.get("insomnia_task_queue") or []
+            stored_queue = data.get("insomnia_task_queue")
+            app_state.insomnia_task_queue = stored_queue if isinstance(stored_queue, list) else []
             app_state.insomnia_max_iterations = max(
                 1, _as_int(data.get("insomnia_max_iterations"), MAX_ITERATIONS)
             )
@@ -361,7 +385,9 @@ class SessionManager:
 
         except Exception:
             logger.warning("Failed to load session from %s", path, exc_info=True)
-            return None
+            # The snapshot is beyond saving, but the append-only transcript
+            # beside it usually is not: half a session beats none.
+            return self._recover_from_transcript(path)
 
     def _recover_from_transcript(self, path: str) -> AppState | None:
         """Rebuild a session from its append-only journal.

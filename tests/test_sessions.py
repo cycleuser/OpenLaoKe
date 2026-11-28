@@ -414,3 +414,45 @@ def test_an_old_export_in_the_sessions_directory_is_not_a_session(manager, state
     listed = manager.list_sessions()
 
     assert [Path(item.path).name for item in listed] == [f"{state.session_id}.json"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"session_config": "not a dict", "messages": []},
+        {"session_config": {"model": None}, "messages": []},
+        {"messages": [None, 3, "a string", {"role": "user", "content": "real one"}]},
+        {"messages": "not a list"},
+        {"tasks": ["not", "a", "dict"]},
+        {"token_usage": [1, 2], "cost_info": "cheap"},
+        {"tool_call_counts": {"Read": None, "Bash": "9"}},
+        {"insomnia_task_queue": 1.5, "insomnia_max_iterations": {}, "cwd": [1, 2]},
+        {"guard_state": 0, "compact_state": [1, 2], "todo": "lots"},
+    ],
+)
+def test_a_junk_record_does_not_discard_the_whole_snapshot(manager, payload) -> None:
+    """One bad field used to raise, and the session was reported as unloadable."""
+    path = os.path.join(manager.session_dir, "junk.json")
+    Path(path).write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = manager._load_from_path(path)
+
+    assert loaded is not None, "a usable session must come back"
+    assert loaded.session_config.model, "the model must fall back, not be empty"
+
+
+def test_a_snapshot_that_is_not_an_object_falls_back_to_the_transcript(manager) -> None:
+    """Shapes can be nonsense; the journal beside it still has the words."""
+    from openlaoke.core.transcript import Transcript
+
+    path = os.path.join(manager.session_dir, "broken.json")
+    Path(path).write_text('["not", "a", "session"]', encoding="utf-8")
+    journal = Transcript(path.replace(".json", ".jsonl"), session_id="broken", cwd="/tmp")
+    from openlaoke.types.core_types import MessageRole, UserMessage
+
+    journal.append_message(UserMessage(role=MessageRole.USER, content="the conversation"))
+
+    loaded = manager._load_from_path(path)
+
+    assert loaded is not None
+    assert [message.content for message in loaded.messages] == ["the conversation"]

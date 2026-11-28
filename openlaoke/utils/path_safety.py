@@ -11,8 +11,25 @@ from __future__ import annotations
 import os
 
 
+def _clean(path: str) -> str:
+    """Replace characters a filesystem cannot hold with U+FFFD.
+
+    JSON strings may contain lone surrogates (``"\\ud800"``), and a model does
+    emit them when it echoes a broken escape. ``os.path`` then raises
+    ``UnicodeEncodeError`` out of a path helper, which surfaces to the user as an
+    encoding error instead of "no such file". Replacing the character keeps the
+    rest of the check, the containment test included, working normally.
+    """
+    try:
+        path.encode("utf-8")
+    except UnicodeEncodeError:
+        return path.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+    return path
+
+
 def resolve_path(path: str, cwd: str) -> str:
     """Resolve a path relative to cwd, normalising it."""
+    path = _clean(path)
     if os.path.isabs(path):
         return os.path.normpath(path)
     return os.path.normpath(os.path.join(cwd, path))
@@ -25,6 +42,7 @@ def validate_path(resolved: str, cwd: str) -> str | None:
     Allows paths under the current working directory or the user's home
     directory. This matches Claude Code / opencode containment semantics.
     """
+    resolved = _clean(resolved)
     real_resolved = os.path.realpath(resolved)
     real_cwd = os.path.realpath(cwd)
     home = os.path.realpath(os.path.expanduser("~"))
@@ -46,6 +64,7 @@ def validate_path_strict(resolved: str, cwd: str) -> str | None:
     silently scatters files across the user's home. Callers that truly want
     to write outside the project can use ``Write`` or ``Bash`` instead.
     """
+    resolved = _clean(resolved)
     real_resolved = os.path.realpath(resolved)
     real_cwd = os.path.realpath(cwd)
     if _contains(real_cwd, real_resolved):
