@@ -244,6 +244,11 @@ def _artifact_root(root: str | None) -> Path:
     return Path(root or os.environ.get("OPENLAOKE_ARTIFACT_DIR") or default_artifact_root())
 
 
+def session_artifact_dir(session_id: str, root: str | None = None) -> Path:
+    """The directory holding one session's stored tool output."""
+    return _artifact_root(root) / _safe_segment(session_id, "unscoped")
+
+
 def artifact_inventory(root: str | None = None) -> list[tuple[str, int, int]]:
     """``(session, file_count, bytes)`` for every session directory."""
     base = _artifact_root(root)

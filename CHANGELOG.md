@@ -49,13 +49,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   overshoot be the size of the most expensive task. On hitting it the turn stops,
   the task goes back in the queue instead of being counted as done or failed
   (its attempt is refunded only if it never started), and the event is logged.
-  Artifacts older than `insomnia_artifact_days` (30 by default, the same as
-  `/artifacts prune`) are pruned at most every 10 minutes while the run goes,
-  with the running session protected because its history still points at those
-  files. `/insomnia cost <usd|off>` and `/insomnia days <n|off>` set or lift
-  each one; `off` (or `0`) means unlimited, and raising the cap mid-run takes
-  effect because the check recomputes instead of latching. `/insomnia` shows the
-  cap, what this session has spent, and the retention.
+  The artifact window is `insomnia_artifact_hours`, **three hours by default**,
+  and age is only half the test: a file is deleted only when the live history no
+  longer names it, because a pointer's rendered text carries its full path and a
+  message that survived trimming is the only thing that can still reach the file.
+  That is what lets the window be this short without losing evidence the model
+  could still be asked about, and it is also why only this session's directory is
+  touched: another session's pointers belong to a session that is not running,
+  and `/artifacts prune` is the command that decides their fate. Pruning runs at
+  most every ten minutes. `/insomnia cost <usd|off>` and `/insomnia hours <n|off>`
+  set or lift each limit; `off` (or `0`) means unlimited, and raising the cap
+  mid-run takes effect because the check recomputes instead of latching.
+  `/insomnia` shows the cap, what this session has spent, and the retention.
 - **A working unattended mode and `/insomnia`** (`core/insomnia.py`, `core/repl.py`,
   `commands/base.py`): the state fields, the banner and the localized strings
   existed, and nothing read them. Insomnia mode printed "Mode: Insomnia" and

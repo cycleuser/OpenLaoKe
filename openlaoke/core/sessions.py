@@ -287,7 +287,7 @@ class SessionManager:
             # behaviour a new session has, or a resumed unattended run starts
             # with a 10-step budget and no auto-accept.
             from openlaoke.core.insomnia import (
-                ARTIFACT_DAYS,
+                ARTIFACT_HOURS,
                 COST_LIMIT_USD,
                 MAX_ITERATIONS,
                 RETRY_LIMIT,
@@ -298,7 +298,7 @@ class SessionManager:
             app_state.insomnia_max_iterations = data.get("insomnia_max_iterations", MAX_ITERATIONS)
             app_state.insomnia_max_retries = data.get("insomnia_max_retries", RETRY_LIMIT)
             app_state.insomnia_max_cost = data.get("insomnia_max_cost", COST_LIMIT_USD)
-            app_state.insomnia_artifact_days = data.get("insomnia_artifact_days", ARTIFACT_DAYS)
+            app_state.insomnia_artifact_hours = data.get("insomnia_artifact_hours", ARTIFACT_HOURS)
             app_state.insomnia_auto_accept = data.get("insomnia_auto_accept", True)
             app_state.insomnia_log_path = data.get("insomnia_log_path", None)
 

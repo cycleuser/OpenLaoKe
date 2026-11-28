@@ -1385,7 +1385,7 @@ class InsomniaCommand(SlashCommand):
         from openlaoke.core.insomnia import (
             MAX_ITERATIONS,
             RETRY_LIMIT,
-            artifact_retention_days,
+            artifact_retention_hours,
             backoff_seconds,
             cost_limit,
             log_path_for,
@@ -1404,9 +1404,11 @@ class InsomniaCommand(SlashCommand):
                 retries = int(getattr(state, "insomnia_max_retries", 0) or RETRY_LIMIT)
                 cap = cost_limit(state)
                 cap_text = f"${cap:.2f}" if cap > 0 else "unlimited"
-                days = artifact_retention_days(state)
-                days_text = (
-                    f"artifacts older than {days} day(s) pruned" if days else "artifacts kept"
+                hours = artifact_retention_hours(state)
+                retention_text = (
+                    f"unreferenced artifacts older than {hours:g}h pruned"
+                    if hours
+                    else "artifacts kept"
                 )
                 return CommandResult(
                     message=(
@@ -1416,8 +1418,8 @@ class InsomniaCommand(SlashCommand):
                         f"steps, a failed turn retried up to {retries} time(s) with backoff "
                         f"(first wait {backoff_seconds(1):.0f}s), and the live history "
                         "trimmed at turn boundaries so a long run stays bounded.\n"
-                        f"Limits: cost cap {cap_text}, {days_text}. "
-                        "'/insomnia cost off' and '/insomnia days off' lift them.\n"
+                        f"Limits: cost cap {cap_text}, {retention_text}. "
+                        "'/insomnia cost off' and '/insomnia hours off' lift them.\n"
                         f"Log: {log_path_for(state)}\n"
                         "Add work with '/insomnia add <task>'."
                     )
@@ -1503,37 +1505,43 @@ class InsomniaCommand(SlashCommand):
                 )
             return CommandResult(message=f"Cost cap set to ${amount:.2f}.{note}")
 
-        if action in ("days", "artifacts"):
+        if action in ("hours", "days", "artifacts"):
+            unit_hours = 24.0 if action == "days" else 1.0
+            unit = "day(s)" if action == "days" else "hour(s)"
             if len(args) < 2:
-                days = artifact_retention_days(state)
-                current = f"{days} day(s)" if days else "kept forever"
+                hours = artifact_retention_hours(state)
+                current = f"{hours / unit_hours:g} {unit}" if hours else "kept forever"
                 return CommandResult(
                     message=(
                         f"Artifact retention: {current}\n"
-                        "Usage: /insomnia days <n> | /insomnia days off"
+                        "A file is only deleted once the live history no longer names it, "
+                        "and only inside this session's directory.\n"
+                        "Usage: /insomnia hours <n> | /insomnia hours off  (days <n> also works)"
                     )
                 )
             value = args[1].lower()
             if value in ("off", "none", "never", "0"):
-                state.insomnia_artifact_days = 0
+                state.insomnia_artifact_hours = 0.0
                 state._persist()
                 return CommandResult(
                     message="Artifact retention off: stored tool output is never pruned by a run."
                 )
             try:
-                days = int(args[1])
+                amount = float(args[1])
             except ValueError:
                 return CommandResult(
-                    success=False, message="Usage: /insomnia days <n> | /insomnia days off"
+                    success=False,
+                    message="Usage: /insomnia hours <n> | /insomnia hours off",
                 )
-            if days < 0:
-                return CommandResult(success=False, message="Days cannot be negative.")
-            state.insomnia_artifact_days = days
+            if amount < 0:
+                return CommandResult(success=False, message="That cannot be negative.")
+            hours = amount * unit_hours
+            state.insomnia_artifact_hours = hours
             state._persist()
             return CommandResult(
                 message=(
-                    f"Artifacts older than {days} day(s) are pruned during a run "
-                    "(the running session is always kept)."
+                    f"Unreferenced artifacts older than {amount:g} {unit} are pruned during "
+                    "a run. A pointer still in the live history keeps its file."
                 )
             )
 
@@ -1549,22 +1557,22 @@ class InsomniaCommand(SlashCommand):
                     "  clear   empty the queue\n"
                     "  log     show the run log\n"
                     "  cost    show or set the cost cap ('off' = unlimited)\n"
-                    "  days    show or set artifact retention ('off' = never prune)"
+                    "  hours   show or set artifact retention ('off' = never prune)"
                 ),
             )
 
         state_text = "on" if state.insomnia_mode else "off"
         cap = cost_limit(state)
         cap_text = f"${cap:.2f} (spent ${spent_usd(state):.2f})" if cap > 0 else "unlimited"
-        days = artifact_retention_days(state)
-        days_text = f"prune older than {days} day(s)" if days else "never prune"
+        hours = artifact_retention_hours(state)
+        retention_text = f"prune unreferenced older than {hours:g}h" if hours else "never prune"
         lines = [
             f"Insomnia mode: {state_text}",
             f"  queue: {len(tasks)} task(s)",
             f"  turn budget: {int(getattr(state, 'insomnia_max_iterations', 0) or MAX_ITERATIONS)} step(s)",
             f"  retries per task: {int(getattr(state, 'insomnia_max_retries', 0) or RETRY_LIMIT)}",
             f"  cost cap: {cap_text}",
-            f"  artifacts: {days_text}",
+            f"  artifacts: {retention_text}",
             f"  log: {log_path_for(state)}",
         ]
         for index, task in enumerate(tasks[:10], start=1):

@@ -813,34 +813,34 @@ class REPL:
         return True
 
     def _insomnia_prune_artifacts(self) -> None:
-        """Reclaim old tool output while the run is going, at most every 10 min.
+        """Reclaim this run's own stale tool output, at most every 10 minutes.
 
-        Every oversized result writes a file, and an unattended run writes a lot
-        of them. The running session is protected: its history still points at
-        those files. ``insomnia_artifact_days = 0`` turns this off.
+        Every oversized result writes a file and an unattended run writes a lot
+        of them, but the window can be short (three hours by default) because a
+        file is only deleted when the live history no longer names it: a pointer
+        that is still in context keeps its file. Another session's artifacts are
+        never touched here. ``insomnia_artifact_hours = 0`` turns this off.
         """
-        from openlaoke.core.insomnia import ARTIFACT_PRUNE_INTERVAL, artifact_retention_days
+        from openlaoke.core.insomnia import (
+            ARTIFACT_PRUNE_INTERVAL,
+            artifact_retention_hours,
+            prune_unreferenced_artifacts,
+        )
 
-        days = artifact_retention_days(self.app_state)
-        if days <= 0:
+        hours = artifact_retention_hours(self.app_state)
+        if hours <= 0:
             return
         now = time.time()
         if now - float(getattr(self, "_insomnia_last_prune", 0.0)) < ARTIFACT_PRUNE_INTERVAL:
             return
         self._insomnia_last_prune = now
-        from openlaoke.core.tool_output_store import prune_artifacts, resolve_artifact_root
-
-        try:
-            files, freed = prune_artifacts(
-                root=resolve_artifact_root(self.app_state),
-                max_age_days=days,
-                keep_sessions={self.app_state.session_id},
-            )
-        except OSError:
-            return
+        files, freed = prune_unreferenced_artifacts(self.app_state, hours)
         if files:
             self._insomnia_log.append(
-                "artifacts_pruned", files=files, kb=round(freed / 1024, 1), older_than_days=days
+                "artifacts_pruned",
+                files=files,
+                kb=round(freed / 1024, 1),
+                older_than_hours=hours,
             )
 
     async def _insomnia_run_task(self, task: dict[str, Any]) -> tuple[bool, str]:

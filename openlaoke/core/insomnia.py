@@ -40,9 +40,12 @@ LOG_MAX_BYTES = 1_000_000
 # "do not stop" is the point of the mode and only the operator knows when the
 # wallet is the limit rather than the clock.
 COST_LIMIT_USD = 10.0
-# Same 30 days as `/artifacts prune`, so an unattended run never deletes
-# evidence the manual command would have kept.
-ARTIFACT_DAYS = 30
+# Three hours, not days: an unattended run writes far more tool output than a
+# chat does, and almost all of it stops mattering within minutes. The window can
+# be this short because age is only half the test; see
+# ``prune_unreferenced_artifacts``, which never deletes a file the live history
+# still names.
+ARTIFACT_HOURS = 3
 ARTIFACT_PRUNE_INTERVAL = 600.0
 
 
@@ -66,12 +69,82 @@ def cost_limit_reached(state: Any) -> bool:
     return limit > 0 and spent_usd(state) >= limit
 
 
-def artifact_retention_days(state: Any) -> int:
-    """How old an artifact must be before an unattended run deletes it."""
+def artifact_retention_hours(state: Any) -> float:
+    """How old an artifact must be before an unattended run may delete it."""
     try:
-        return max(0, int(getattr(state, "insomnia_artifact_days", 0) or 0))
+        return max(0.0, float(getattr(state, "insomnia_artifact_hours", 0.0) or 0.0))
     except (TypeError, ValueError):
-        return 0
+        return 0.0
+
+
+def _history_text(state: Any) -> str:
+    """Everything the live context can see, as one searchable string."""
+    parts: list[str] = []
+    for message in getattr(state, "messages", None) or []:
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        if content:
+            parts.append(str(content))
+        for use in getattr(message, "tool_uses", None) or []:
+            parts.append(str(use))
+    return "\n".join(parts)
+
+
+def prune_unreferenced_artifacts(
+    state: Any,
+    older_than_hours: float | None = None,
+    *,
+    root: str | None = None,
+    now: float | None = None,
+) -> tuple[int, int]:
+    """Delete this session's stale artifacts that the live history no longer names.
+
+    Age alone is the wrong test. An artifact is a file a pointer in the history
+    points at, so the only safe question is "is anything still pointing here".
+    The live history answers that directly: a pointer's rendered text carries its
+    full path, and a message that survived history trimming is the only thing
+    that can still reach the file. That is what lets the retention window be
+    short (three hours by default) without losing evidence the model could still
+    be asked about.
+
+    Another session's directory is never touched: those pointers live in a
+    session that is not running, and only ``/artifacts prune`` should decide
+    their fate.
+    """
+    hours = artifact_retention_hours(state) if older_than_hours is None else older_than_hours
+    if hours <= 0:
+        return 0, 0
+    moment = now if now is not None else time.time()
+    cutoff = moment - hours * 3600
+
+    from openlaoke.core.tool_output_store import resolve_artifact_root, session_artifact_dir
+
+    directory = session_artifact_dir(
+        str(getattr(state, "session_id", "") or "session"),
+        root or resolve_artifact_root(state),
+    )
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return 0, 0
+
+    referenced = _history_text(state)
+    files = 0
+    freed = 0
+    for item in entries:
+        try:
+            if not item.is_file() or item.stat().st_mtime >= cutoff:
+                continue
+            if item.name in referenced:
+                continue
+            size = item.stat().st_size
+            item.unlink()
+        except OSError:
+            continue
+        files += 1
+        freed += size
+    return files, freed
 
 
 def log_path_for(state: Any, root: str | None = None) -> str:

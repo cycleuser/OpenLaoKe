@@ -398,7 +398,7 @@ def test_a_snapshot_without_the_new_fields_restores_the_class_defaults(tmp_path)
     assert state.insomnia_max_iterations == 1000
     assert state.insomnia_max_retries == 8
     assert state.insomnia_max_cost == 10.0
-    assert state.insomnia_artifact_days == 30
+    assert state.insomnia_artifact_hours == 3.0
     assert state.insomnia_auto_accept is True
     assert state.insomnia_log_path is None
 
@@ -653,31 +653,42 @@ def test_a_task_cut_off_mid_turn_is_requeued_not_counted(tmp_path) -> None:
     assert "task_paused" in log
 
 
-def test_artifacts_are_pruned_during_a_run_but_the_live_session_kept(tmp_path, monkeypatch) -> None:
+def test_a_run_deletes_only_artifacts_its_history_no_longer_names(tmp_path, monkeypatch) -> None:
     import os as _os
 
     from openlaoke.core.tool_output_store import ToolOutputStore
 
     monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
-    old = ToolOutputStore(None, "other-session").store("Bash", "old body")
-    long_ago = time.time() - 30 * 86400
-    _os.utime(old.path, (long_ago, long_ago))
-    live = ToolOutputStore(None, "test-session").store("Bash", "still referenced")
-    _os.utime(live.path, (long_ago, long_ago))
+    stale = ToolOutputStore(None, "test-session").store("Bash", "nobody points here")
+    live = ToolOutputStore(None, "test-session").store("Bash", "the model can still read this")
+    other = ToolOutputStore(None, "another-session").store("Bash", "not this run's business")
+    long_ago = time.time() - 5 * 3600
+    for pointer in (stale, live, other):
+        _os.utime(pointer.path, (long_ago, long_ago))
 
     r = make_repl([[text("done")]])
     r.app_state.session_id = "test-session"
     r.app_state.insomnia_mode = True
-    r.app_state.insomnia_artifact_days = 30
+    r.app_state.insomnia_artifact_hours = 3
     r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    # The pointer to `live` is still in the context; `stale` is not mentioned.
+    r.app_state.messages.append(
+        SystemMessage(
+            role=MessageRole.SYSTEM,
+            content=f"[tool output externalized]\nfull output: {live.path}",
+            subtype="tool_result",
+            tool_use_id="t1",
+        )
+    )
     enqueue(r.app_state, "one task")
 
     asyncio.run(r._insomnia_drain())
 
-    assert Path(live.path).exists(), "the running session's artifacts must survive"
-    assert not Path(old.path).exists(), "another session's stale artifact should go"
+    assert Path(live.path).exists(), "a pointer still in history keeps its file"
+    assert not Path(stale.path).exists(), "an unreferenced stale artifact should go"
+    assert Path(other.path).exists(), "another session's artifacts are not this run's to delete"
     log = (tmp_path / "run.log").read_text(encoding="utf-8")
-    assert "artifacts_pruned" in log
+    assert "artifacts_pruned" in log and "older_than_hours" in log
 
 
 def test_artifact_pruning_can_be_turned_off(tmp_path, monkeypatch) -> None:
@@ -686,23 +697,48 @@ def test_artifact_pruning_can_be_turned_off(tmp_path, monkeypatch) -> None:
     from openlaoke.core.tool_output_store import ToolOutputStore
 
     monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
-    old = ToolOutputStore(None, "other-session").store("Bash", "old body")
-    long_ago = time.time() - 30 * 86400
-    _os.utime(old.path, (long_ago, long_ago))
+    stale = ToolOutputStore(None, "test-session").store("Bash", "an old body")
+    long_ago = time.time() - 5 * 3600
+    _os.utime(stale.path, (long_ago, long_ago))
 
     r = make_repl([[text("done")]])
+    r.app_state.session_id = "test-session"
     r.app_state.insomnia_mode = True
-    r.app_state.insomnia_artifact_days = 0  # never prune
+    r.app_state.insomnia_artifact_hours = 0  # never prune
     r.app_state.insomnia_log_path = str(tmp_path / "run.log")
     enqueue(r.app_state, "one task")
 
     asyncio.run(r._insomnia_drain())
 
-    assert Path(old.path).exists()
+    assert Path(stale.path).exists()
+
+
+def test_a_young_artifact_is_left_alone_even_when_nothing_points_at_it(
+    tmp_path, monkeypatch
+) -> None:
+    import os as _os
+
+    from openlaoke.core.tool_output_store import ToolOutputStore
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    young = ToolOutputStore(None, "test-session").store("Bash", "written a minute ago")
+    an_hour_ago = time.time() - 3600
+    _os.utime(young.path, (an_hour_ago, an_hour_ago))
+
+    r = make_repl([[text("done")]])
+    r.app_state.session_id = "test-session"
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_artifact_hours = 3
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    enqueue(r.app_state, "one task")
+
+    asyncio.run(r._insomnia_drain())
+
+    assert Path(young.path).exists()
 
 
 @pytest.mark.asyncio
-async def test_the_cost_and_days_subcommands(tmp_path) -> None:
+async def test_the_cost_and_retention_subcommands(tmp_path) -> None:
     from openlaoke.commands.base import InsomniaCommand
 
     state = create_app_state(cwd=str(tmp_path))
@@ -725,16 +761,22 @@ async def test_the_cost_and_days_subcommands(tmp_path) -> None:
     negative = await command.execute(_ctx(state, "cost -1"))
     assert negative.success is False
 
-    days = await command.execute(_ctx(state, "days 3"))
-    assert state.insomnia_artifact_days == 3
-    assert "older than 3 day(s)" in days.message
+    hours = await command.execute(_ctx(state, "hours 3"))
+    assert state.insomnia_artifact_hours == 3.0
+    assert "older than 3 hour(s)" in hours.message
 
-    days_off = await command.execute(_ctx(state, "days off"))
-    assert state.insomnia_artifact_days == 0
-    assert "never pruned" in days_off.message
+    await command.execute(_ctx(state, "hours 0.5"))
+    assert state.insomnia_artifact_hours == 0.5
 
-    bad_days = await command.execute(_ctx(state, "days soon"))
-    assert bad_days.success is False
+    await command.execute(_ctx(state, "days 2"))  # alias: 2 days == 48 hours
+    assert state.insomnia_artifact_hours == 48.0
+
+    hours_off = await command.execute(_ctx(state, "hours off"))
+    assert state.insomnia_artifact_hours == 0.0
+    assert "never pruned" in hours_off.message
+
+    bad_hours = await command.execute(_ctx(state, "hours soon"))
+    assert bad_hours.success is False
 
 
 @pytest.mark.asyncio
@@ -744,16 +786,44 @@ async def test_the_status_shows_both_limits_and_their_off_switch(tmp_path) -> No
     state = create_app_state(cwd=str(tmp_path))
     state.insomnia_log_path = str(tmp_path / "run.log")
     state.insomnia_max_cost = 2.5
-    state.insomnia_artifact_days = 4
+    state.insomnia_artifact_hours = 4
     state.cost_info.input_cost = 1.25
 
     status = await InsomniaCommand().execute(_ctx(state, ""))
 
     assert "cost cap: $2.50 (spent $1.25)" in status.message
-    assert "artifacts: prune older than 4 day(s)" in status.message
+    assert "artifacts: prune unreferenced older than 4h" in status.message
 
     state.insomnia_max_cost = 0.0
-    state.insomnia_artifact_days = 0
+    state.insomnia_artifact_hours = 0
     status = await InsomniaCommand().execute(_ctx(state, ""))
     assert "cost cap: unlimited" in status.message
     assert "artifacts: never prune" in status.message
+
+
+def test_the_retention_helper_reads_the_clock_not_the_file_time_mood(tmp_path, monkeypatch) -> None:
+    import os as _os
+
+    from openlaoke.core.insomnia import prune_unreferenced_artifacts
+    from openlaoke.core.tool_output_store import ToolOutputStore
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    state = create_app_state(cwd=str(tmp_path))
+    state.session_id = "helper-session"
+    pointer = ToolOutputStore(None, "helper-session").store("Bash", "body")
+    written = time.time() - 2 * 3600
+    _os.utime(pointer.path, (written, written))
+
+    # Two hours old, three-hour window: kept. The clock is injected, not guessed.
+    assert prune_unreferenced_artifacts(state, 3, now=time.time()) == (0, 0)
+    assert Path(pointer.path).exists()
+
+    # Same file, judged four hours later: gone, and the bytes are reported.
+    files, freed = prune_unreferenced_artifacts(state, 3, now=time.time() + 2 * 3600)
+    assert files == 1 and freed > 0
+    assert not Path(pointer.path).exists()
+
+    # 0 hours means "never", not "everything is stale".
+    again = ToolOutputStore(None, "helper-session").store("Bash", "second body")
+    assert prune_unreferenced_artifacts(state, 0) == (0, 0)
+    assert Path(again.path).exists()

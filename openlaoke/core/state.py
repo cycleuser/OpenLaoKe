@@ -84,7 +84,10 @@ class AppState:
     # default because an unattended run is the one place where an unbounded
     # night is a real bill and a real disk, but the operator can turn both off.
     insomnia_max_cost: float = 10.0
-    insomnia_artifact_days: int = 30
+    # Hours, not days: an unattended run's own tool output stops mattering
+    # quickly, and a file is only deleted once the live history no longer names
+    # it (see core/insomnia.py), so a short window costs no evidence.
+    insomnia_artifact_hours: float = 3.0
     insomnia_auto_accept: bool = True
     insomnia_log_path: str | None = None
     last_thinking: str = ""
@@ -357,7 +360,7 @@ class AppState:
                 "insomnia_max_iterations": self.insomnia_max_iterations,
                 "insomnia_max_retries": self.insomnia_max_retries,
                 "insomnia_max_cost": self.insomnia_max_cost,
-                "insomnia_artifact_days": self.insomnia_artifact_days,
+                "insomnia_artifact_hours": self.insomnia_artifact_hours,
                 "insomnia_auto_accept": self.insomnia_auto_accept,
                 "insomnia_log_path": self.insomnia_log_path,
                 "guard_state": self.guard_state,
