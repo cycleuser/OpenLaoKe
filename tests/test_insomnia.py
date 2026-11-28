@@ -461,6 +461,7 @@ async def test_the_command_switches_the_mode_and_says_what_it_does(tmp_path) -> 
     assert "Insomnia mode on" in on.message
     assert "1000" in on.message and "step" in on.message
     assert "retried" in on.message
+    assert "approved by the run itself" in on.message
 
     off = await InsomniaCommand().execute(_ctx(state, "off"))
     assert state.insomnia_mode is False
@@ -495,7 +496,34 @@ async def test_the_status_lists_the_queue_and_the_limits(tmp_path) -> None:
     assert "Insomnia mode: off" in status.message
     assert "queue: 2 task(s)" in status.message
     assert "1. first" in status.message and "2. second" in status.message
+    assert "tool approval: approve tool calls itself" in status.message
     assert "/insomnia on" in status.message
+
+
+@pytest.mark.asyncio
+async def test_the_accept_switch_is_visible_and_controllable(tmp_path) -> None:
+    """The run's stand-in for the operator has to be both shown and switchable."""
+    from openlaoke.commands.base import InsomniaCommand
+
+    state = create_app_state(cwd=str(tmp_path))
+    command = InsomniaCommand()
+
+    shown = await command.execute(_ctx(state, "accept"))
+    assert "Unattended tool approval: on" in shown.message
+
+    off = await command.execute(_ctx(state, "accept off"))
+    assert state.insomnia_auto_accept is False
+    assert "deny" in off.message
+    assert "tool approval: deny calls that need approval" in (
+        await command.execute(_ctx(state, ""))
+    ).message
+
+    back_on = await command.execute(_ctx(state, "accept on"))
+    assert state.insomnia_auto_accept is True
+    assert "approve" in back_on.message
+
+    bad = await command.execute(_ctx(state, "accept maybe"))
+    assert bad.success is False
 
 
 @pytest.mark.asyncio
@@ -771,6 +799,118 @@ def test_a_task_that_gives_up_leaves_the_queue(tmp_path) -> None:
     log = (tmp_path / "run.log").read_text(encoding="utf-8")
     # The give-up did not abandon the rest of the queue.
     assert "task_failed" in log and "task_done" in log
+
+
+def test_a_killed_run_resumes_the_unfinished_task_from_the_snapshot(tmp_path) -> None:
+    """The claim the queue exists for: kill it, start again, lose nothing."""
+    from openlaoke.core.sessions import SessionManager
+
+    manager = SessionManager(session_dir=str(tmp_path / "sessions"))
+    r = make_repl([[text("first done")], [text("second done")]])
+    r.app_state.session_id = "crashtest"
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    manager.save_session(r.app_state)
+    enqueue(r.app_state, "first task")
+    enqueue(r.app_state, "second task")
+    manager.save_session(r.app_state)
+
+    original = r._insomnia_run_task
+    seen: list[str] = []
+
+    async def die_during_the_second(task):
+        seen.append(task["prompt"])
+        result = await original(task)
+        if len(seen) == 2:
+            raise SystemExit(137)  # the OOM killer, mid-turn
+        return result
+
+    r._insomnia_run_task = die_during_the_second
+    with pytest.raises(SystemExit):
+        asyncio.run(r._insomnia_drain())
+
+    reloaded = manager.load_session("crashtest")
+    assert reloaded is not None
+    assert reloaded.insomnia_mode is True
+    tasks = queue_tasks(reloaded)
+    assert [task["prompt"] for task in tasks] == ["second task"], "the unfinished task"
+    assert tasks[0]["attempts"] == 1
+
+    # Starting again finishes what the kill interrupted.
+    resumed = make_repl([[text("second done")]])
+    resumed.app_state = reloaded
+    assert asyncio.run(resumed._insomnia_drain()) == 1
+    assert queue_tasks(reloaded) == []
+
+
+def test_an_unattended_run_answers_the_permission_prompt_itself() -> None:
+    """Asking a question with nobody there is a hang, or a no to everything."""
+    from openlaoke.types.core_types import PermissionMode
+    from tests.test_repl_loop import FakeTool, tool_use
+
+    tool = FakeTool("Bash", readonly=False, result="ran the command")
+    r = make_repl([], tools=[tool])
+    r.app_state.permission_config.mode = PermissionMode.DEFAULT
+    r.app_state.auto_accept = False
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_auto_accept = True
+
+    async def never_ask(*_args, **_kwargs):
+        raise AssertionError("an unattended run must not wait for an answer")
+
+    r._ask_permission = never_ask
+
+    result = asyncio.run(r._execute_tool(tool_use("Bash", command="ls")))
+
+    assert result.is_error is False
+    assert tool.calls, "the tool should have run"
+    assert "approving Bash" in r.console.file.getvalue(), "the decision must be visible"
+
+
+def test_an_unattended_run_denies_instead_of_asking_when_told_to() -> None:
+    from openlaoke.types.core_types import PermissionMode
+    from tests.test_repl_loop import FakeTool, tool_use
+
+    tool = FakeTool("Bash", readonly=False, result="ran the command")
+    r = make_repl([], tools=[tool])
+    r.app_state.permission_config.mode = PermissionMode.DEFAULT
+    r.app_state.auto_accept = False
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_auto_accept = False
+
+    async def never_ask(*_args, **_kwargs):
+        raise AssertionError("an unattended run must not wait for an answer")
+
+    r._ask_permission = never_ask
+
+    result = asyncio.run(r._execute_tool(tool_use("Bash", command="ls")))
+
+    assert result.is_error is True
+    assert not tool.calls
+    assert "unattended" in result.content
+
+
+def test_an_attended_session_still_asks() -> None:
+    """The replacement must not leak into an ordinary session."""
+    from openlaoke.types.core_types import PermissionMode
+    from tests.test_repl_loop import FakeTool, tool_use
+
+    tool = FakeTool("Bash", readonly=False, result="ran the command")
+    r = make_repl([], tools=[tool])
+    r.app_state.permission_config.mode = PermissionMode.DEFAULT
+    r.app_state.auto_accept = False
+    asked: list[str] = []
+
+    async def remember(name, _input, _tool):
+        asked.append(name)
+        return True
+
+    r._ask_permission = remember
+
+    result = asyncio.run(r._execute_tool(tool_use("Bash", command="ls")))
+
+    assert asked == ["Bash"]
+    assert result.is_error is False
 
 
 def test_a_run_deletes_only_artifacts_its_history_no_longer_names(tmp_path, monkeypatch) -> None:

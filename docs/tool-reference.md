@@ -86,6 +86,35 @@ Optional tools (Batch, Browser) only appear when their config flag is on.
 | `/tree` | - | Show recorded session turns; /tree <n> rewinds to turn n |
 | `/trust` | - | Trust this project so its .openlaoke skills and prompts load (on/off/reset) |
 
+## Unattended mode (`/insomnia`)
+
+Off by default. When on, the REPL drains a task queue one turn after another
+without waiting for input, retries a failed turn with exponential backoff, and
+keeps the session bounded while it runs.
+
+| Command | What it does |
+| --- | --- |
+| `/insomnia on` / `off` | Switch the mode; the queue is kept either way |
+| `/insomnia add <task>` | Queue a task (turns the mode on) |
+| `/insomnia list` | Show the queue, with attempt counts |
+| `/insomnia clear` | Empty the queue |
+| `/insomnia log [lines]` | Show the run log (`~/.openlaoke/insomnia/<session>.log`) |
+| `/insomnia cost [usd\|off]` | Cost cap, checked after every iteration (default $10) |
+| `/insomnia hours [n\|off]` | Prune this session's tool output older than n hours
+  and no longer named by the live history (default 3) |
+| `/insomnia accept [on\|off]` | Whether the run approves tool calls that would
+  otherwise prompt (default on) |
+
+Two rules matter for a run that lasts all night. A task is only taken out of the
+queue once it has finished, so a crash, a reboot or a kill leaves the unfinished
+task in place for the next start. And a tool call that would ask the operator is
+never asked: with `accept` on the run approves it and says so once per tool, and
+with `accept` off it denies the call instead of blocking on a prompt nobody is
+there to answer.
+
+Ctrl+C during a run stops the run and returns the prompt; the current task stays
+queued.
+
 ## Notes
 
 - Every tool carries two extra arguments injected by the harness: `intent` (why the

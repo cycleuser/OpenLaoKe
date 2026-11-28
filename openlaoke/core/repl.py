@@ -1967,24 +1967,65 @@ class REPL:
             )
 
         if perm_result == PermissionResult.ASK and not self.app_state.auto_accept:
-            approved = await self._ask_permission(tool_use.name, tool_input, tool)
-            if not approved:
-                self.console.print(f"  [{self._c('error')}]Denied: {tool_use.name}[/]")
-                from openlaoke.core import audit
+            if getattr(self.app_state, "insomnia_mode", False):
+                # Nobody is at the keyboard to answer, so asking is either a
+                # terminal that waits forever or a pipe that answers "no" to
+                # everything and fails the task after its retries. The mode is
+                # "run without me", so it answers for the operator: visibly, once
+                # per tool, and only while the session allows it.
+                if not getattr(self.app_state, "insomnia_auto_accept", True):
+                    from openlaoke.core import audit
 
-                audit.record(
-                    self.app_state,
-                    "tool.denied",
-                    tool=tool_use.name,
-                    call_id=tool_use.id,
-                    reason="user",
-                    args=audit.summarize_args(tool_input),
-                )
-                return ToolResultBlock(
-                    tool_use_id=tool_use.id,
-                    content=f"User denied {tool_use.name}",
-                    is_error=True,
-                )
+                    audit.record(
+                        self.app_state,
+                        "tool.denied",
+                        tool=tool_use.name,
+                        call_id=tool_use.id,
+                        reason="unattended",
+                        args=audit.summarize_args(tool_input),
+                    )
+                    self.console.print(
+                        f"  [{self._c('error')}]Denied: {tool_use.name}[/] "
+                        f"[{self._c('muted')}](needs approval, run is unattended)[/]"
+                    )
+                    return ToolResultBlock(
+                        tool_use_id=tool_use.id,
+                        content=(
+                            f"{tool_use.name} requires approval and this run is unattended, "
+                            "so it was denied. '/insomnia accept on' lets an unattended run "
+                            "approve tool calls itself."
+                        ),
+                        is_error=True,
+                    )
+                approved_so_far = getattr(self, "_insomnia_auto_approved", None)
+                if approved_so_far is None:
+                    approved_so_far = set()
+                    self._insomnia_auto_approved = approved_so_far
+                if tool_use.name not in approved_so_far:
+                    approved_so_far.add(tool_use.name)
+                    self.console.print(
+                        f"  [{self._c('muted')}]insomnia: approving {tool_use.name} without "
+                        "asking ('/insomnia accept off' stops this)[/]"
+                    )
+            else:
+                approved = await self._ask_permission(tool_use.name, tool_input, tool)
+                if not approved:
+                    self.console.print(f"  [{self._c('error')}]Denied: {tool_use.name}[/]")
+                    from openlaoke.core import audit
+
+                    audit.record(
+                        self.app_state,
+                        "tool.denied",
+                        tool=tool_use.name,
+                        call_id=tool_use.id,
+                        reason="user",
+                        args=audit.summarize_args(tool_input),
+                    )
+                    return ToolResultBlock(
+                        tool_use_id=tool_use.id,
+                        content=f"User denied {tool_use.name}",
+                        is_error=True,
+                    )
 
         tool_icon = "\u2219" if not self.app_state.insomnia_mode else "\u2615"
         intent_label = str(tool_input.get("intent") or "").strip()

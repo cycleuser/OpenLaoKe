@@ -1413,6 +1413,11 @@ class InsomniaCommand(SlashCommand):
                     if hours
                     else "artifacts kept"
                 )
+                approve_text = (
+                    "tool calls that would ask for approval are approved by the run itself"
+                    if getattr(state, "insomnia_auto_accept", True)
+                    else "tool calls that need approval are denied"
+                )
                 return CommandResult(
                     message=(
                         "Insomnia mode on. Queued tasks run one after another without "
@@ -1423,6 +1428,7 @@ class InsomniaCommand(SlashCommand):
                         "trimmed at turn boundaries so a long run stays bounded.\n"
                         f"Limits: cost cap {cap_text}, {retention_text}. "
                         "'/insomnia cost off' and '/insomnia hours off' lift them.\n"
+                        f"Approval: {approve_text} ('/insomnia accept on|off').\n"
                         f"Log: {log_path_for(state)}\n"
                         "Add work with '/insomnia add <task>'."
                     )
@@ -1548,6 +1554,38 @@ class InsomniaCommand(SlashCommand):
                 )
             )
 
+        if action in ("accept", "approve"):
+            if len(args) < 2:
+                current = "on" if getattr(state, "insomnia_auto_accept", True) else "off"
+                return CommandResult(
+                    message=(
+                        f"Unattended tool approval: {current}\n"
+                        "With it on, a tool that would ask the operator is approved by the run "
+                        "itself (announced once per tool). With it off such a call is denied "
+                        "instead of waiting for an answer nobody is there to give.\n"
+                        "Usage: /insomnia accept on | /insomnia accept off"
+                    )
+                )
+            value = args[1].lower()
+            if value in ("on", "yes", "true", "1"):
+                state.insomnia_auto_accept = True
+            elif value in ("off", "no", "false", "0"):
+                state.insomnia_auto_accept = False
+            else:
+                return CommandResult(
+                    success=False, message="Usage: /insomnia accept on | /insomnia accept off"
+                )
+            state._persist()
+            if state.insomnia_auto_accept:
+                return CommandResult(
+                    message="An unattended run will approve tool calls itself, announcing each "
+                    "tool the first time."
+                )
+            return CommandResult(
+                message="An unattended run will deny any tool call that needs approval instead "
+                "of waiting for one."
+            )
+
         tasks = queue_tasks(state)
         if action and action not in ("status", "list"):
             return CommandResult(
@@ -1560,7 +1598,8 @@ class InsomniaCommand(SlashCommand):
                     "  clear   empty the queue\n"
                     "  log     show the run log\n"
                     "  cost    show or set the cost cap ('off' = unlimited)\n"
-                    "  hours   show or set artifact retention ('off' = never prune)"
+                    "  hours   show or set artifact retention ('off' = never prune)\n"
+                    "  accept  approve tool calls the run would otherwise ask about"
                 ),
             )
 
@@ -1569,6 +1608,11 @@ class InsomniaCommand(SlashCommand):
         cap_text = f"${cap:.2f} (spent ${spent_usd(state):.2f})" if cap > 0 else "unlimited"
         hours = artifact_retention_hours(state)
         retention_text = f"prune unreferenced older than {hours:g}h" if hours else "never prune"
+        accept_text = (
+            "approve tool calls itself"
+            if getattr(state, "insomnia_auto_accept", True)
+            else "deny calls that need approval"
+        )
         lines = [
             f"Insomnia mode: {state_text}",
             f"  queue: {len(tasks)} task(s)",
@@ -1576,6 +1620,7 @@ class InsomniaCommand(SlashCommand):
             f"  retries per task: {int(getattr(state, 'insomnia_max_retries', 0) or RETRY_LIMIT)}",
             f"  cost cap: {cap_text}",
             f"  artifacts: {retention_text}",
+            f"  tool approval: {accept_text}",
             f"  log: {log_path_for(state)}",
         ]
         for index, task in enumerate(tasks[:10], start=1):
