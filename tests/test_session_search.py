@@ -272,3 +272,27 @@ def test_a_message_with_no_text_is_not_indexed() -> None:
     hits = search_conversation("real", messages)
 
     assert [hit.index for hit in hits] == [2]
+
+
+def test_an_export_file_is_not_searched_twice(tmp_path) -> None:
+    _write_session(
+        tmp_path,
+        "s1",
+        str(tmp_path),
+        [_msg("user", "we should cache the token budget per session")],
+    )
+    # /export used to write this beside the snapshots: same id, same messages.
+    (tmp_path / "session_s1.json").write_text(
+        json.dumps(
+            {
+                "session_id": "s1",
+                "exported_at": "now",
+                "messages": [_msg("user", "we should cache the token budget per session")],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    hits = search_sessions("token budget", sessions_dir=str(tmp_path))
+
+    assert len(hits) == 1, [hit.session_id for hit in hits]

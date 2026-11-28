@@ -39,7 +39,11 @@ class Hit:
     score: float = 0.0
 
     def line(self) -> str:
-        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(self.timestamp)) if self.timestamp else "?"
+        when = (
+            time.strftime("%Y-%m-%d %H:%M", time.localtime(self.timestamp))
+            if self.timestamp
+            else "?"
+        )
         snippet = " ".join(self.text.split())[:240]
         return f"{self.session_id} #{self.index} {self.role} {when}\n    {snippet}"
 
@@ -86,7 +90,9 @@ def _idf(total: int, document_frequency: int) -> float:
 
 def _messages_of(payload: dict[str, Any]) -> list[dict[str, Any]]:
     messages = payload.get("messages")
-    return [item for item in messages if isinstance(item, dict)] if isinstance(messages, list) else []
+    return (
+        [item for item in messages if isinstance(item, dict)] if isinstance(messages, list) else []
+    )
 
 
 def _payloads(sessions_dir: str) -> list[dict[str, Any]]:
@@ -115,6 +121,12 @@ def _payloads(sessions_dir: str) -> list[dict[str, Any]]:
             payload = _journal_payload(sessions_dir, stem)
             if payload is not None:
                 payloads.append(payload)
+            continue
+        if isinstance(payload, dict) and "exported_at" in payload:
+            # An /export JSON written next to the snapshots (older builds put it
+            # there) is the same conversation under the same id; searching it
+            # would return every hit twice and name a session /sessions does not
+            # list.
             continue
         payload.setdefault("session_id", stem)
         payload["_path"] = path

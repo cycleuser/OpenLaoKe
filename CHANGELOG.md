@@ -181,6 +181,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **`/search` counted an exported session twice** (`core/session_index.py`):
+  `list_sessions()` learned to skip the `exported_at` files that older builds
+  wrote into the snapshot directory, but the full-text index still read them, so
+  every hit in such a session appeared twice and one of the two named a session
+  `/sessions` does not show.
 - **Reading a pipe or a device froze the whole agent** (`tools/read_tool.py`,
   `tools/grep_tool.py`, `utils/symbols.py`): `Read` opened anything that was not
   a directory, and `Grep` opened anything `os.walk` called a file. Opening a
