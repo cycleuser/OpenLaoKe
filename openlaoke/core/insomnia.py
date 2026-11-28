@@ -5,8 +5,9 @@ a step budget of 25-80, and any provider error ending the turn. A run that is
 supposed to last for hours or days breaks every one of those assumptions, so
 insomnia mode replaces them:
 
-* the queue drains without asking for input (``next_task``), and the step budget
-  comes from ``insomnia_max_iterations`` instead of the harness mode;
+* the queue drains without asking for input (``start_task``/``finish_task``), a
+  task stays queued until it actually finished, and the step budget comes from
+  ``insomnia_max_iterations`` instead of the harness mode;
 * a failed turn is retried with exponential backoff rather than ending the run
   (``backoff_seconds``), and the failure is written down;
 * the live history is trimmed at turn boundaries once it passes a limit
@@ -266,25 +267,55 @@ def enqueue(state: Any, prompt: str) -> dict[str, Any] | None:
     return task
 
 
-def next_task(state: Any) -> dict[str, Any] | None:
-    """Pop the next task, leaving the queue on disk without it."""
+def start_task(state: Any) -> dict[str, Any] | None:
+    """Claim the head of the queue **without removing it**.
+
+    The task stays in the queue until it is finished. Taking it out first means a
+    crash, a reboot or an OOM kill between the pop and the completion silently
+    loses the task, and losing work is the one thing an unattended run must not
+    do quietly. At-least-once is the right promise here: an interrupted task runs
+    again, and the attempt counter says how many times it has started.
+    """
     tasks = queue_tasks(state)
     if not tasks:
         state.insomnia_task_queue = []
         return None
-    task = tasks.pop(0)
+    task = tasks[0]
     task["attempts"] = int(task.get("attempts") or 0) + 1
+    tasks[0] = task
     state.insomnia_task_queue = tasks
     state._persist()
-    return task
+    return dict(task)
 
 
-def requeue(state: Any, task: dict[str, Any], error: str = "") -> None:
-    """Put a failed task back in front of the queue for a later attempt."""
-    entry = normalize_task(task) or dict(task)
-    entry["attempts"] = int(task.get("attempts") or 0)
-    entry["last_error"] = error[:400]
-    state.insomnia_task_queue = [entry] + queue_tasks(state)
+def finish_task(state: Any, task: dict[str, Any]) -> bool:
+    """Remove the finished task from the queue; returns whether it was there."""
+    tasks = queue_tasks(state)
+    prompt = str(task.get("prompt") or "")
+    for index, item in enumerate(tasks):
+        if item["prompt"] == prompt:
+            tasks.pop(index)
+            state.insomnia_task_queue = tasks
+            state._persist()
+            return True
+    state.insomnia_task_queue = tasks
+    return False
+
+
+def note_task_error(state: Any, task: dict[str, Any], error: str) -> None:
+    """Record why a task was paused, on the task itself.
+
+    The attempt count comes from ``task`` too, so a caller that refunded an
+    attempt (the run stopped before the task could start) is not undone here.
+    """
+    tasks = queue_tasks(state)
+    prompt = str(task.get("prompt") or "")
+    for item in tasks:
+        if item["prompt"] == prompt:
+            item["attempts"] = int(task.get("attempts") or 0)
+            item["last_error"] = error[:400]
+            break
+    state.insomnia_task_queue = tasks
     state._persist()
 
 

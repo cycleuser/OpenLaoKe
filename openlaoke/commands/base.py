@@ -1362,6 +1362,9 @@ class ArtifactsCommand(SlashCommand):
         ]
         for name, count, size in inventory[:20]:
             lines.append(f"  {name:<24} {count:>4} file(s)  {size / 1024:>8.1f} KB")
+        if len(inventory) > 20:
+            # A list that silently stops at 20 looks like "that is all there is".
+            lines.append(f"  … and {len(inventory) - 20} more session(s)")
         lines.append("('/artifacts prune 30' removes files older than 30 days)")
         return CommandResult(message="\n".join(lines))
 

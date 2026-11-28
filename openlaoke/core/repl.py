@@ -179,6 +179,13 @@ class REPL:
                 self._interrupt_requested = True
                 self._agent_task.cancel()
                 return
+            if signum == signal.SIGINT and getattr(self, "_insomnia_draining", False):
+                # An unattended run spends most of its wall clock *between*
+                # turns, waiting for a retry or for the schedule. Exiting the
+                # process there would skip the shutdown path for a run that was
+                # only asked to pause, so stop the run and hand back the prompt.
+                self._interrupt_requested = True
+                return
             _cleanup()
             os._exit(0)
 
@@ -685,7 +692,13 @@ class REPL:
         level instead of one stack frame per task: a queue of a thousand tasks
         would otherwise end in a RecursionError long before it ended in work.
         """
-        from openlaoke.core.insomnia import HISTORY_LIMIT, next_task, requeue, trim_history
+        from openlaoke.core.insomnia import (
+            HISTORY_LIMIT,
+            finish_task,
+            note_task_error,
+            start_task,
+            trim_history,
+        )
 
         if getattr(self, "_insomnia_draining", False):
             return 0
@@ -701,7 +714,7 @@ class REPL:
             if started_with:
                 log.append("drain_start", queued=started_with)
             while self._running and not self._interrupt_requested:
-                task = next_task(self.app_state)
+                task = start_task(self.app_state)
                 if task is None:
                     # The scheduler is the other source of unattended work: a
                     # reminder that fires at 03:00 has to start a turn, not wait
@@ -710,10 +723,10 @@ class REPL:
                     # a typed message takes.
                     if self._input_queue:
                         notice = str(self._input_queue.pop(0))
-                        task = {"prompt": notice, "attempts": 1}
+                        task = {"prompt": notice, "attempts": 1, "transient": True}
                         log.append("scheduled_wake", prompt=notice[:200])
                     elif self._insomnia_should_idle():
-                        await asyncio.sleep(30.0)
+                        await self._insomnia_interruptible_sleep(30.0)
                         continue
                     else:
                         break
@@ -722,19 +735,31 @@ class REPL:
                     # The task never ran, so put it back without spending one of
                     # its attempts: the money ran out, not the task's patience.
                     task["attempts"] = max(0, int(task.get("attempts") or 1) - 1)
-                    requeue(self.app_state, task, error="cost limit")
+                    note_task_error(self.app_state, task, "cost limit")
                     break
                 log.append(
                     "task_start", index=completed + 1, attempt=task.get("attempts"), prompt=head
                 )
                 ok, error = await self._insomnia_run_task(task)
+                transient = bool(task.get("transient"))
+                if self._interrupt_requested:
+                    # Someone asked the run to stop. The task did not finish, so
+                    # it stays queued instead of being counted as done or failed.
+                    log.append("task_interrupted", index=completed + 1, prompt=head)
+                    break
                 if self._insomnia_budget_hit:
                     # The turn was cut mid-flight by the budget. The work is
-                    # incomplete, so the task goes back in the queue instead of
-                    # being counted as done or as a failure.
+                    # incomplete, so the task stays queued (it has not been
+                    # removed yet) instead of being counted as done or failed.
                     log.append("task_paused", index=completed + 1, prompt=head)
-                    requeue(self.app_state, task, error="cost limit")
+                    if not transient:
+                        note_task_error(self.app_state, task, "cost limit")
                     break
+                if not transient:
+                    # Only now is the queue rid of it. Anything that kills the
+                    # process before this line leaves the task in place for the
+                    # next run, which is the whole point of the queue.
+                    finish_task(self.app_state, task)
                 if ok:
                     completed += 1
                     log.append("task_done", index=completed, prompt=head)
@@ -751,6 +776,8 @@ class REPL:
                 self._insomnia_prune_artifacts()
         finally:
             self._insomnia_draining = False
+        # The interrupt was aimed at the run; the session goes on.
+        self._interrupt_requested = False
 
         if started_with:
             log.append("drain_end", completed=completed)
@@ -843,6 +870,25 @@ class REPL:
                 older_than_hours=hours,
             )
 
+    async def _insomnia_interruptible_sleep(self, seconds: float) -> bool:
+        """Sleep, but stop early when the run is asked to stop.
+
+        A retry backoff can be ten minutes and the idle wait is indefinite.
+        Sleeping that in one call would swallow a Ctrl+C until it expired, which
+        for a mode whose whole point is running unattended is the difference
+        between stopping and not stopping.
+        """
+        # Counted down by what was asked for, not by the clock: five one-second
+        # slices always end, whatever ``asyncio.sleep`` is doing underneath.
+        remaining = max(0.0, seconds)
+        while remaining > 0:
+            if self._interrupt_requested or not self._running:
+                return False
+            step = min(1.0, remaining)
+            await asyncio.sleep(step)
+            remaining -= step
+        return not self._interrupt_requested
+
     async def _insomnia_run_task(self, task: dict[str, Any]) -> tuple[bool, str]:
         """Run one queued task, retrying a failed turn instead of giving up.
 
@@ -871,7 +917,8 @@ class REPL:
                 f"  [{self._c('warning')}]insomnia: {error[:100]} (retry "
                 f"{attempt}/{limit} in {delay:.0f}s)[/]"
             )
-            await asyncio.sleep(delay)
+            if not await self._insomnia_interruptible_sleep(delay):
+                return True, ""
             attempt += 1
 
     def _collect_artifacts(self) -> dict[str, Any]:

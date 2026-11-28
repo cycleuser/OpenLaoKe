@@ -335,11 +335,11 @@ def test_an_interrupted_state_save_keeps_the_previous_copy(tmp_path, monkeypatch
     path = str(tmp_path / "subagent_1.json")
     agent_runner._save_subagent_state(path, "first", [], [], 1, "running")
 
-    def half_then_fail(payload, handle, **kwargs):
-        handle.write('{"prompt": "half')
+    def half_then_fail(source, destination):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(agent_runner.json, "dump", half_then_fail)
+    # The disk fills up just as the new copy would replace the good one.
+    monkeypatch.setattr("openlaoke.utils.atomic_write.os.replace", half_then_fail)
     agent_runner._save_subagent_state(path, "second", [], [], 2, "running")
 
     loaded = agent_runner._load_subagent_state(path)

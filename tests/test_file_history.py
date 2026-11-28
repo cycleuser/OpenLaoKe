@@ -183,12 +183,12 @@ def test_a_failed_write_keeps_the_versions_already_recorded(work_file) -> None:
     save_snapshot(work_file, "v1 content")
     store = Path(get_history_path(os.path.abspath(work_file)))
 
-    def half_then_fail(payload, handle, **kwargs):
-        handle.write('{"path": "half')
+    # The disk fills up at the moment the new file would replace the old one.
+    def half_then_fail(source, destination):
         raise OSError(28, "No space left on device")
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(fh.json, "dump", half_then_fail)
+        patch.setattr("openlaoke.utils.atomic_write.os.replace", half_then_fail)
         assert save_snapshot(work_file, "v2 content") is None
 
     # The half-written temporary file is gone and the earlier version survived.

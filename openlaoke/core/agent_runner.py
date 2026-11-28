@@ -14,7 +14,6 @@ import json
 import logging
 import os
 import time
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
@@ -56,17 +55,9 @@ def _save_subagent_state(
         # /agent-resume can read. Truncating it in place means a crash in the
         # middle of a dump leaves JSON that will not parse, and the sub-agent
         # becomes unresumable, so write beside it and rename.
-        temporary = f"{path}.{os.getpid()}.tmp"
-        try:
-            with open(temporary, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, default=str)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temporary, path)
-        finally:
-            if os.path.exists(temporary):
-                with suppress(OSError):
-                    os.remove(temporary)
+        from openlaoke.utils.atomic_write import write_json_atomic
+
+        write_json_atomic(path, state, default=str)
     except Exception as e:
         logger.warning("Failed to save agent runner state: %s", e)
 

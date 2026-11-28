@@ -168,11 +168,9 @@ def _read_json(path: str, default: Any) -> Any:
 
 
 def _write_json(path: str, payload: Any) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    from openlaoke.utils.atomic_write import write_json_atomic
+
+    write_json_atomic(path, payload, indent=1)
 
 
 def _merge_consecutive(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

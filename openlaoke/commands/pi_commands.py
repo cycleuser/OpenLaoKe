@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from openlaoke.commands.base import CommandContext, CommandResult, SlashCommand
+from openlaoke.utils.atomic_write import write_json_atomic
 
 if TYPE_CHECKING:
     from openlaoke.core.state import AppState
@@ -37,8 +38,9 @@ def _read_json(path: Path, default: Any) -> Any:
 
 
 def _write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Session metadata is rewritten on every rename/share; a truncated one reads
+    # back as the empty default, which loses the name and the session pointer.
+    write_json_atomic(str(path), data)
 
 
 def _session_name(session_id: str) -> str:

@@ -7,9 +7,10 @@ import json
 import logging
 import os
 import time
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
+
+from openlaoke.utils.atomic_write import write_json_atomic
 
 MAX_SNAPSHOTS = 100
 HISTORY_DIR = "~/.openlaoke/file_history"
@@ -119,19 +120,7 @@ def _write_history(history_path: str, payload: dict[str, Any]) -> None:
     bad moment erases every version of every earlier edit. Writing beside it and
     renaming leaves the old file intact until the new one is complete.
     """
-    directory = os.path.dirname(history_path) or "."
-    os.makedirs(directory, exist_ok=True)
-    temporary = f"{history_path}.{os.getpid()}.tmp"
-    try:
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, history_path)
-    finally:
-        if os.path.exists(temporary):
-            with suppress(OSError):
-                os.remove(temporary)
+    write_json_atomic(history_path, payload)
 
 
 def save_snapshot(

@@ -339,6 +339,28 @@ def test_the_artifacts_command_says_when_nothing_is_stored(tmp_path, monkeypatch
     assert "No stored tool output" in result.message
 
 
+def test_the_artifacts_listing_does_not_silently_stop_at_twenty(tmp_path, monkeypatch):
+    """Twenty rows look like "that is all there is"; count the rest out loud."""
+    import asyncio
+
+    from openlaoke.commands.base import ArtifactsCommand
+    from openlaoke.core.state import AppState
+
+    monkeypatch.setenv("OPENLAOKE_ARTIFACT_DIR", str(tmp_path / "art"))
+    for index in range(23):
+        ToolOutputStore(None, f"sess-{index:02d}").store("Bash", "body")
+
+    class Ctx:
+        app_state = AppState(session_id="sess-00", cwd=str(tmp_path))
+        args = ""
+
+    listing = asyncio.run(ArtifactsCommand().execute(Ctx())).message
+
+    assert "23 file(s)" in listing
+    assert listing.count("file(s)  ") == 20, "the listing itself stays bounded"
+    assert "… and 3 more session(s)" in listing
+
+
 def test_the_inventory_skips_stray_files_and_unreadable_entries(tmp_path, monkeypatch):
     from openlaoke.core import tool_output_store as store_module
     from openlaoke.core.tool_output_store import artifact_inventory

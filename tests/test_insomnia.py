@@ -26,12 +26,13 @@ from openlaoke.core.insomnia import (
     InsomniaLog,
     backoff_seconds,
     enqueue,
+    finish_task,
     log_path_for,
-    next_task,
     normalize_task,
+    note_task_error,
     plan_trim,
     queue_tasks,
-    requeue,
+    start_task,
     trim_history,
 )
 from openlaoke.core.state import create_app_state
@@ -63,29 +64,47 @@ def test_a_string_and_a_dict_are_the_same_task(tmp_path) -> None:
     assert tasks[1]["attempts"] == 2
 
 
-def test_next_task_pops_and_counts_the_attempt(tmp_path) -> None:
+def test_starting_a_task_counts_the_attempt_but_keeps_it_queued(tmp_path) -> None:
     state = create_app_state(cwd=str(tmp_path))
     enqueue(state, "first")
     enqueue(state, "second")
 
-    task = next_task(state)
+    task = start_task(state)
 
     assert task is not None and task["prompt"] == "first" and task["attempts"] == 1
-    assert [item["prompt"] for item in queue_tasks(state)] == ["second"]
-    assert next_task(state) is not None
-    assert next_task(state) is None
+    assert [item["prompt"] for item in queue_tasks(state)] == ["first", "second"]
+    assert queue_tasks(state)[0]["attempts"] == 1
+    # Starting twice is what a resumed run looks like.
+    assert start_task(state)["attempts"] == 2
 
 
-def test_requeue_puts_the_task_back_at_the_front(tmp_path) -> None:
+def test_finishing_a_task_takes_only_that_one_out(tmp_path) -> None:
     state = create_app_state(cwd=str(tmp_path))
-    enqueue(state, "later")
+    enqueue(state, "first")
+    enqueue(state, "second")
+    task = start_task(state)
+    assert task is not None
 
-    requeue(state, {"prompt": "earlier", "attempts": 3}, error="rate limited")
+    assert finish_task(state, task) is True
 
     tasks = queue_tasks(state)
-    assert [task["prompt"] for task in tasks] == ["earlier", "later"]
-    assert tasks[0]["attempts"] == 3
-    assert tasks[0]["last_error"] == "rate limited"
+    assert [item["prompt"] for item in tasks] == ["second"]
+    # Finishing the same task twice must not eat the next one.
+    assert finish_task(state, task) is False
+    assert [item["prompt"] for item in queue_tasks(state)] == ["second"]
+
+
+def test_a_paused_task_keeps_its_last_error(tmp_path) -> None:
+    state = create_app_state(cwd=str(tmp_path))
+    enqueue(state, "task")
+    task = start_task(state)
+    assert task is not None
+
+    note_task_error(state, {**task, "attempts": 0}, "cost limit")
+
+    queued = queue_tasks(state)[0]
+    assert queued["attempts"] == 0, "the refunded attempt must reach the queue"
+    assert queued["last_error"] == "cost limit"
 
 
 def test_backoff_grows_and_is_capped() -> None:
@@ -158,7 +177,9 @@ def test_a_failed_turn_is_retried_instead_of_ending_the_shift(tmp_path, monkeypa
     completed = asyncio.run(r._insomnia_drain())
 
     assert completed == 1
-    assert sleeps == [15.0]
+    # The backoff is taken in slices so an interrupt is not swallowed, but it
+    # still adds up to the first step of the schedule.
+    assert sum(sleeps) == 15.0
     assert r.api.turn_index == 2
     log = (tmp_path / "run.log").read_text(encoding="utf-8").splitlines()
     events = [json.loads(line)["event"] for line in log]
@@ -418,7 +439,7 @@ def test_normalize_task_refuses_junk() -> None:
 def test_an_empty_queue_is_not_an_error(tmp_path) -> None:
     state = create_app_state(cwd=str(tmp_path))
     state.insomnia_task_queue = []
-    assert next_task(state) is None
+    assert start_task(state) is None
     assert time.time() > 0  # the queue code has no clock dependency to trip over
 
 
@@ -542,12 +563,63 @@ def test_a_scheduled_reminder_wakes_the_run(tmp_path, monkeypatch) -> None:
     completed = asyncio.run(r._insomnia_drain())
 
     assert completed == 1
-    # First wait: the notice arrives and its turn runs. Second wait: the drain
-    # goes back to watching the schedule, and the fake ends it there.
-    assert sleeps == [30.0, 30.0]
+    # The wait is taken in short slices so a Ctrl+C is not swallowed; it still
+    # adds up to the idle interval rather than spinning.
+    assert sleeps and all(delay <= 1.0 for delay in sleeps)
+    assert sum(sleeps) <= 30.0
     assert r.api.turn_index == 1
     log = (tmp_path / "run.log").read_text(encoding="utf-8")
     assert "scheduled_wake" in log
+
+
+def test_an_interrupted_task_stays_queued_and_the_session_survives(tmp_path) -> None:
+    """Ctrl+C means "stop the run", not "throw away the task" or "kill the app"."""
+    r = make_repl([[text("half done")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    enqueue(r.app_state, "the long one")
+    enqueue(r.app_state, "the next one")
+    original = r._insomnia_run_task
+
+    async def interrupted(task):
+        result = await original(task)
+        # What the SIGINT handler plus the cancelled turn leave behind.
+        r._interrupt_requested = True
+        return result
+
+    r._insomnia_run_task = interrupted
+
+    completed = asyncio.run(r._insomnia_drain())
+
+    assert completed == 0
+    assert [task["prompt"] for task in queue_tasks(r.app_state)] == [
+        "the long one",
+        "the next one",
+    ], "an interrupted task must not be dropped"
+    assert r._interrupt_requested is False, "the session must be usable afterwards"
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "task_interrupted" in log and "task_done" not in log
+
+
+def test_the_idle_wait_ends_when_the_interrupt_arrives(tmp_path) -> None:
+    r = make_repl([[text("never")]])
+    r.app_state.insomnia_mode = True
+
+    async def main():
+        async def interrupt_soon():
+            await asyncio.sleep(0.05)
+            r._interrupt_requested = True
+
+        started = time.monotonic()
+        waiter = asyncio.ensure_future(interrupt_soon())
+        completed = await r._insomnia_interruptible_sleep(30.0)
+        await waiter
+        return completed, time.monotonic() - started
+
+    completed, elapsed = asyncio.run(main())
+
+    assert completed is False
+    assert elapsed < 2.0, f"a 30s wait took {elapsed:.1f}s to notice the interrupt"
 
 
 def test_a_run_does_not_idle_without_a_running_scheduler(tmp_path, monkeypatch) -> None:
@@ -651,6 +723,54 @@ def test_a_task_cut_off_mid_turn_is_requeued_not_counted(tmp_path) -> None:
     assert [task["prompt"] for task in queue_tasks(r.app_state)] == ["long task"]
     log = (tmp_path / "run.log").read_text(encoding="utf-8")
     assert "task_paused" in log
+
+
+def test_a_task_killed_mid_run_is_still_queued_for_the_next_start(tmp_path) -> None:
+    """The queue's job is to survive the process, so a kill must not eat a task."""
+    r = make_repl([[text("never happens")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    enqueue(r.app_state, "the only task")
+
+    async def killed(task):
+        raise KeyboardInterrupt  # what SIGINT during a turn actually looks like
+
+    r._insomnia_run_task = killed
+
+    with pytest.raises(KeyboardInterrupt):
+        asyncio.run(r._insomnia_drain())
+
+    tasks = queue_tasks(r.app_state)
+    assert [task["prompt"] for task in tasks] == ["the only task"]
+    assert tasks[0]["attempts"] == 1
+    # And the drain guard is not left set, so the session is still usable.
+    assert r._insomnia_draining is False
+
+
+def test_a_task_that_gives_up_leaves_the_queue(tmp_path) -> None:
+    r = make_repl([[text("done")]])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r.app_state.insomnia_max_retries = 1
+    enqueue(r.app_state, "doomed")
+    enqueue(r.app_state, "next in line")
+
+    original = r._insomnia_run_task
+
+    async def run(task):
+        if task["prompt"] == "doomed":
+            return False, "permanent failure"
+        return await original(task)
+
+    r._insomnia_run_task = run
+
+    asyncio.run(r._insomnia_drain())
+
+    tasks = queue_tasks(r.app_state)
+    assert tasks == [], "a task that gave up must not stay in the queue"
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    # The give-up did not abandon the rest of the queue.
+    assert "task_failed" in log and "task_done" in log
 
 
 def test_a_run_deletes_only_artifacts_its_history_no_longer_names(tmp_path, monkeypatch) -> None:
