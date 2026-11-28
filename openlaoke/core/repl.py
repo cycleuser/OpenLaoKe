@@ -1482,6 +1482,17 @@ class REPL:
                 and msg.tool_use_id
             ):
                 messages.append(tool_result_message(msg.tool_use_id, msg.content))
+            elif (
+                msg.role == MessageRole.SYSTEM
+                and isinstance(msg, SystemMessage)
+                and msg.content
+            ):
+                # Harness notes that are not tool output: the elision digest a
+                # trim leaves behind, and the summary /compact writes. They were
+                # built for the model and then dropped here, so it was never told
+                # that part of the conversation had gone. A user turn is the only
+                # place every provider accepts text mid-list.
+                messages.append({"role": "user", "content": msg.content})
         return messages
 
     async def _inject_runtime_context(

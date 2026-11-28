@@ -331,6 +331,22 @@ def test_the_trimmed_history_has_no_dangling_tool_call() -> None:
     assert kept[2].role == MessageRole.USER
 
 
+def test_the_note_about_elided_history_actually_reaches_the_model() -> None:
+    """A trim note the provider never sees is a lie told to nobody."""
+    r = make_repl([])
+    r.app_state.messages = []
+    for index in range(30):
+        r.app_state.messages.append(UserMessage(role=MessageRole.USER, content=f"task {index}"))
+
+    dropped = trim_history(r.app_state, 6)
+    assert dropped > 0
+
+    request = r._history_to_messages()
+    contents = [str(message.get("content")) for message in request]
+    assert any("no longer in the live context" in text for text in contents), contents
+    assert all(message["role"] in ("user", "assistant", "tool") for message in request)
+
+
 def test_a_short_history_is_left_alone() -> None:
     messages = [UserMessage(role=MessageRole.USER, content="only")]
     kept, dropped = plan_trim(messages, keep=10)

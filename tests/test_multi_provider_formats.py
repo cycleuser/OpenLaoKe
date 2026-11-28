@@ -1047,3 +1047,37 @@ def test_cohere_tool_conversion_accepts_both_shapes() -> None:
     )
 
     assert [tool["function"]["name"] for tool in converted] == ["a", "b"]
+
+
+def test_a_prune_digest_is_delivered_instead_of_dropped() -> None:
+    """The digest says what was elided; skipping it hid that from the model."""
+    client = client_for(provider(ProviderType.ANTHROPIC))
+
+    converted = client._convert_to_anthropic_format(
+        [
+            {"role": "user", "content": "start"},
+            {
+                "role": "system",
+                "content": "1200 tokens of assistant prose elided",
+                "subtype": "compact",
+            },
+            {"role": "user", "content": "carry on"},
+        ]
+    )
+
+    texts = [message["content"] for message in converted]
+    assert any("elided" in str(text) for text in texts), texts
+    assert all(message["role"] == "user" for message in converted)
+
+
+def test_a_plain_system_message_is_still_not_a_chat_turn() -> None:
+    client = client_for(provider(ProviderType.ANTHROPIC))
+
+    converted = client._convert_to_anthropic_format(
+        [
+            {"role": "system", "content": "session context"},
+            {"role": "user", "content": "hi"},
+        ]
+    )
+
+    assert converted == [{"role": "user", "content": "hi"}]

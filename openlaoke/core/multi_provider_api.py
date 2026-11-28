@@ -511,7 +511,13 @@ class MultiProviderClient:
             content = msg.get("content", "")
 
             # Skip system role and system_injected messages — those travel
-            # separately via the "system" body parameter or [session context]
+            # separately via the "system" body parameter or [session context].
+            # A prune digest is the exception: it is context the model is
+            # supposed to read, and skipping it meant the model was never told
+            # that the middle of the conversation had been elided.
+            if role == "system" and msg.get("subtype") == "compact":
+                result.append({"role": "user", "content": content})
+                continue
             if role == "system" or msg.get("system_injected"):
                 continue
 
