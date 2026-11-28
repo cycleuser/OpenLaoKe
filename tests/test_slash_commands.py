@@ -56,9 +56,7 @@ def ctx(state, args: str = "") -> CommandContext:
 @pytest.fixture(autouse=True)
 def isolated_file_history(tmp_path, monkeypatch):
     """Keep the snapshot store out of ~/.openlaoke."""
-    monkeypatch.setattr(
-        "openlaoke.utils.file_history.HISTORY_DIR", str(tmp_path / "file_history")
-    )
+    monkeypatch.setattr("openlaoke.utils.file_history.HISTORY_DIR", str(tmp_path / "file_history"))
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +72,7 @@ def isolated_memory(tmp_path, monkeypatch):
 def isolated_config(tmp_path, monkeypatch):
     """Keep config writes out of the real ~/.openlaoke."""
     saved: list[object] = []
+
     class Cfg:
         def __init__(self) -> None:
             self.mode = "balanced"
@@ -89,9 +88,7 @@ def isolated_config(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cmd, "load_config", lambda: config, raising=False)
     monkeypatch.setattr("openlaoke.utils.config.load_config", lambda: config)
-    monkeypatch.setattr(
-        "openlaoke.utils.config.save_config", lambda c: saved.append(c)
-    )
+    monkeypatch.setattr("openlaoke.utils.config.save_config", lambda c: saved.append(c))
     return saved
 
 
@@ -266,7 +263,9 @@ async def test_mode_switch_without_a_guard_or_session_config(state, isolated_con
 @pytest.mark.asyncio
 async def test_compact_reports_the_message_delta(state) -> None:
     for i in range(6):
-        state.messages.append(UserMessage(role=MessageRole.USER, content=f"message {i} " + "x" * 200))
+        state.messages.append(
+            UserMessage(role=MessageRole.USER, content=f"message {i} " + "x" * 200)
+        )
     result = await CompactCommand().execute(ctx(state))
     assert result.message.startswith("Compacted context: 6 ->")
     assert result.success is True
@@ -285,7 +284,9 @@ async def test_compact_on_a_short_history_is_a_noop(state) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def make_session_info(tmp_path, session_id: str = "session_a", created: float = 0.0, count: int = 3):
+def make_session_info(
+    tmp_path, session_id: str = "session_a", created: float = 0.0, count: int = 3
+):
     path = tmp_path / f"{session_id}.json"
     path.write_text("{}", encoding="utf-8")
     return type(
@@ -674,6 +675,16 @@ async def test_export_json_to_the_default_location(home_redirect, state) -> None
 
 
 @pytest.mark.asyncio
+async def test_the_default_export_does_not_land_beside_the_snapshots(home_redirect, state) -> None:
+    result = await ExportCommand().execute(ctx(state, "json"))
+    path = Path(result.message.removeprefix("Session exported to "))
+
+    assert path.parent.name == "exports", path
+    assert "/sessions/" not in result.message
+    assert path.name == f"{state.session_id}.json"
+
+
+@pytest.mark.asyncio
 async def test_export_markdown_default(home_redirect, state) -> None:
     state.messages.append(UserMessage(role=MessageRole.USER, content="hello"))
     result = await ExportCommand().execute(ctx(state, ""))
@@ -761,9 +772,7 @@ async def test_context_falls_back_to_provider_discovery_when_the_window_is_unkno
     async def discover(provider, model):
         return 64_000
 
-    monkeypatch.setattr(
-        "openlaoke.core.model_discovery.get_effective_context_limit", discover
-    )
+    monkeypatch.setattr("openlaoke.core.model_discovery.get_effective_context_limit", discover)
     message = (await ContextCommand().execute(ctx(state))).message
     assert "Model window : 64,000" in message
     assert "Effective    : 64,000 tokens" in message

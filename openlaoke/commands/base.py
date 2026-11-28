@@ -1148,14 +1148,22 @@ class ExportCommand(SlashCommand):
         fmt = parts[0].lower() if parts else "markdown"
         filename = parts[1] if len(parts) > 1 else None
         state = ctx.app_state
-        sessions_dir = os.path.expanduser("~/.openlaoke/sessions")
-        os.makedirs(sessions_dir, exist_ok=True)
+        if fmt not in ("json", "markdown", "md"):
+            return CommandResult(
+                success=False, message=f"Unknown format: {fmt}. Use json|markdown."
+            )
         if filename:
             path = os.path.expanduser(filename)
-        elif fmt == "json":
-            path = os.path.join(sessions_dir, f"session_{state.session_id}.json")
         else:
-            path = os.path.join(sessions_dir, f"session_{state.session_id}.md")
+            # Not the sessions directory: snapshots live there as
+            # <id>.json, and an export dropped beside them is listed by
+            # /sessions as a second copy of the same session (identical id,
+            # different file). Resume then has two candidates and the export,
+            # being newer, can win: a filesystem race with your own session.
+            export_dir = os.path.expanduser("~/.openlaoke/exports")
+            os.makedirs(export_dir, exist_ok=True)
+            suffix = "json" if fmt == "json" else "md"
+            path = os.path.join(export_dir, f"{state.session_id}.{suffix}")
 
         try:
             if fmt == "json":
@@ -1167,7 +1175,7 @@ class ExportCommand(SlashCommand):
                 }
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, default=str)
-            elif fmt in ("markdown", "md"):
+            else:
                 lines = [f"# Session {state.session_id}", ""]
                 for message in state.messages:
                     lines.append(f"## {getattr(message, 'role', 'message')}")
@@ -1175,10 +1183,6 @@ class ExportCommand(SlashCommand):
                     lines.append("")
                 with open(path, "w", encoding="utf-8") as f:
                     f.write("\n".join(lines))
-            else:
-                return CommandResult(
-                    success=False, message=f"Unknown format: {fmt}. Use json|markdown."
-                )
         except OSError as exc:
             return CommandResult(success=False, message=f"Export failed: {exc}")
         return CommandResult(message=f"Session exported to {path}")

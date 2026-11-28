@@ -181,6 +181,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **`/export` wrote its output into the snapshot directory** (`commands/base.py`):
+  the default JSON export was `~/.openlaoke/sessions/session_<id>.json`, the
+  directory `SessionManager` lists as sessions. `/sessions` then showed the same
+  session twice with the same id but different paths, and because the export
+  carries `exported_at` rather than `created_at`, its timestamp was the file
+  mtime: the newest file. `load_latest()` could pick the export and resume from
+  it, with no tasks, no compact state and a model of "unknown". Exports go to
+  `~/.openlaoke/exports/<id>.<ext>` now, and `list_sessions()` skips any file
+  carrying `exported_at` so an old export already sitting in the directory stops
+  being listed. An unknown format is now rejected before anything is written.
 - **One bad record in a state file crashed the thing that read it**
   (`core/scheduler.py`, `core/memory_store.py`, `core/bot_mode.py`): the loaders
   turned every dict in a JSON list into a dataclass through `cls(**fields)`, and

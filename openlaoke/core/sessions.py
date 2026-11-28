@@ -90,10 +90,16 @@ class SessionManager:
             if not filename.endswith(".json"):
                 continue
             path = os.path.join(self.session_dir, filename)
-            seen.add(filename[: -len(".json")])
             try:
                 with open(path) as f:
                     data = json.load(f)
+                if isinstance(data, dict) and "exported_at" in data:
+                    # /export used to write its JSON into this directory. Such a
+                    # file carries the same session_id as the snapshot it came
+                    # from, so listing it showed the session twice and gave
+                    # /resume a second, wrong candidate.
+                    continue
+                seen.add(filename[: -len(".json")])
                 sessions.append(
                     SessionInfo(
                         session_id=data.get("session_id", filename.replace(".json", "")),
@@ -109,8 +115,12 @@ class SessionManager:
                 # An unreadable snapshot is still a session if its journal is
                 # there; listing it is how you find out it can be recovered.
                 logger.warning("Failed to load session from %s", path, exc_info=True)
-                recovered = self._journal_entry(filename[: -len(".json")])
+                session_id = filename[: -len(".json")]
+                recovered = self._journal_entry(session_id)
                 if recovered is not None:
+                    # Claim the id, so the journal scan below does not add the
+                    # same session a second time.
+                    seen.add(session_id)
                     sessions.append(recovered)
                 continue
         sessions.extend(self._journal_only_sessions(seen))

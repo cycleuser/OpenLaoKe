@@ -291,7 +291,9 @@ def test_load_latest_without_sessions(manager) -> None:
 
 
 def test_load_latest_uses_the_filename_when_the_file_has_no_session_id(manager) -> None:
-    write_session(manager.session_dir, "good", {"session_id": "good", "created_at": 1.0, "messages": []})
+    write_session(
+        manager.session_dir, "good", {"session_id": "good", "created_at": 1.0, "messages": []}
+    )
     write_session(manager.session_dir, "legacy", {"created_at": 5.0})
     loaded = manager.load_latest()
     assert loaded is not None
@@ -313,7 +315,9 @@ def test_delete_session(manager) -> None:
 
 def test_cleanup_old_sessions_removes_only_expired_ones(manager) -> None:
     now = time.time()
-    write_session(manager.session_dir, "ancient", {"session_id": "ancient", "created_at": now - 90 * 86400})
+    write_session(
+        manager.session_dir, "ancient", {"session_id": "ancient", "created_at": now - 90 * 86400}
+    )
     write_session(manager.session_dir, "recent", {"session_id": "recent", "created_at": now})
 
     removed = manager.cleanup_old_sessions(max_age_days=30)
@@ -366,3 +370,17 @@ def test_message_from_dict_keeps_a_defensive_fallback(monkeypatch) -> None:
     assert isinstance(message, SystemMessage)
     assert message.content == "kept"
     assert message.subtype == "error"
+
+
+def test_an_old_export_in_the_sessions_directory_is_not_a_session(manager, state) -> None:
+    manager.save_session(state)
+    # /export used to write {"session_id": ..., "exported_at": ...} here.
+    write_session(
+        manager.session_dir,
+        f"session_{state.session_id}",
+        {"session_id": state.session_id, "exported_at": "now", "messages": []},
+    )
+
+    listed = manager.list_sessions()
+
+    assert [Path(item.path).name for item in listed] == [f"{state.session_id}.json"]
