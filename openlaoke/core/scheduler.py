@@ -101,7 +101,22 @@ class ScheduleEntry:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ScheduleEntry:
         known = set(cls.__dataclass_fields__)
-        return cls(**{key: value for key, value in data.items() if key in known})
+        fields = {key: value for key, value in data.items() if key in known}
+        # A hand-edited or older file can carry "next_run": "tomorrow". Left as
+        # a string it compares against a timestamp in due() and raises
+        # TypeError, which is far from the file that caused it.
+        for name in ("created_at", "next_run", "last_run"):
+            if name in fields:
+                try:
+                    fields[name] = float(fields[name])
+                except (TypeError, ValueError):
+                    fields[name] = 0.0
+        if "runs" in fields:
+            try:
+                fields["runs"] = int(fields["runs"])
+            except (TypeError, ValueError):
+                fields["runs"] = 0
+        return cls(**fields)
 
     def describe(self) -> str:
         target = self.prompt or self.command
@@ -133,7 +148,19 @@ def parse_when(when: str, now: float | None = None) -> float:
             raise ScheduleError(f"time out of range: {text}")
         local = time.localtime(moment)
         today = time.mktime((local.tm_year, local.tm_mon, local.tm_mday, hour, minute, 0, 0, 0, -1))
-        return today if today > moment else today + 86400
+        if today > moment:
+            return today
+        # Ask for the same wall-clock time tomorrow instead of adding 86400 to
+        # today's stamp. A day is not always 86400 seconds: on the clocks-change
+        # day the addition lands an hour off, and every later run recomputes
+        # from that shifted stamp, so a daily 09:00 schedule stayed at 10:00
+        # until the other change of the year. mktime normalises the day
+        # overflow (and a nonexistent local time such as 02:30 on the spring
+        # change day) by itself.
+        tomorrow = time.mktime(
+            (local.tm_year, local.tm_mon, local.tm_mday + 1, hour, minute, 0, 0, 0, -1)
+        )
+        return tomorrow
 
     match = _ONCE.match(text)
     if match:
@@ -175,7 +202,17 @@ class Scheduler:
             return
         raw = payload.get("entries") if isinstance(payload, dict) else payload
         if isinstance(raw, list):
-            self.entries = [ScheduleEntry.from_dict(item) for item in raw if isinstance(item, dict)]
+            entries: list[ScheduleEntry] = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    entries.append(ScheduleEntry.from_dict(item))
+                except (TypeError, ValueError):
+                    # One entry missing an id or a "when" is not a reason to
+                    # lose the other nine.
+                    continue
+            self.entries = entries
 
     # ── run history ──────────────────────────────────────────────────────
 

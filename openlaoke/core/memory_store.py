@@ -124,7 +124,22 @@ class MemoryEntry:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MemoryEntry:
         known = set(cls.__dataclass_fields__)
-        entry = cls(**{key: value for key, value in data.items() if key in known})
+        fields = {key: value for key, value in data.items() if key in known}
+        # A note is written by a model, so any field can arrive with the wrong
+        # type. A string timestamp sorts against floats and a string "uses"
+        # fails on += 1, far away from the note that caused it.
+        for name in ("created_at", "updated_at"):
+            if name in fields:
+                try:
+                    fields[name] = float(fields[name])
+                except (TypeError, ValueError):
+                    fields[name] = 0.0
+        if "uses" in fields:
+            try:
+                fields["uses"] = int(fields["uses"])
+            except (TypeError, ValueError):
+                fields["uses"] = 0
+        entry = cls(**fields)
         if entry.authority not in AUTHORITY_RANK:
             entry.authority = DEFAULT_AUTHORITY
         return entry
@@ -160,7 +175,17 @@ class MemoryStore:
         raw = payload.get("entries") if isinstance(payload, dict) else payload
         if not isinstance(raw, list):
             return
-        self.entries = [MemoryEntry.from_dict(item) for item in raw if isinstance(item, dict)]
+        entries: list[MemoryEntry] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                entries.append(MemoryEntry.from_dict(item))
+            except (TypeError, ValueError):
+                # One note without an id or text must not take the rest of the
+                # store with it: this file is read at startup.
+                continue
+        self.entries = entries
 
     def save(self) -> None:
         if not self._dirty:

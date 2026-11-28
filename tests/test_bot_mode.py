@@ -106,6 +106,44 @@ def test_create_resolve_and_persist(env) -> None:
     assert again.get_bot("alice").title == "Lead engineer"
 
 
+def test_a_roster_entry_without_a_name_does_not_empty_the_roster(env) -> None:
+    import json
+    import os
+
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice", title="Lead")
+    path = os.path.join(mode.root, "bots.json")
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+    payload["bots"].append({"title": "someone forgot the name"})
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+    again = BotMode(mode.app_state, root=mode.root)
+
+    assert again.get_bot("alice") is not None
+
+
+def test_an_unreadable_room_does_not_hide_the_other_rooms(env) -> None:
+    import json
+    import os
+
+    mode, _state, _factory, _tmp = env
+    mode.create_bot("Alice")
+    mode.create_bot("Bob")
+    mode.create_room("standup", ["alice", "bob"])
+    rooms_dir = os.path.join(mode.root, "rooms")
+    broken = os.path.join(rooms_dir, "broken")
+    os.makedirs(broken, exist_ok=True)
+    with open(os.path.join(broken, "room.json"), "w", encoding="utf-8") as handle:
+        json.dump({"members": ["alice"]}, handle)  # no name
+
+    names = [room.name for room in mode.list_rooms()]
+
+    assert names == ["standup"]
+    assert mode.get_room("broken") is None
+
+
 def test_hide_show_and_remove_archives(env) -> None:
     mode, _state, _factory, _tmp = env
     mode.create_bot("Alice", title="Lead")

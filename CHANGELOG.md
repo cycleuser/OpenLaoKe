@@ -181,6 +181,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **One bad record in a state file crashed the thing that read it**
+  (`core/scheduler.py`, `core/memory_store.py`, `core/bot_mode.py`): the loaders
+  turned every dict in a JSON list into a dataclass through `cls(**fields)`, and
+  a missing required key raises `TypeError` straight out of the constructor. A
+  schedule without a `when`, a note without an id, a roster entry without a
+  name, a room file without a name: any one of them made the whole command fail,
+  and the memory store and the roster are read at startup. Malformed records are
+  skipped now, one at a time; a numeric field that arrived as a string (`"uses":
+  "9"`, `"next_run": "soon"`) is coerced, because a string timestamp does not
+  compare against a float in `due()` and says nothing about which file was wrong.
+- **A daily schedule drifted an hour on the clocks-change day**
+  (`core/scheduler.py`): `parse_when` computed tomorrow as `today + 86400`
+  seconds, which is wrong twice a year. A `daily 09:00` computed on the day
+  before a spring change fired at 10:00, and every later run recomputed from the
+  shifted stamp, so it stayed an hour late until the other change of the year.
+  The next occurrence is computed by asking `mktime` for the same wall-clock time
+  tomorrow, which also normalises a time that does not exist that day.
 - **Compaction wedged the session with an `AttributeError`**
   (`core/compact/fast_pruner.py`): the REPL keeps history as plain dicts and the
   compactor keeps message objects. The digest the pruner inserts in place of

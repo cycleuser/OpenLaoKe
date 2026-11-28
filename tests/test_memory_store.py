@@ -547,3 +547,31 @@ def test_the_prompt_digest_is_not_emptied_by_a_supersession_chain(tmp_path) -> N
 
     assert "Always use pytest." in block
     assert "Port 9019 for the dev server." in block
+
+
+def test_one_broken_note_does_not_take_the_store_with_it(tmp_path) -> None:
+    import json
+
+    path = tmp_path / "memory.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entries": [
+                    {"id": "m1", "text": "Keep this note.", "updated_at": "yesterday", "uses": "9"},
+                    {"no id": True},
+                    "not an object",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = MemoryStore(str(tmp_path), path=str(path))
+
+    assert [entry.id for entry in store.entries] == ["m1"]
+    assert store.entries[0].updated_at == 0.0
+    # A numeric string is coerced rather than left to fail on += 1 later.
+    assert store.entries[0].uses == 9
+    # Retrieval still works on what survived.
+    assert store.recall("keep")[0].id == "m1"

@@ -241,7 +241,11 @@ class BotMode:
         for item in raw or []:
             if not isinstance(item, dict):
                 continue
-            profile = BotProfile.from_dict(item)
+            try:
+                profile = BotProfile.from_dict(item)
+            except (TypeError, ValueError):
+                # A roster entry without a name is not worth losing the roster.
+                continue
             if profile.name and slug(profile.name) not in self._bots:
                 self._bots[slug(profile.name)] = profile
         if self.active_bot and self.active_bot not in self._bots:
@@ -783,7 +787,12 @@ class BotMode:
         direct = self._room_path(name)
         payload = _read_json(direct, None)
         if isinstance(payload, dict):
-            return Room.from_dict(payload)
+            try:
+                return Room.from_dict(payload)
+            except (TypeError, ValueError):
+                # A room file without a name cannot be reconstructed, so this is
+                # "no such room" rather than an exception out of /room.
+                return None
         key = slug(name)
         for candidate in self.list_rooms():
             if slug(candidate.name) == key:
@@ -804,7 +813,11 @@ class BotMode:
         for entry in sorted(os.listdir(base)):
             payload = _read_json(os.path.join(base, entry, "room.json"), None)
             if isinstance(payload, dict):
-                rooms.append(Room.from_dict(payload))
+                try:
+                    rooms.append(Room.from_dict(payload))
+                except (TypeError, ValueError):
+                    # One unreadable room must not hide every other room.
+                    continue
         return rooms
 
     def save_room(self, room: Room) -> None:
