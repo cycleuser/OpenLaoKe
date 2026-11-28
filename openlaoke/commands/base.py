@@ -1364,3 +1364,122 @@ class ArtifactsCommand(SlashCommand):
             lines.append(f"  {name:<24} {count:>4} file(s)  {size / 1024:>8.1f} KB")
         lines.append("('/artifacts prune 30' removes files older than 30 days)")
         return CommandResult(message="\n".join(lines))
+
+
+class InsomniaCommand(SlashCommand):
+    """Unattended mode: a task queue that drains without asking for input.
+
+    The state fields already existed and were saved with every session, but
+    nothing read them: the mode printed a banner and then behaved exactly like a
+    normal session, one turn per message, stopping at the harness mode's step
+    budget. This is the switch that makes them mean something.
+    """
+
+    name = "insomnia"
+    description = "Unattended mode: queue tasks that run without asking for input"
+    aliases = ["nightshift"]
+
+    async def execute(self, ctx: CommandContext) -> CommandResult:
+        import shlex
+
+        from openlaoke.core.insomnia import (
+            MAX_ITERATIONS,
+            RETRY_LIMIT,
+            backoff_seconds,
+            log_path_for,
+            queue_tasks,
+        )
+
+        state = ctx.app_state
+        args = shlex.split(ctx.args or "")
+        action = args[0].lower() if args else ""
+
+        if action in ("on", "off"):
+            state.insomnia_mode = action == "on"
+            state._persist()
+            if state.insomnia_mode:
+                retries = int(getattr(state, "insomnia_max_retries", 0) or RETRY_LIMIT)
+                return CommandResult(
+                    message=(
+                        "Insomnia mode on. Queued tasks run one after another without "
+                        "asking for input, a turn budget of "
+                        f"{int(getattr(state, 'insomnia_max_iterations', 0) or MAX_ITERATIONS)} "
+                        f"steps, a failed turn retried up to {retries} time(s) with backoff "
+                        f"(first wait {backoff_seconds(1):.0f}s), and the live history "
+                        "trimmed at turn boundaries so a long run stays bounded.\n"
+                        f"Log: {log_path_for(state)}\n"
+                        "Add work with '/insomnia add <task>'."
+                    )
+                )
+            return CommandResult(message="Insomnia mode off. Queued tasks stay queued.")
+
+        if action == "add":
+            prompt = (
+                ctx.args.split(maxsplit=1)[1].strip() if len(ctx.args.split(maxsplit=1)) > 1 else ""
+            )
+            if not prompt:
+                return CommandResult(success=False, message="Usage: /insomnia add <task>")
+            from openlaoke.core.insomnia import enqueue
+
+            task = enqueue(state, prompt)
+            if task is None:
+                return CommandResult(success=False, message="Nothing to queue.")
+            was_on = bool(state.insomnia_mode)
+            state.insomnia_mode = True
+            state._persist()
+            note = "" if was_on else " Insomnia mode is now on."
+            return CommandResult(
+                message=(
+                    f"Queued ({len(queue_tasks(state))} in queue): {prompt[:120]}.{note}\n"
+                    "It starts when the current turn ends."
+                )
+            )
+
+        if action == "clear":
+            count = len(queue_tasks(state))
+            state.insomnia_task_queue = []
+            state._persist()
+            return CommandResult(message=f"Cleared {count} queued task(s).")
+
+        if action == "log":
+            from openlaoke.core.insomnia import InsomniaLog
+
+            limit = 12
+            if len(args) > 1:
+                try:
+                    limit = max(1, int(args[1]))
+                except ValueError:
+                    return CommandResult(success=False, message="Usage: /insomnia log [lines]")
+            return CommandResult(message=InsomniaLog(log_path_for(state)).render_tail(limit))
+
+        tasks = queue_tasks(state)
+        if action and action not in ("status", "list"):
+            return CommandResult(
+                success=False,
+                message=(
+                    "Usage: /insomnia [on|off|add <task>|list|clear|log [lines]]\n"
+                    "  on/off  switch unattended mode\n"
+                    "  add     queue a task\n"
+                    "  list    show the queue\n"
+                    "  clear   empty the queue\n"
+                    "  log     show the run log"
+                ),
+            )
+
+        state_text = "on" if state.insomnia_mode else "off"
+        lines = [
+            f"Insomnia mode: {state_text}",
+            f"  queue: {len(tasks)} task(s)",
+            f"  turn budget: {int(getattr(state, 'insomnia_max_iterations', 0) or MAX_ITERATIONS)} step(s)",
+            f"  retries per task: {int(getattr(state, 'insomnia_max_retries', 0) or RETRY_LIMIT)}",
+            f"  log: {log_path_for(state)}",
+        ]
+        for index, task in enumerate(tasks[:10], start=1):
+            attempts = int(task.get("attempts") or 0)
+            suffix = f" (attempts {attempts})" if attempts else ""
+            lines.append(f"  {index}. {task['prompt'][:100]}{suffix}")
+        if len(tasks) > 10:
+            lines.append(f"  ... {len(tasks) - 10} more")
+        if not state.insomnia_mode:
+            lines.append("('/insomnia on' starts the queue running unattended)")
+        return CommandResult(message="\n".join(lines))

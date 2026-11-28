@@ -79,6 +79,7 @@ class AppState:
     insomnia_mode: bool = False
     insomnia_task_queue: list[dict[str, Any]] = field(default_factory=list)
     insomnia_max_iterations: int = 1000
+    insomnia_max_retries: int = 8
     insomnia_auto_accept: bool = True
     insomnia_log_path: str | None = None
     last_thinking: str = ""
@@ -93,6 +94,10 @@ class AppState:
     caveman_mode: bool = False
     max_tool_history: int = 4096
     max_steps: int = 100
+    # True only when --max-steps was typed. The CLI fills max_steps from the
+    # harness mode otherwise, so a mode-derived budget cannot be told apart from
+    # a deliberate one without this flag (insomnia mode outranks the former).
+    max_steps_explicit: bool = False
     harness_mode: str = "balanced"
     use_all_tools: bool = False
 
@@ -345,6 +350,7 @@ class AppState:
                 "insomnia_mode": self.insomnia_mode,
                 "insomnia_task_queue": self.insomnia_task_queue,
                 "insomnia_max_iterations": self.insomnia_max_iterations,
+                "insomnia_max_retries": self.insomnia_max_retries,
                 "insomnia_auto_accept": self.insomnia_auto_accept,
                 "insomnia_log_path": self.insomnia_log_path,
                 "guard_state": self.guard_state,

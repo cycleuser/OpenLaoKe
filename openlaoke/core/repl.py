@@ -234,6 +234,18 @@ class REPL:
         self._start_scheduler()
 
         try:
+            # A resumed session that was working through a queue keeps working:
+            # the queue survives on disk precisely so a crash or a reboot does
+            # not silently end the shift with half the tasks unrun.
+            if (
+                getattr(self.app_state, "insomnia_mode", False)
+                and self.app_state.insomnia_task_queue
+            ):
+                self.console.print(
+                    f"  [{self._c('muted')}]{self._t('insomnia_resuming')}[/] "
+                    f"({len(self.app_state.insomnia_task_queue)} task(s))"
+                )
+                await self._insomnia_drain()
             while self._running:
                 await self._handle_input()
         except (KeyboardInterrupt, EOFError):
@@ -645,6 +657,118 @@ class REPL:
             await self._handle_chat(queued)
             return
 
+        if (
+            not self._interrupt_requested
+            and getattr(self.app_state, "insomnia_mode", False)
+            and not getattr(self, "_insomnia_draining", False)
+        ):
+            await self._insomnia_drain()
+
+    # -- insomnia mode ------------------------------------------------------
+
+    @property
+    def _insomnia_log(self) -> Any:
+        from openlaoke.core.insomnia import InsomniaLog, log_path_for
+
+        path = log_path_for(self.app_state)
+        existing = getattr(self, "_insomnia_log_obj", None)
+        if existing is None or getattr(existing, "path", "") != path:
+            existing = InsomniaLog(path)
+            self._insomnia_log_obj = existing
+        return existing
+
+    async def _insomnia_drain(self) -> int:
+        """Work through the queue without asking for input; returns task count.
+
+        Only one drain runs at a time. Each task's turn calls back into
+        ``_handle_chat``, which calls back here, so the flag keeps the loop at one
+        level instead of one stack frame per task: a queue of a thousand tasks
+        would otherwise end in a RecursionError long before it ended in work.
+        """
+        from openlaoke.core.insomnia import HISTORY_LIMIT, next_task, trim_history
+
+        if getattr(self, "_insomnia_draining", False):
+            return 0
+        if not getattr(self.app_state, "insomnia_mode", False):
+            return 0
+
+        self._insomnia_draining = True
+        log = self._insomnia_log
+        completed = 0
+        started_with = len(self.app_state.insomnia_task_queue or [])
+        try:
+            if started_with:
+                log.append("drain_start", queued=started_with)
+            while self._running and not self._interrupt_requested:
+                task = next_task(self.app_state)
+                if task is None:
+                    break
+                head = str(task.get("prompt") or "")[:200]
+                log.append(
+                    "task_start", index=completed + 1, attempt=task.get("attempts"), prompt=head
+                )
+                ok, error = await self._insomnia_run_task(task)
+                if ok:
+                    completed += 1
+                    log.append("task_done", index=completed, prompt=head)
+                else:
+                    log.append("task_failed", index=completed + 1, prompt=head, error=error[:300])
+                    self.console.print(
+                        f"  [{self._c('error')}]insomnia: task given up after "
+                        f"{getattr(self.app_state, 'insomnia_max_retries', 0) or 8} attempt(s): "
+                        f"{error[:120]}[/]"
+                    )
+                dropped = trim_history(self.app_state, HISTORY_LIMIT)
+                if dropped:
+                    log.append("history_trimmed", dropped=dropped)
+        finally:
+            self._insomnia_draining = False
+
+        if started_with:
+            log.append("drain_end", completed=completed)
+        # A drain that had nothing to do is the normal case on every ordinary
+        # turn while the mode is on; announcing it would print a line per
+        # message for the rest of the session.
+        if started_with and self._running and not self._interrupt_requested:
+            remaining = len(self.app_state.insomnia_task_queue or [])
+            self.console.print(
+                f"  [{self._c('muted')}]insomnia: {completed} task(s) done, "
+                f"{remaining} still queued. The mode stays on: `/insomnia add <task>` "
+                f"or a new message keeps going unattended.[/]"
+            )
+        return completed
+
+    async def _insomnia_run_task(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Run one queued task, retrying a failed turn instead of giving up.
+
+        The turn machinery already reports its own failures; what it does not do
+        is try again. A rate limit, a dropped connection or a provider 502 that
+        arrives at 03:00 ends the turn, and with nobody at the keyboard that is
+        the end of the run. Each retry waits longer than the last.
+        """
+        from openlaoke.core.insomnia import RETRY_LIMIT, backoff_seconds
+
+        prompt = str(task.get("prompt") or "")
+        attempt = int(task.get("attempts") or 1)
+        limit = int(getattr(self.app_state, "insomnia_max_retries", 0) or RETRY_LIMIT)
+        log = self._insomnia_log
+
+        while True:
+            await self._handle_chat(prompt)
+            error = str(getattr(self.app_state, "error_message", "") or "")
+            if not error or self._interrupt_requested:
+                return True, ""
+            if attempt > limit:
+                return False, error
+            delay = backoff_seconds(attempt)
+            log.append("retry", attempt=attempt, delay=delay, error=error[:300])
+            self.console.print(
+                f"  [{self._c('warning')}]insomnia: {error[:100]} (retry "
+                f"{attempt}/{limit} in {delay:.0f}s)[/]"
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
+
     def _collect_artifacts(self) -> dict[str, Any]:
         artifacts: dict[str, Any] = {
             "content": "",
@@ -705,6 +829,20 @@ class REPL:
         self.app_state._persist()
 
     def _resolve_max_iterations(self) -> int:
+        # An unattended run is not a turn with a tool-call budget: it is a shift.
+        # The harness mode's 25-80 steps exist to keep a conversation snappy, and
+        # stopping a queued task halfway through because of them is the reason
+        # insomnia mode never finishes anything. This has to come before the
+        # max_steps check: the CLI fills max_steps from the harness mode, so that
+        # value is present in every real session. Only a typed --max-steps
+        # outranks the mode.
+        if getattr(self.app_state, "insomnia_mode", False) and not getattr(
+            self.app_state, "max_steps_explicit", False
+        ):
+            from openlaoke.core.insomnia import MAX_ITERATIONS
+
+            configured = getattr(self.app_state, "insomnia_max_iterations", 0) or 0
+            return max(1, int(configured) or MAX_ITERATIONS)
         steps = getattr(self.app_state, "max_steps", 0) or 0
         if steps > 0:
             return steps
@@ -1387,6 +1525,10 @@ class REPL:
                         self.console.print(
                             f"  [bold {self._c('error')}]Error:[/] {escape(str(turn.stream_error))}"
                         )
+                        # Machine-readable copy: the insomnia retry loop reads
+                        # app_state.error_message to decide whether the task
+                        # actually finished, and a printed line is not readable.
+                        self.app_state.set_error(str(turn.stream_error))
                         break
 
                     if (
@@ -1400,6 +1542,7 @@ class REPL:
                             f"  [bold {self._c('error')}]Model returned no output[/]"
                             f" (waited {turn.elapsed:.0f}s). Try a different model or check the provider."
                         )
+                        self.app_state.set_error("Model returned no output")
                         break
 
                     if self._guard:
@@ -1520,6 +1663,7 @@ class REPL:
                 self.console.print(
                     f"\n[bold {self._c('error')}]API Error:[/] {e.response.status_code}"
                 )
+                self.app_state.set_error(f"API {e.response.status_code}")
                 try:
                     error_data = e.response.json()
                     error_msg = error_data.get("error", {}).get("message", str(e))
@@ -1531,6 +1675,7 @@ class REPL:
                 from rich.markup import escape
 
                 self.console.print(f"\n[bold {self._c('error')}]Error:[/] {escape(str(e))}")
+                self.app_state.set_error(str(e))
                 break
             finally:
                 # turn_end fires however the iteration leaves, including the

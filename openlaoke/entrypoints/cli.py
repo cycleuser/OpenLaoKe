@@ -338,6 +338,7 @@ def main() -> None:
     if args.max_tool_history:
         app_state.max_tool_history = args.max_tool_history
     app_state.max_steps = args.max_steps if args.max_steps is not None else mode.max_steps
+    app_state.max_steps_explicit = args.max_steps is not None
     app_state.use_all_tools = args.all_tools or mode.all_tools
 
     app_state.multi_provider_config = config.providers

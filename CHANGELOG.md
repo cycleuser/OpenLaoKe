@@ -40,6 +40,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MemoryStore.index_entries()` now and marks authority.
 
 ### Added
+- **A working unattended mode and `/insomnia`** (`core/insomnia.py`, `core/repl.py`,
+  `commands/base.py`): the state fields, the banner and the localized strings
+  existed, and nothing read them. Insomnia mode printed "Mode: Insomnia" and
+  then behaved exactly like a normal session: one turn per keystroke, stopped at
+  the harness mode's 25-80 steps, and a single provider error ended the run. It
+  now does the four things a run of hours or days needs. `insomnia_max_iterations`
+  (1000 by default) is the turn budget instead of the mode's; a typed
+  `--max-steps` still wins. The queue drains on its own, one task after another,
+  without asking for input, and one task's failure does not abandon the rest. A
+  failed turn is retried with exponential backoff (15s, 30s, ... capped at 10
+  minutes) up to `insomnia_max_retries`, because a rate limit at 03:00 with
+  nobody at the keyboard used to be the end of the shift. The live history is
+  trimmed at a user-message boundary once it passes 400 messages, since the
+  snapshot is rewritten on every save and an untrimmed run writes an ever-growing
+  file forever; the cut never leaves a dangling tool_call_id, and the first
+  message survives so the model keeps its reason for working. Every step, retry,
+  failure and trim appends one JSONL line to `~/.openlaoke/insomnia/<session>.log`
+  (rotated at 1 MB, and a log that cannot be written never stops the run), and
+  `/insomnia [on|off|add|list|clear|log]` drives it. A resumed session whose
+  queue still has tasks starts draining immediately.
 - **`prune_artifacts()` can protect live sessions** (`core/tool_output_store.py`):
   `/artifacts prune` deletes by age, and a session still running can have
   artifacts older than the cutoff while its history still points at them. A
@@ -181,6 +201,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **A resumed session restored insomnia settings with the wrong defaults**
+  (`core/sessions.py`): `_load_from_path` fell back to 10 iterations and
+  `auto_accept=False` for snapshots that predate those fields, while a new
+  AppState starts at 1000 and True, so resuming an older session quietly gave an
+  unattended run a tenth of its budget.
 - **`/search` counted an exported session twice** (`core/session_index.py`):
   `list_sessions()` learned to skip the `exported_at` files that older builds
   wrote into the snapshot directory, but the full-text index still read them, so
