@@ -19,7 +19,7 @@ from openlaoke.core.config_wizard import (
 from openlaoke.core.multi_provider_api import MultiProviderClient
 from openlaoke.core.repl import REPL
 from openlaoke.core.state import create_app_state
-from openlaoke.utils.config import load_config, save_config
+from openlaoke.utils.config import AppConfig, load_config, save_config
 
 _VALUE_FLAGS = frozenset(
     {
@@ -67,6 +67,73 @@ def split_argv(argv: list[str]) -> tuple[list[str], list[str]]:
         else:
             prompt_parts.append(tok)
     return filtered_argv, prompt_parts
+
+
+def _interactive_terminal() -> bool:
+    """True when a person could answer a prompt right now."""
+    try:
+        return bool(sys.stdin.isatty() and sys.stdout.isatty())
+    except (AttributeError, ValueError):  # closed or replaced streams
+        return False
+
+
+def _provider_usable(provider: Any) -> bool:
+    """True when this provider could answer a request right now.
+
+    ``is_configured`` says "ready on paper": opencode is ready because it
+    exists, and a local server is ready because something answered the probe.
+    A keyless remote provider is not usable at all.
+    """
+    from openlaoke.types.providers import ProviderType
+
+    if not getattr(provider, "enabled", True):
+        return False
+    if provider.provider_type == ProviderType.OPENCODE:
+        return False
+    if not provider.is_local:
+        key = (provider.api_key or "").strip()
+        return bool(key) and key != "none"
+    try:
+        return bool(provider.is_configured())
+    except OSError:
+        return False
+
+
+def _pick_usable_provider(config: AppConfig) -> str:
+    """Settle on a provider the session can talk to; returns its name or "".
+
+    Three cases, in order: a key exported in the environment for a provider that
+    has none yet; the active provider already works; some other configured
+    provider works, so make it active. Without this a container whose config
+    still points at an Ollama that is not running dies with "All connection
+    attempts failed" while a perfectly good key sits in its environment.
+    """
+    from openlaoke.core.provider_presets import wizard_presets
+
+    providers = config.providers
+    for preset in wizard_presets():
+        key = os.environ.get(preset.env_var, "") if preset.env_var else ""
+        if not key:
+            continue
+        existing = providers.providers.get(preset.key)
+        if existing is not None and (existing.api_key or "").strip():
+            continue
+        provider = preset.build(api_key=key)
+        providers.providers[preset.key] = provider
+        providers.active_provider = preset.key
+        providers.active_model = provider.get_default_model() or providers.active_model
+        return preset.key
+
+    active = providers.get_active_provider()
+    if active is not None and _provider_usable(active):
+        return providers.active_provider
+
+    for name, provider in providers.providers.items():
+        if _provider_usable(provider):
+            providers.active_provider = name
+            providers.active_model = provider.get_default_model() or providers.active_model
+            return name
+    return ""
 
 
 def main() -> None:
@@ -234,11 +301,43 @@ def main() -> None:
         return
 
     if args.config or config.first_run or not config.providers.has_provider_selected():
-        config = run_config_wizard(config)
-        config.first_run = False
-        save_config(config)
-        if args.config:
-            return
+        before = config.providers.active_provider
+        settled = "" if args.config or args.provider else _pick_usable_provider(config)
+        if settled:
+            config.first_run = False
+            save_config(config)
+            if settled != before:
+                console.print(f"[green]Using {settled}.[/green]")
+        elif args.config or _interactive_terminal():
+            try:
+                config = run_config_wizard(config)
+            except (EOFError, KeyboardInterrupt):
+                # Ctrl-D and Ctrl-C at a prompt are a decision, not a crash.
+                console.print("\n[yellow]Configuration cancelled.[/yellow]")
+                raise SystemExit(1) from None
+            config.first_run = False
+            save_config(config)
+            if args.config:
+                return
+        elif args.provider:
+            # No terminal, but the session already has something to talk to, so
+            # the questions are optional. Asking them here is what raised
+            # EOFError out of main() in a pipeline or a container.
+            config.first_run = False
+            save_config(config)
+        else:
+            # The wizard is a series of prompts. With no terminal to answer in
+            # (a pipe, a cron job, a closed stdin) the first one raised EOFError
+            # out of main() and the tool died with a traceback instead of saying
+            # what to do. Docker images and CI hit exactly this.
+            console.print(
+                "[red]No provider is configured, and there is no terminal to ask in.[/red]"
+            )
+            console.print(
+                "Run 'openlaoke --config' once in a terminal, or set the provider's API key "
+                "environment variable (for example ANTHROPIC_API_KEY) and run again."
+            )
+            raise SystemExit(1)
 
     # Apply command-line overrides
     if args.provider:

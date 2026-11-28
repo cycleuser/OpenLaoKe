@@ -1103,3 +1103,53 @@ def test_the_retention_helper_reads_the_clock_not_the_file_time_mood(tmp_path, m
     again = ToolOutputStore(None, "helper-session").store("Bash", "second body")
     assert prune_unreferenced_artifacts(state, 0) == (0, 0)
     assert Path(again.path).exists()
+
+
+def _unpaired_tool_calls(messages: list[dict]) -> list[str]:
+    """Tool calls a provider would reject: asked, but never answered."""
+    called = [
+        call["id"]
+        for message in messages
+        if message.get("role") == "assistant"
+        for call in (message.get("tool_calls") or [])
+    ]
+    answered = {
+        message.get("tool_call_id") for message in messages if message.get("role") == "tool"
+    }
+    orphans = [
+        message.get("tool_call_id")
+        for message in messages
+        if message.get("role") == "tool" and message.get("tool_call_id") not in called
+    ]
+    return [call for call in called if call not in answered] + orphans
+
+
+def test_a_long_run_keeps_every_request_provider_valid(tmp_path, monkeypatch) -> None:
+    """Many tasks, a history that keeps getting trimmed: no dangling tool calls."""
+    import json as _json
+
+    from openlaoke.core import insomnia as insomnia_module
+    from tests.test_repl_loop import FakeTool, tool_call
+
+    monkeypatch.setattr(insomnia_module, "HISTORY_LIMIT", 8)
+    turns = []
+    for index in range(12):
+        turns.append([tool_call(f"c{index}", "Read", _json.dumps({"file_path": "a.txt"}))])
+        turns.append([text(f"task {index} done")])
+    tool = FakeTool("Read", result="file body " * 20)
+    r = make_repl(turns, tools=[tool])
+    r.app_state.insomnia_mode = True
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    for index in range(12):
+        enqueue(r.app_state, f"task {index}")
+
+    completed = asyncio.run(r._insomnia_drain())
+
+    assert completed == 12
+    assert queue_tasks(r.app_state) == []
+    assert r.api.requests, "the provider should have been called"
+    bad = [(index, _unpaired_tool_calls(request)) for index, request in enumerate(r.api.requests)]
+    bad = [(index, ids) for index, ids in bad if ids]
+    assert not bad, f"requests with unpaired tool calls: {bad[:3]}"
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "history_trimmed" in log, "the run should have trimmed at least once"

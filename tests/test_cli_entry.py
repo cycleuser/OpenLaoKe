@@ -24,6 +24,13 @@ def isolated_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".openlaoke").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
+    # A developer machine may export a real key; the wizard's own env detection
+    # would then quietly reconfigure the config these tests build by hand.
+    from openlaoke.core.provider_presets import PRESETS
+
+    for preset in PRESETS:
+        if preset.env_var:
+            monkeypatch.delenv(preset.env_var, raising=False)
     yield home
 
 
@@ -61,6 +68,16 @@ def ready_config() -> AppConfig:
     config.providers.active_provider = "openai"
     config.providers.active_model = "gpt-4o"
     config.providers.providers["openai"].api_key = "sk-x"
+    return config
+
+
+def bare_config() -> AppConfig:
+    """A first run on a machine with no provider at all (a container, a CI box)."""
+    config = AppConfig()
+    config.first_run = True
+    config.providers.providers.clear()
+    config.providers.active_provider = ""
+    config.providers.active_model = ""
     return config
 
 
@@ -130,8 +147,7 @@ def test_config_flag_runs_the_wizard_and_stops(monkeypatch) -> None:
 
 
 def test_first_run_runs_the_wizard_then_continues(monkeypatch, launched) -> None:
-    config = ready_config()
-    config.first_run = True
+    config = bare_config()
     saved: list[Any] = []
 
     def wizard(current):
@@ -140,11 +156,56 @@ def test_first_run_runs_the_wizard_then_continues(monkeypatch, launched) -> None
 
     monkeypatch.setattr(cli, "run_config_wizard", wizard)
     monkeypatch.setattr(cli, "save_config", lambda cfg: saved.append(cfg))
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: True)
 
     run_main(monkeypatch, [], config)
 
     assert saved and saved[0].first_run is False
     assert launched["mode"] == "interactive"
+
+
+def test_no_terminal_and_no_key_exits_cleanly(monkeypatch, capsys) -> None:
+    """A pipe is not a person: say so instead of dying on EOFError."""
+    config = bare_config()
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: False)
+    started: list[str] = []
+    monkeypatch.setattr(cli, "_run_interactive", lambda *a: started.append("ran"))
+
+    with pytest.raises(SystemExit) as exited:
+        run_main(monkeypatch, [], config)
+
+    assert exited.value.code == 1
+    out = capsys.readouterr().out
+    assert "no terminal to ask in" in out
+    assert "--config" in out
+    assert not started, "it must not try to start a session without a provider"
+
+
+def test_a_key_in_the_environment_is_enough(monkeypatch, launched) -> None:
+    """The client already reads these variables; do not demand a wizard answer."""
+    config = bare_config()
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-from-env")
+    saved: list[Any] = []
+    monkeypatch.setattr(cli, "save_config", lambda cfg: saved.append(cfg))
+
+    run_main(monkeypatch, [], config)
+
+    assert launched["mode"] == "interactive"
+    assert launched["config"].providers.active_provider == "anthropic"
+    assert saved, "the choice is remembered for the next run"
+
+
+def test_eof_at_a_wizard_prompt_is_not_a_crash(monkeypatch, capsys) -> None:
+    config = bare_config()
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(cli, "run_config_wizard", lambda current: (_ for _ in ()).throw(EOFError()))
+
+    with pytest.raises(SystemExit) as exited:
+        run_main(monkeypatch, [], config)
+
+    assert exited.value.code == 1
+    assert "Configuration cancelled" in capsys.readouterr().out
 
 
 def test_an_unknown_provider_is_reported(monkeypatch, capsys) -> None:
