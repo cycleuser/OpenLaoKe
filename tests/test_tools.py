@@ -84,6 +84,27 @@ class TestRead:
         assert not r.is_error and "d/" in r.content and "f.txt" in r.content
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo is POSIX only")
+    async def test_a_pipe_is_refused_instead_of_blocking_the_loop(self, tmp):
+        import asyncio
+        import threading
+
+        fifo = os.path.join(tmp, "pipe")
+        os.mkfifo(fifo)
+        collected = []
+
+        def read() -> None:
+            collected.append(asyncio.run(ReadTool().call(_ctx(tmp), file_path=fifo)))
+
+        worker = threading.Thread(target=read, daemon=True)
+        worker.start()
+        worker.join(5)
+
+        assert not worker.is_alive(), "Read blocked forever inside open() on a FIFO"
+        assert collected[0].is_error
+        assert "not a regular file" in collected[0].content
+
+    @pytest.mark.asyncio
     async def test_offset_limit(self, tmp):
         p = os.path.join(tmp, "m.txt")
         with open(p, "w") as f:
@@ -203,6 +224,28 @@ class TestGlob:
 
 
 class TestGrep:
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo is POSIX only")
+    async def test_a_pipe_in_the_tree_is_skipped_not_opened(self, tmp):
+        import asyncio
+        import threading
+
+        with open(os.path.join(tmp, "real.py"), "w") as f:
+            f.write("needle = 1\n")
+        os.mkfifo(os.path.join(tmp, "pipe"))
+        collected = []
+
+        def grep() -> None:
+            collected.append(asyncio.run(GrepTool().call(_ctx(tmp), pattern="needle", path=tmp)))
+
+        worker = threading.Thread(target=grep, daemon=True)
+        worker.start()
+        worker.join(5)
+
+        assert not worker.is_alive(), "Grep blocked forever inside open() on a FIFO"
+        assert "needle" in collected[0].content
+        assert not collected[0].is_error
+
     @pytest.mark.asyncio
     async def test_find_defs(self, tmp):
         with open(os.path.join(tmp, "code.py"), "w") as f:

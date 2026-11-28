@@ -10,6 +10,7 @@ approximate but never wrong about the name.
 from __future__ import annotations
 
 import ast
+import os
 import re
 from dataclasses import dataclass
 
@@ -89,6 +90,10 @@ def index_text(path: str, lines: list[str]) -> list[Symbol]:
 
 
 def index_file(path: str) -> list[Symbol]:
+    # Same reason as in the Grep tool: os.walk hands back pipes and devices as
+    # if they were files, and opening one blocks the whole loop.
+    if not os.path.isfile(path):
+        return []
     try:
         with open(path, encoding="utf-8", errors="replace") as handle:
             lines = handle.read(MAX_FILE_BYTES).splitlines()

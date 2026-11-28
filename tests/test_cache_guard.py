@@ -100,7 +100,9 @@ def fake_git(monkeypatch):
 def test_session_context_includes_date_model_os_cwd_and_branch(fake_git) -> None:
     fake_git(stdout="feature/ctx\n")
     state = FakeAppState(cwd="/tmp/project")
-    text = _build_session_context(state, model="claude-sonnet-4-6", date_str="2026-03-04, Wednesday")
+    text = _build_session_context(
+        state, model="claude-sonnet-4-6", date_str="2026-03-04, Wednesday"
+    )
     assert "2026-03-04, Wednesday" in text
     assert "claude-sonnet-4-6" in text
     assert "/tmp/project" in text
@@ -281,7 +283,9 @@ def test_day_change_reinjects(fake_git, monkeypatch) -> None:
     guard = CacheGuard(FakeAppState())
     guard.ensure_session_context(model="m1")
 
-    monkeypatch.setattr(mod.time, "strftime", lambda fmt: "2099-12-31" if fmt == "%Y-%m-%d" else "d")
+    monkeypatch.setattr(
+        mod.time, "strftime", lambda fmt: "2099-12-31" if fmt == "%Y-%m-%d" else "d"
+    )
     assert guard.ensure_session_context(model="m1") is not None
 
 
@@ -313,9 +317,7 @@ def test_ensure_session_context_builds_the_prompt_if_needed(fake_git) -> None:
 
 
 def test_markers_mark_the_last_two_real_messages() -> None:
-    messages = [
-        {"role": "user", "content": f"m{i}"} for i in range(5)
-    ]
+    messages = [{"role": "user", "content": f"m{i}"} for i in range(5)]
     out = CacheGuard.apply_cache_markers(messages)
     marked = [
         i
@@ -356,7 +358,10 @@ def test_markers_preserve_tool_fields_when_wrapping_strings() -> None:
 
 def test_markers_do_not_double_wrap_a_marked_message() -> None:
     messages = [
-        {"role": "user", "content": [{"type": "text", "text": "x", "cache_control": {"type": "ephemeral"}}]},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "x", "cache_control": {"type": "ephemeral"}}],
+        },
         {"role": "user", "content": "y"},
     ]
     out = CacheGuard.apply_cache_markers(messages)
@@ -366,7 +371,10 @@ def test_markers_do_not_double_wrap_a_marked_message() -> None:
 
 def test_markers_add_cache_control_to_the_last_text_block() -> None:
     messages = [
-        {"role": "user", "content": [{"type": "text", "text": "keep"}, {"type": "text", "text": "mark me"}]},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "keep"}, {"type": "text", "text": "mark me"}],
+        },
         {"role": "user", "content": "second"},
     ]
     out = CacheGuard.apply_cache_markers(messages)
@@ -412,3 +420,59 @@ def test_compact_prompt_falls_back_to_cwd_when_missing(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "getcwd", lambda: "/fallback")
     text = CacheGuard.build_compact_prompt(FakeAppState(cwd=""))
     assert "/fallback" in text
+
+
+# --------------------------------------------------------------------------- #
+# set_prompt_budget (the frozen prompt under a real window)
+# --------------------------------------------------------------------------- #
+
+
+def _big_knowledge() -> object:
+    return type("KL", (), {"format_for_prompt": lambda _self, _q: "K" * 20000})()
+
+
+def test_no_budget_keeps_the_extra_exactly_as_before() -> None:
+    loader = type("KL", (), {"format_for_prompt": lambda _self, _q: "KNOWLEDGE"})()
+    state = FakeAppState(knowledge_loader=loader, harness_mode="pi")
+    guard = CacheGuard(state)
+
+    guard.build()
+
+    # The old assembly was "\n".join(parts), with the same leading newlines.
+    from openlaoke.core.harness_modes import mode_directives
+
+    expected = "\n".join([f"\n{mode_directives('pi')}", "\nKNOWLEDGE"])
+    assert guard._system_prompt_extra == expected
+
+
+def test_a_tight_budget_drops_the_knowledge_block_not_the_rules() -> None:
+    loader = _big_knowledge()
+    guard = CacheGuard(FakeAppState(knowledge_loader=loader))
+
+    assert guard.set_prompt_budget(800) is True
+    prompt = guard.system_prompt
+
+    assert prompt.startswith(SYSTEM_PROMPT_STATIC)
+    assert "KKKKKKKKKK" not in prompt
+    assert guard.last_assembly is not None
+    assert guard.last_assembly.dropped == ["knowledge"]
+    assert "mode" in guard.last_assembly.included
+
+
+def test_a_wide_budget_keeps_the_knowledge_block() -> None:
+    loader = _big_knowledge()
+    guard = CacheGuard(FakeAppState(knowledge_loader=loader))
+
+    guard.set_prompt_budget(50000)
+
+    assert "KKKKKKKKKK" in guard.system_prompt
+    assert guard.last_assembly is not None and guard.last_assembly.dropped == []
+
+
+def test_a_budget_arriving_after_the_build_is_refused() -> None:
+    loader = _big_knowledge()
+    guard = CacheGuard(FakeAppState(knowledge_loader=loader))
+    before = guard.system_prompt
+
+    assert guard.set_prompt_budget(600) is False
+    assert guard.system_prompt == before, "the frozen prefix must stay byte-identical"

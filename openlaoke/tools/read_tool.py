@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from typing import Any
 
 import chardet
@@ -69,6 +70,30 @@ class ReadTool(Tool):
                 tool_use_id=ctx.tool_use_id,
                 content=f"Directory listing:\n{', '.join(dirs + files)}",
                 is_error=False,
+            )
+
+        # Only regular files. A FIFO blocks inside open() until a writer shows
+        # up, and no timeout can interrupt that: it is a C call, so the whole
+        # agent loop stops, not just the tool call. A character device has no
+        # size to check against the limit either (/dev/zero reads forever, and
+        # read() would grow until the process is killed). Reading a device is
+        # not what this tool is for; Bash can do it under the user's control.
+        try:
+            mode = os.stat(abs_path).st_mode
+        except OSError as exc:
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=f"Error: cannot stat {abs_path}: {exc}",
+                is_error=True,
+            )
+        if not stat.S_ISREG(mode):
+            return ToolResultBlock(
+                tool_use_id=ctx.tool_use_id,
+                content=(
+                    f"Error: not a regular file: {abs_path} "
+                    "(a pipe, device or socket cannot be read this way; use Bash)"
+                ),
+                is_error=True,
             )
 
         try:

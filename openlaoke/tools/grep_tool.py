@@ -81,6 +81,11 @@ def _search_file(
     """
     if remaining <= 0:
         return [], 0, True
+    # os.walk lists pipes, sockets and devices among the files. Opening one
+    # blocks (a FIFO waits for a writer) or never ends (/dev/zero), and the
+    # block happens inside the C call, so no timeout can interrupt the loop.
+    if not os.path.isfile(file_path):
+        return [], 0, False
     try:
         with open(file_path, encoding="utf-8", errors="replace") as fh:
             text_content = fh.read()

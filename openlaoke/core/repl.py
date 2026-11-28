@@ -1299,8 +1299,15 @@ class REPL:
         self._turn_failures = []
 
         messages = self._history_to_messages()
-        system_prompt = self._cache_guard.system_prompt
+        # Resolve the window before the prompt is built: the frozen prompt is
+        # assembled once, and an optional block (retrieved knowledge) can be
+        # longer than a small model's whole window. Building first meant the
+        # budget arrived too late to apply and the extras were never bounded.
         context_limit, model_size = await self._inject_runtime_context(messages)
+        from openlaoke.core.prompt_budget import budget_for_window
+
+        self._cache_guard.set_prompt_budget(budget_for_window(context_limit))
+        system_prompt = self._cache_guard.system_prompt
 
         # Config on disk does not change mid-turn; read it once instead of
         # hitting the filesystem on every iteration.

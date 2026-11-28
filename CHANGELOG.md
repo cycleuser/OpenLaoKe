@@ -181,6 +181,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **Reading a pipe or a device froze the whole agent** (`tools/read_tool.py`,
+  `tools/grep_tool.py`, `utils/symbols.py`): `Read` opened anything that was not
+  a directory, and `Grep` opened anything `os.walk` called a file. Opening a
+  FIFO blocks until a writer appears, and that block happens inside the C call,
+  so no asyncio timeout can interrupt it: the loop, the REPL and the turn all
+  stop, and the only way out is Ctrl-C. A character device is worse: `/dev/zero`
+  has size 0, so it passed the 10 MB guard and then read until the process was
+  killed. Both tools now require a regular file, and say so. The test starts a
+  `Read` on a FIFO in a thread and fails on the join timeout rather than
+  hanging the suite.
+- **The prompt budget was decided after the prompt was built**
+  (`core/repl.py`, `core/cache_guard.py`): the REPL read the frozen prompt, and
+  only then resolved the model's context window, so the budget arrived too late
+  to apply and the extras were never bounded. On a small local model a retrieved
+  knowledge block could fill the window on its own. The window is now resolved
+  first and the budget is handed to the guard before its first build; the
+  knowledge block is optional and the mode, skills, instructions and language
+  directive are required, so only the knowledge block can be dropped. A budget
+  that arrives after the build is refused, because the frozen prefix has to stay
+  byte-identical for the provider's cache. With no budget the assembled text is
+  byte-identical to before.
 - **`/export` wrote its output into the snapshot directory** (`commands/base.py`):
   the default JSON export was `~/.openlaoke/sessions/session_<id>.json`, the
   directory `SessionManager` lists as sessions. `/sessions` then showed the same

@@ -114,9 +114,15 @@ class FakeTheme:
 
 class FakeCacheGuard:
     system_prompt = "SYSTEM PROMPT"
+    last_assembly = None
 
     def ensure_session_context(self, model=""):
         return ""
+
+    def set_prompt_budget(self, max_tokens):
+        # The real guard freezes on first build; a double just accepts it.
+        self.budget = max_tokens
+        return True
 
     @staticmethod
     def apply_cache_markers(messages):

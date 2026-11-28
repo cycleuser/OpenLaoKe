@@ -22,6 +22,15 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from openlaoke.core.context_budget import estimate_text_tokens
+from openlaoke.core.prompt_budget import (
+    OPTIONAL,
+    REQUIRED,
+    AssemblyReport,
+    PromptBlock,
+    assemble,
+)
+
 if TYPE_CHECKING:
     pass
 
@@ -205,10 +214,28 @@ class CacheGuard:
     _caveman_mode: bool = False
     """When True, return the concise caveman system prompt."""
 
+    _max_tokens: int | None = None
+    """Budget for the whole prompt when the caller knows the window."""
+
+    last_assembly: AssemblyReport | None = None
+    """What the last build kept and dropped, for diagnostics."""
+
     # ---- public API -------------------------------------------------------
 
     def __init__(self, app_state: object | None = None) -> None:
         self._app_state = app_state
+
+    def set_prompt_budget(self, max_tokens: int | None) -> bool:
+        """Set the prompt budget. Returns False once the prompt is frozen.
+
+        The prompt has to stay byte-identical for the session so the provider's
+        cache prefix keeps matching, so a budget that arrives after build() is
+        ignored rather than silently changing the prompt mid-session.
+        """
+        if self._built:
+            return False
+        self._max_tokens = max_tokens
+        return True
 
     @property
     def app_state(self) -> object | None:
@@ -250,7 +277,14 @@ class CacheGuard:
             return self.system_prompt
 
         self._system_prompt = SYSTEM_PROMPT_STATIC
-        self._system_prompt_extra = self._build_extra()
+        budget = self._max_tokens
+        if budget is not None:
+            # The rules are not negotiable, so the extras only get what is left
+            # of the window after them.
+            budget = max(0, budget - estimate_text_tokens(SYSTEM_PROMPT_STATIC))
+        self._system_prompt_extra, self.last_assembly = assemble(
+            self._extra_blocks(), max_tokens=budget
+        )
         self._built = True
         return self.system_prompt
 
@@ -270,25 +304,39 @@ class CacheGuard:
         self._built = False
         self._system_prompt = ""
         self._system_prompt_extra = ""
+        self.last_assembly = None
 
     def _build_extra(self) -> str:
-        """Build the once-per-session extra suffix.
+        """The extra suffix with no budget applied."""
+        text, _report = assemble(self._extra_blocks())
+        return text
 
-        This includes active skills, knowledge loader output, and
-        user-configured system_prompt_suffix — all read ONCE at session
-        start.  Mid-session changes are communicated via [session context].
+    def _extra_blocks(self) -> list[PromptBlock]:
+        """The once-per-session extra suffix, as tiered blocks.
+
+        This includes the harness mode, active skills, the user-configured
+        system_prompt_suffix, knowledge loader output and the language
+        directive, all read ONCE at session start. Mid-session changes travel
+        in the [session context] block instead.
+
+        The knowledge block is the only optional one: it is retrieved text that
+        can be longer than the model's window, and dropping it costs a little
+        grounding, while dropping the rules costs the whole session's
+        discipline.
         """
         app_state = self._app_state
         if app_state is None:
-            return ""
+            return []
 
-        parts: list[str] = []
+        blocks: list[PromptBlock] = []
 
         # Harness mode directives (pi / jcode / opencode / balanced)
         from openlaoke.core.harness_modes import mode_directives
 
         mode_name = getattr(app_state, "harness_mode", "balanced")
-        parts.append(f"\n{mode_directives(mode_name)}")
+        blocks.append(
+            PromptBlock("mode", f"\n{mode_directives(mode_name)}", REQUIRED, separator="\n")
+        )
 
         # Active skills (read once, frozen)
         if hasattr(app_state, "active_skills") and app_state.active_skills:
@@ -296,20 +344,33 @@ class CacheGuard:
 
             skill_prompt = get_skill_system_prompt(app_state.active_skills)
             if skill_prompt:
-                parts.append(f"\n## Active Skills\n{skill_prompt}")
+                blocks.append(
+                    PromptBlock(
+                        "skills", f"\n## Active Skills\n{skill_prompt}", REQUIRED, separator="\n"
+                    )
+                )
 
         # User-configured suffix
         if hasattr(app_state, "session_config"):
             suffix = app_state.session_config.system_prompt_suffix
             if suffix:
-                parts.append(f"\n## Additional Instructions\n{suffix}")
+                blocks.append(
+                    PromptBlock(
+                        "instructions",
+                        f"\n## Additional Instructions\n{suffix}",
+                        REQUIRED,
+                        separator="\n",
+                    )
+                )
 
         # Knowledge loader (read once, frozen)
         if hasattr(app_state, "knowledge_loader") and app_state.knowledge_loader is not None:
             try:
                 knowledge = app_state.knowledge_loader.format_for_prompt("")
                 if knowledge:
-                    parts.append(f"\n{knowledge}")
+                    blocks.append(
+                        PromptBlock("knowledge", f"\n{knowledge}", OPTIONAL, separator="\n")
+                    )
             except Exception:
                 pass
 
@@ -319,9 +380,9 @@ class CacheGuard:
 
             lang_inst = get_language_instruction(app_state.language)
             if lang_inst:
-                parts.append(lang_inst)
+                blocks.append(PromptBlock("language", lang_inst, REQUIRED, separator="\n"))
 
-        return "\n".join(parts) if parts else ""
+        return blocks
 
     # -- session context ----------------------------------------------------
 
