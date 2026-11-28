@@ -30,6 +30,37 @@ from openlaoke.types.core_types import (
 )
 
 
+def _compact_digest(messages: list) -> object:
+    """The digest message, whatever shape the history uses."""
+    for message in messages:
+        if isinstance(message, dict) and message.get("subtype") == "compact":
+            return message
+        if isinstance(message, SystemMessage) and message.subtype == "compact":
+            return message
+    return None
+
+
+def _tool_results_with_no_adjacent_tool_call(messages: list) -> list[int]:
+    """Indexes of tool results separated from their tool call by another message."""
+    orphaned: list[int] = []
+    for index, message in enumerate(messages):
+        if not (isinstance(message, dict) and message.get("role") == "tool"):
+            continue
+        back = index - 1
+        while (
+            back >= 0 and isinstance(messages[back], dict) and messages[back].get("role") == "tool"
+        ):
+            back -= 1
+        parent = messages[back] if back >= 0 else None
+        if not (
+            isinstance(parent, dict)
+            and parent.get("role") == "assistant"
+            and parent.get("tool_calls")
+        ):
+            orphaned.append(index)
+    return orphaned
+
+
 def user_obj(text: str) -> UserMessage:
     return UserMessage(role=MessageRole.USER, content=text)
 
@@ -334,16 +365,18 @@ def test_fast_prune_truncates_system_message_tool_results_keeping_metadata() -> 
 def test_fast_prune_inserts_digest_after_the_head_block() -> None:
     head = {"role": "system", "content": "HEAD " * 30}
     msgs = [head]
-    msgs.extend({"role": "assistant", "content": f"file /pkg/mod{i}.py def fn{i} Error: e{i}\n" * 20} for i in range(40))
+    msgs.extend(
+        {"role": "assistant", "content": f"file /pkg/mod{i}.py def fn{i} Error: e{i}\n" * 20}
+        for i in range(40)
+    )
     result = fast_prune(msgs, max_tokens=600, keep_tail_tokens=100)
-    digests = [
-        m
-        for m in result.messages
-        if isinstance(m, SystemMessage) and m.subtype == "compact"
-    ]
-    assert digests, "assistant prose should collapse into a digest"
-    assert result.messages.index(digests[0]) == 1  # right after the head block
-    assert "tokens of assistant prose elided" in digests[0].content
+    digest = _compact_digest(result.messages)
+    assert digest is not None, "assistant prose should collapse into a digest"
+    # The history is dicts, so the digest is a dict too; an object here would
+    # break every later msg.get() in the provider conversion.
+    assert isinstance(digest, dict)
+    assert result.messages.index(digest) == 1  # right after the head block
+    assert "tokens of assistant prose elided" in digest["content"]
     assert result.keywords_extracted > 0
 
 
@@ -366,10 +399,14 @@ def test_fast_prune_never_grows_the_context_when_digest_is_not_worth_it() -> Non
 
 def test_fast_prune_handles_message_objects_as_well_as_dicts() -> None:
     msgs = [system_obj("SYSTEM " * 100)]
-    msgs.extend(assistant_obj("\n".join(["/pkg/file.py def handler", "Error: nope"])) for _ in range(40))
+    msgs.extend(
+        assistant_obj("\n".join(["/pkg/file.py def handler", "Error: nope"])) for _ in range(40)
+    )
     result = fast_prune(msgs, max_tokens=400, keep_tail_tokens=100)
     assert result.tokens_after <= result.tokens_before
-    digests = [m for m in result.messages if isinstance(m, SystemMessage) and m.subtype == "compact"]
+    digests = [
+        m for m in result.messages if isinstance(m, SystemMessage) and m.subtype == "compact"
+    ]
     assert digests
 
 
@@ -403,7 +440,9 @@ def test_aggressive_leaves_error_warning_and_compact_systems_alone() -> None:
     for subtype in ("error", "warning", "compact"):
         body = "\n".join(f"line {i}" for i in range(200))
         msg = system_obj(body, subtype=subtype)
-        result = fast_prune_aggressive([msg, {"role": "user", "content": "x" * 4000}], max_tokens=100)
+        result = fast_prune_aggressive(
+            [msg, {"role": "user", "content": "x" * 4000}], max_tokens=100
+        )
         kept = [m for m in result.messages if isinstance(m, SystemMessage)]
         if kept:
             assert kept[0].content == body
@@ -429,7 +468,9 @@ def test_aggressive_keeps_user_requirements_and_truncates_tool_results() -> None
     msgs.extend({"role": "assistant", "content": "prose " * 200} for _ in range(10))
     result = fast_prune_aggressive(msgs, max_tokens=500)
     assert requirement in result.messages
-    tool_outputs = [m["content"] for m in result.messages if isinstance(m, dict) and m.get("role") == "tool"]
+    tool_outputs = [
+        m["content"] for m in result.messages if isinstance(m, dict) and m.get("role") == "tool"
+    ]
     assert tool_outputs
     assert "lines truncated" in tool_outputs[0]
 
@@ -442,9 +483,10 @@ def test_aggressive_appends_digest_for_elided_prose() -> None:
     )
     msgs.append({"role": "assistant", "content": "tail " * 50})
     result = fast_prune_aggressive(msgs, max_tokens=500)
-    digests = [m for m in result.messages if isinstance(m, SystemMessage) and m.subtype == "compact"]
-    assert digests
-    assert "tokens elided" in digests[0].content
+    digest = _compact_digest(result.messages)
+    assert digest is not None
+    assert isinstance(digest, dict)
+    assert "tokens elided" in digest["content"]
     assert result.keywords_extracted > 0
     assert result.tokens_after < result.tokens_before
 
@@ -461,3 +503,67 @@ def test_aggressive_restores_everything_when_digest_would_not_help() -> None:
         assert result.messages == msgs
         assert len(result.messages) == len(msgs)
         assert result.keywords_extracted == 0
+
+
+def test_a_dict_history_stays_dicts_a_provider_can_convert() -> None:
+    # Exactly what the REPL does: plain dicts in, then straight to a request.
+    from openlaoke.core.multi_provider_api import MultiProviderClient
+    from openlaoke.types.providers import ProviderType
+
+    msgs = [{"role": "user", "content": "fix the failing test"}]
+    for step in range(40):
+        msgs.append({"role": "assistant", "content": f"prose {step} " + "x" * 400})
+        msgs.append({"role": "user", "content": "continue please"})
+
+    result = fast_prune(msgs, max_tokens=2000, keep_tail_tokens=500)
+
+    assert all(isinstance(message, dict) for message in result.messages), [
+        type(message).__name__ for message in result.messages if not isinstance(message, dict)
+    ]
+    client = MultiProviderClient.__new__(MultiProviderClient)
+    for provider_type in (ProviderType.OPENAI_COMPATIBLE, ProviderType.ANTHROPIC):
+        # Used to raise AttributeError: 'SystemMessage' object has no attribute 'get'
+        client._convert_messages_for_provider(result.messages, provider_type)
+
+
+def _tool_call_and_result() -> tuple[dict, dict]:
+    call = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "Read", "arguments": "{}"}}
+        ],
+    }
+    return call, {"role": "tool", "tool_call_id": "c1", "content": "y" * 4000}
+
+
+def test_the_digest_never_splits_a_tool_call_from_its_results() -> None:
+    call, tool_result = _tool_call_and_result()
+    prose = [{"role": "assistant", "content": f"prose {i} " * 100} for i in range(12)]
+
+    # fast_prune: the head can end right after the tool call, and the digest
+    # goes after the head block.
+    after_the_head = [
+        {"role": "system", "content": "HEAD " * 10},
+        call,
+        tool_result,
+        *prose,
+        {"role": "user", "content": "and now finish"},
+    ]
+    # fast_prune_aggressive: the digest goes before the tail, which here starts
+    # exactly on the tool result.
+    before_the_tail = [
+        {"role": "user", "content": "start"},
+        *prose,
+        call,
+        tool_result,
+    ]
+
+    results = [
+        fast_prune(after_the_head, max_tokens=600, keep_tail_tokens=200),
+        fast_prune_aggressive(before_the_tail, max_tokens=600),
+    ]
+
+    for result in results:
+        assert _compact_digest(result.messages) is not None
+        assert _tool_results_with_no_adjacent_tool_call(result.messages) == []

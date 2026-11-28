@@ -128,6 +128,40 @@ def _strip_prose(message: Any) -> Any:
     return message
 
 
+def _digest_message(content: str, template: Any) -> Any:
+    """Build the digest message in the same shape as the history it joins.
+
+    The REPL keeps history as plain dicts and the compactor keeps Message
+    objects. Returning a ``SystemMessage`` for a dict history puts an object
+    into a list where every later step does ``msg.get(...)``: the first turn
+    that actually elides prose died with ``AttributeError: 'SystemMessage'
+    object has no attribute 'get'`` while converting the request.
+    """
+    if isinstance(template, dict):
+        return {"role": "system", "content": content, "subtype": "compact"}
+    from openlaoke.types.core_types import MessageRole, SystemMessage
+
+    return SystemMessage(role=MessageRole.SYSTEM, content=content, subtype="compact")
+
+
+def _insert_clear_of_tool_results(messages: list[Any], position: int, digest: Any) -> list[Any]:
+    """Insert *digest* at *position*, never between a tool call and its results.
+
+    A message inserted between an assistant message carrying ``tool_calls`` and
+    the ``tool`` messages that answer it leaves a dangling tool_call_id, which
+    OpenAI-compatible providers reject outright.
+    """
+    position = _past_leading_tool_results(messages, position)
+    return list(messages[:position]) + [digest] + list(messages[position:])
+
+
+def _past_leading_tool_results(messages: list[Any], position: int) -> int:
+    """First index at or after *position* that is not a tool result."""
+    while position < len(messages) and _is_tool_result(messages[position]):
+        position += 1
+    return position
+
+
 def extract_keywords(text: str, max_keywords: int = 50) -> list[str]:
     """Extract key information from text using a single combined regex pass."""
     keywords: list[str] = []
@@ -217,7 +251,7 @@ def fast_prune(
             elapsed_ms=(time.monotonic() - start) * 1000,
         )
 
-    from openlaoke.types.core_types import MessageRole, SystemMessage
+    from openlaoke.types.core_types import SystemMessage
 
     new_messages: list[Any] = []
     new_tokens = 0
@@ -324,11 +358,7 @@ def fast_prune(
         )
         summary_tokens = estimate_text_tokens(summary_content)
         if summary_tokens < elided_tokens:
-            middle_summary = SystemMessage(
-                role=MessageRole.SYSTEM,
-                content=summary_content,
-                subtype="compact",
-            )
+            middle_summary = _digest_message(summary_content, messages[0])
             new_tokens += summary_tokens
         else:
             # Digest would not save space — return the history exactly as it
@@ -346,9 +376,9 @@ def fast_prune(
         # Insert digest right after the head block (before first non-head
         # message) to preserve chronology: the digest represents the elided
         # middle messages that came before everything in new_messages[head_end:].
-        new_messages = (
-            list(new_messages[:head_end]) + [middle_summary] + list(new_messages[head_end:])
-        )
+        # If the head ended between an assistant tool call and its results, the
+        # digest goes after those results instead of between them.
+        new_messages = _insert_clear_of_tool_results(new_messages, head_end, middle_summary)
 
     new_messages.extend(messages[tail_start:])
     elapsed = (time.monotonic() - start) * 1000
@@ -377,7 +407,7 @@ def fast_prune_aggressive(
     - Strips non-essential system messages entirely
     - Preserves message order and tool_call/tool_result adjacency
     """
-    from openlaoke.types.core_types import MessageRole, SystemMessage
+    from openlaoke.types.core_types import SystemMessage
 
     start = time.monotonic()
 
@@ -519,13 +549,8 @@ def fast_prune_aggressive(
         )
         summary_tokens = estimate_text_tokens(summary_content)
         if summary_tokens < elided_tokens:
-            summary_msg = SystemMessage(
-                role=MessageRole.SYSTEM,
-                content=summary_content,
-                subtype="compact",
-            )
+            summary_msg = _digest_message(summary_content, messages[0])
             new_tokens += summary_tokens
-            new_messages.append(summary_msg)
         else:
             # Digest would not save space — return the history unchanged.
             # As above, the tail is appended after this block, so restoring the
@@ -536,8 +561,21 @@ def fast_prune_aggressive(
                 tokens_after=total_tokens,
                 elapsed_ms=(time.monotonic() - start) * 1000,
             )
+    else:
+        summary_msg = None
 
-    new_messages.extend(messages[tail_start:])
+    # If the tail starts with the tool results of a tool call the middle ended
+    # on, the digest goes after them: a message inserted between a tool call and
+    # its results leaves a dangling tool_call_id.
+    tail_leading_end = (
+        _past_leading_tool_results(messages, tail_start) if summary_msg is not None else tail_start
+    )
+    new_messages.extend(messages[tail_start:tail_leading_end])
+    if summary_msg is not None:
+        new_messages.append(summary_msg)
+        new_messages.extend(messages[tail_leading_end:])
+    else:
+        new_messages.extend(messages[tail_leading_end:])
     elapsed = (time.monotonic() - start) * 1000
 
     return PruneResult(

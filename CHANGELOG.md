@@ -181,6 +181,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests now assert on the stored rules directly.
 
 ### Fixed
+- **Compaction wedged the session with an `AttributeError`**
+  (`core/compact/fast_pruner.py`): the REPL keeps history as plain dicts and the
+  compactor keeps message objects. The digest the pruner inserts in place of
+  elided prose was always a `SystemMessage` object, so the first turn that
+  actually had prose to elide put an object into a list of dicts. Provider
+  conversion then died on `msg.get(...)`, the error was captured as the turn's
+  `stream_error`, and every later turn failed the same way with
+  "'SystemMessage' object has no attribute 'get'" as the only explanation. The
+  digest is now built in the shape of the history it joins.
+- **The digest could be inserted between a tool call and its results**
+  (`core/compact/fast_pruner.py`): the digest goes after the head block in
+  `fast_prune` and before the tail in `fast_prune_aggressive`, and either
+  boundary can fall exactly between an assistant message carrying `tool_calls`
+  and the `tool` messages answering it. That leaves a dangling tool_call_id,
+  which OpenAI-compatible providers reject. The insertion point now steps past
+  the leading tool results.
 - **A burst of supersessions emptied the prompt's memory index**
   (`core/memory_store.py`): `index_entries()` took the newest N notes and only
   then dropped the superseded ones, so a session that changed its mind a few
