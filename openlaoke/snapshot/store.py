@@ -223,6 +223,14 @@ class SnapshotStore:
                         touched_after[path] = snap
         report: dict[str, str] = {}
         for path, snap in touched_after.items():
+            if not os.path.isabs(path):
+                # Records are keyed by absolute path. A relative one (a hand
+                # edit, or a file written by something else) would restore into
+                # whatever directory happens to be current, which is how a
+                # restore turns into files scattered beside the checkout.
+                logger.warning("Skipping rewind for a relative path: %s", path)
+                report[path] = "skipped:not-absolute"
+                continue
             if snap.content is None:
                 if os.path.exists(path):
                     try:

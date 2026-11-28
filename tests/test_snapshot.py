@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -16,7 +17,7 @@ from openlaoke.snapshot.rewind import (
     summarize_from,
     summarize_up_to,
 )
-from openlaoke.snapshot.store import SnapshotStore, TurnSnapshot
+from openlaoke.snapshot.store import FileSnapshot, SnapshotStore, TurnSnapshot
 
 
 @pytest.fixture
@@ -293,9 +294,11 @@ class TestRewindOps:
 def test_a_malformed_snapshot_line_does_not_break_rewind(store) -> None:
     """A line that parses but is not a turn record must be skipped, not raised on."""
     import json
-    import os
 
     path = store.path_for("s")
+    # The record key is the file path (that is what the serializer writes, and
+    # what rewind restores to), so it has to be absolute and inside tmp_path.
+    restored = Path(path).parent / "note.txt"
     with open(path, "w", encoding="utf-8") as handle:
         handle.write('["not", "a", "turn"]\n')
         handle.write('{"turn_index": "seven"}\n')
@@ -305,8 +308,8 @@ def test_a_malformed_snapshot_line_does_not_break_rewind(store) -> None:
                     "turn_index": 1,
                     "files": {
                         "bad": 5,
-                        "good": {
-                            "path": os.path.join(os.path.dirname(path), "note.txt"),
+                        str(restored): {
+                            "path": str(restored),
                             "content": "restored",
                             "existed": True,
                             "captured_at_turn": 1,
@@ -320,6 +323,30 @@ def test_a_malformed_snapshot_line_does_not_break_rewind(store) -> None:
     turns = store.all_turns("s")
 
     assert [turn.turn_index for turn in turns] == [1]
-    assert list(turns[0].files) == ["good"]
+    assert list(turns[0].files) == [str(restored)]
     report = store.rewind("s", 1)
     assert list(report.values()) == ["restored"]
+    assert restored.read_text(encoding="utf-8") == "restored"
+
+
+def test_rewind_refuses_to_scatter_files_into_the_current_directory(
+    store, tmp_path, monkeypatch
+) -> None:
+    """A record keyed by a relative path would land beside the checkout."""
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    turn = TurnSnapshot(
+        turn_index=1,
+        files={
+            "relative.txt": FileSnapshot(
+                path="relative.txt", content="nope", existed=True, captured_at_turn=1
+            )
+        },
+    )
+    store.save_turn("s", turn)
+
+    report = store.rewind("s", 1)
+
+    assert report == {"relative.txt": "skipped:not-absolute"}
+    assert not (tmp_path / "relative.txt").exists()
