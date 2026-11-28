@@ -693,7 +693,11 @@ class SessionsCommand(SlashCommand):
                     return CommandResult(success=False, message="Usage: /sessions prune [days]")
             # Deleting sessions is destructive, so it only happens when asked for
             # by name. cleanup_old_sessions() existed but nothing ever called it.
-            removed = manager.cleanup_old_sessions(max_age_days=days)
+            # The session you are typing in is never old enough to delete, and a
+            # long unattended run must not lose the journal it is still writing.
+            removed = manager.cleanup_old_sessions(
+                max_age_days=days, keep={ctx.app_state.session_id}
+            )
             return CommandResult(
                 message=(
                     f"Removed {removed} session(s) older than {days} day(s), "

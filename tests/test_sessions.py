@@ -343,17 +343,58 @@ def test_delete_session(manager) -> None:
     assert manager.delete_session("gone") is False
 
 
+def _age_session(manager, session_id: str, days: float) -> None:
+    """Make a session look untouched for *days*, which is what age means here."""
+    from openlaoke.core.transcript import transcript_path_for
+
+    moment = time.time() - days * 86400
+    path = os.path.join(manager.session_dir, f"{session_id}.json")
+    for candidate in (path, transcript_path_for(path)):
+        if os.path.exists(candidate):
+            os.utime(candidate, (moment, moment))
+
+
 def test_cleanup_old_sessions_removes_only_expired_ones(manager) -> None:
-    now = time.time()
-    write_session(
-        manager.session_dir, "ancient", {"session_id": "ancient", "created_at": now - 90 * 86400}
-    )
-    write_session(manager.session_dir, "recent", {"session_id": "recent", "created_at": now})
+    write_session(manager.session_dir, "ancient", {"session_id": "ancient", "messages": []})
+    write_session(manager.session_dir, "recent", {"session_id": "recent", "messages": []})
+    _age_session(manager, "ancient", 90)
 
     removed = manager.cleanup_old_sessions(max_age_days=30)
 
     assert removed == 1
     assert [s.session_id for s in manager.list_sessions()] == ["recent"]
+
+
+def test_a_session_started_long_ago_but_used_yesterday_survives(manager) -> None:
+    """Age is the last write: pruning by start time deleted active work."""
+    now = time.time()
+    write_session(
+        manager.session_dir,
+        "long-running",
+        {"session_id": "long-running", "created_at": now - 90 * 86400, "messages": []},
+    )
+    _age_session(manager, "long-running", 1)
+
+    assert manager.cleanup_old_sessions(max_age_days=30) == 0
+    assert [s.session_id for s in manager.list_sessions()] == ["long-running"]
+
+
+def test_the_running_session_is_never_pruned(manager) -> None:
+    """A prune must not delete the journal the session is still writing to."""
+    from openlaoke.core.transcript import transcript_path_for
+
+    write_session(manager.session_dir, "live", {"session_id": "live", "messages": []})
+    journal = transcript_path_for(os.path.join(manager.session_dir, "live.json"))
+    Path(journal).write_text("", encoding="utf-8")
+    _age_session(manager, "live", 90)
+    write_session(manager.session_dir, "old", {"session_id": "old", "messages": []})
+    _age_session(manager, "old", 90)
+
+    removed = manager.cleanup_old_sessions(max_age_days=1, keep={"live"})
+
+    assert removed == 1
+    assert Path(os.path.join(manager.session_dir, "live.json")).exists()
+    assert Path(journal).exists()
 
 
 # --------------------------------------------------------------------------- #

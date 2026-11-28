@@ -417,6 +417,10 @@ def test_the_sessions_command_prunes_old_sessions_and_their_data(tmp_path, monke
     payload = json.loads(Path(path).read_text())
     payload["created_at"] = long_ago
     Path(path).write_text(json.dumps(payload))
+    # Age means the last write, so the files themselves have to be old: a
+    # snapshot written a moment ago is a session still in use.
+    for candidate in (path, transcript_path_for(path)):
+        os.utime(candidate, (long_ago, long_ago))
     monkeypatch.setattr(sessions_module, "SessionManager", lambda *a, **k: manager)
 
     class Ctx:

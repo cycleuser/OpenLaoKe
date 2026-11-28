@@ -225,14 +225,42 @@ class SessionManager:
             removed = True
         return removed
 
-    def cleanup_old_sessions(self, max_age_days: int = 30) -> int:
+    def cleanup_old_sessions(self, max_age_days: int = 30, keep: set[str] | None = None) -> int:
+        """Delete sessions untouched for ``max_age_days``; returns how many went.
+
+        Age is the time of the last write, not the time the session started. A
+        snapshot is rewritten on every turn, so its mtime is the last activity:
+        pruning by ``created_at`` deleted a conversation used yesterday because
+        it had been *started* a month earlier.
+
+        ``keep`` holds session ids that must survive whatever their age. The
+        session you are typing in is the obvious one, and an unattended run that
+        has been going since Monday is the other: deleting its journal takes away
+        both its evidence and its recovery source while it is still writing to it.
+        """
         cutoff = time.time() - (max_age_days * 86400)
+        protected = set(keep or ())
         count = 0
         for session in self.list_sessions():
-            if session.created_at < cutoff:
+            if session.session_id in protected:
+                continue
+            last_used = max(session.created_at, self._last_write(session.path))
+            if last_used < cutoff:
                 self.delete_session(session.session_id)
                 count += 1
         return count
+
+    def _last_write(self, path: str) -> float:
+        """When the session files were last written (0 when they are gone)."""
+        from openlaoke.core.transcript import transcript_path_for
+
+        newest = 0.0
+        for candidate in (path, transcript_path_for(path)):
+            try:
+                newest = max(newest, os.path.getmtime(candidate))
+            except OSError:
+                continue
+        return newest
 
     def _load_from_path(self, path: str) -> AppState | None:
         try:
