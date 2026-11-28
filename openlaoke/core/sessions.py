@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from openlaoke.core.state import AppState, create_app_state
 from openlaoke.types.core_types import (
@@ -41,6 +42,41 @@ class SessionInfo:
     # True when only the append-only journal survived: the snapshot is missing or
     # unreadable, and loading this session means replaying the journal.
     recovered: bool = False
+
+
+def _as_int(value: Any, default: int) -> int:
+    """A number from a state file, or the default when it is not one."""
+    if isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    """``"false"`` in JSON-ish text must not read as True."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("1", "true", "yes", "on"):
+            return True
+        if text in ("0", "false", "no", "off", ""):
+            return False
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
 
 
 def _message_from_dict(
@@ -293,14 +329,33 @@ class SessionManager:
                 RETRY_LIMIT,
             )
 
-            app_state.insomnia_mode = data.get("insomnia_mode", False)
-            app_state.insomnia_task_queue = data.get("insomnia_task_queue", [])
-            app_state.insomnia_max_iterations = data.get("insomnia_max_iterations", MAX_ITERATIONS)
-            app_state.insomnia_max_retries = data.get("insomnia_max_retries", RETRY_LIMIT)
-            app_state.insomnia_max_cost = data.get("insomnia_max_cost", COST_LIMIT_USD)
-            app_state.insomnia_artifact_hours = data.get("insomnia_artifact_hours", ARTIFACT_HOURS)
-            app_state.insomnia_auto_accept = data.get("insomnia_auto_accept", True)
-            app_state.insomnia_log_path = data.get("insomnia_log_path", None)
+            # These fields come from a file that a crash, an older version or a
+            # hand edit can leave in any shape. A budget of "lots" used to raise
+            # inside the turn, which the unattended mode then retried forever;
+            # every one of them is coerced to the value a new session would have.
+            app_state.insomnia_mode = _as_bool(data.get("insomnia_mode"), False)
+            app_state.insomnia_task_queue = data.get("insomnia_task_queue") or []
+            app_state.insomnia_max_iterations = max(
+                1, _as_int(data.get("insomnia_max_iterations"), MAX_ITERATIONS)
+            )
+            app_state.insomnia_max_retries = max(
+                0, _as_int(data.get("insomnia_max_retries"), RETRY_LIMIT)
+            )
+            app_state.insomnia_max_cost = max(
+                0.0, _as_float(data.get("insomnia_max_cost"), COST_LIMIT_USD)
+            )
+            app_state.insomnia_artifact_hours = max(
+                0.0, _as_float(data.get("insomnia_artifact_hours"), ARTIFACT_HOURS)
+            )
+            app_state.insomnia_auto_accept = _as_bool(data.get("insomnia_auto_accept"), True)
+            log_path = data.get("insomnia_log_path")
+            app_state.insomnia_log_path = log_path if isinstance(log_path, str) else None
+
+            from openlaoke.core.insomnia import queue_tasks
+
+            # Normalising drops malformed records (a dict without a prompt, a
+            # number) that would otherwise crash the drain on its first pop.
+            app_state.insomnia_task_queue = queue_tasks(app_state)
 
             return app_state
 

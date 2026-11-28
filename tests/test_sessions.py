@@ -234,7 +234,7 @@ def test_load_restores_tasks_including_unknown_enum_values(manager, state) -> No
 
 def test_load_restores_insomnia_settings(manager, state) -> None:
     state.insomnia_mode = True
-    state.insomnia_task_queue = ["task"]
+    state.insomnia_task_queue = [{"prompt": "task", "attempts": 2, "added_at": 1.0}]
     state.insomnia_max_iterations = 7
     state.insomnia_auto_accept = True
     state.insomnia_log_path = "/tmp/log"
@@ -243,10 +243,40 @@ def test_load_restores_insomnia_settings(manager, state) -> None:
     loaded = manager.load_session(state.session_id)
     assert loaded is not None
     assert loaded.insomnia_mode is True
-    assert loaded.insomnia_task_queue == ["task"]
+    assert [task["prompt"] for task in loaded.insomnia_task_queue] == ["task"]
+    assert loaded.insomnia_task_queue[0]["attempts"] == 2
     assert loaded.insomnia_max_iterations == 7
     assert loaded.insomnia_auto_accept is True
     assert loaded.insomnia_log_path == "/tmp/log"
+
+
+def test_a_hand_edited_insomnia_block_cannot_wedge_the_run(manager, state) -> None:
+    """A budget of "lots" used to raise inside every turn, forever."""
+    manager.save_session(state)
+    path = os.path.join(manager.session_dir, f"{state.session_id}.json")
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data["insomnia_mode"] = "yes"
+    data["insomnia_auto_accept"] = "false"
+    data["insomnia_max_iterations"] = "lots"
+    data["insomnia_max_retries"] = None
+    data["insomnia_max_cost"] = "ten dollars"
+    data["insomnia_artifact_hours"] = -5
+    data["insomnia_log_path"] = 42
+    data["insomnia_task_queue"] = ["a bare string", {"no": "prompt"}, 17]
+    Path(path).write_text(json.dumps(data), encoding="utf-8")
+
+    loaded = manager.load_session(state.session_id)
+
+    assert loaded is not None
+    assert loaded.insomnia_mode is True
+    assert loaded.insomnia_auto_accept is False, "'false' is not True"
+    assert loaded.insomnia_max_iterations == 1000
+    assert loaded.insomnia_max_retries == 8
+    assert loaded.insomnia_max_cost == 10.0
+    assert loaded.insomnia_artifact_hours == 0.0, "a negative window means never prune"
+    assert loaded.insomnia_log_path is None, "a number is not a path"
+    # The string survives as a task; the other two records are dropped.
+    assert [task["prompt"] for task in loaded.insomnia_task_queue] == ["a bare string"]
 
 
 def test_load_uses_the_model_fallbacks_in_the_file(manager) -> None:
