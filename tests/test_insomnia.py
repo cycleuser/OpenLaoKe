@@ -1153,3 +1153,36 @@ def test_a_long_run_keeps_every_request_provider_valid(tmp_path, monkeypatch) ->
     assert not bad, f"requests with unpaired tool calls: {bad[:3]}"
     log = (tmp_path / "run.log").read_text(encoding="utf-8")
     assert "history_trimmed" in log, "the run should have trimmed at least once"
+
+
+def test_queueing_a_task_from_the_prompt_starts_the_run(tmp_path) -> None:
+    """`/insomnia add` promised it starts now; between turns nothing was watching."""
+    from types import SimpleNamespace
+
+    r = make_repl([[text("the queued task ran")]])
+    from openlaoke.commands.registry import register_all
+
+    register_all()  # the harness builds a REPL without the command table
+    r.app_state.insomnia_log_path = str(tmp_path / "run.log")
+    r._prompt_manager = SimpleNamespace(
+        get_user_input=lambda: _answer("/insomnia add write the notes")
+    )
+
+    asyncio.run(r._handle_input())
+
+    assert r.api.turn_index == 1, "the queued task should have run immediately"
+    assert queue_tasks(r.app_state) == []
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "task_done" in log
+
+
+async def _answer(text_value: str):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        is_exit=False,
+        is_picker=False,
+        is_lang_picker=False,
+        is_toggle_thinking=False,
+        text=text_value,
+    )

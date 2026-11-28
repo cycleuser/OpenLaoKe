@@ -460,6 +460,15 @@ class REPL:
         if cmd:
             name, args = cmd
             await self._handle_command(name, args)
+            # `/insomnia add ...` queues work and says "it starts when the
+            # current turn ends", but between turns nothing was watching: with
+            # no message to type, a queued task sat there until the next one.
+            if (
+                getattr(self.app_state, "insomnia_mode", False)
+                and self.app_state.insomnia_task_queue
+                and not getattr(self, "_insomnia_draining", False)
+            ):
+                await self._insomnia_drain()
             return
 
         if await self._handle_bot_input(user_input):
